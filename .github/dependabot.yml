@@ -16,6 +16,16 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
+    # Major versions of these are deliberate upgrades, made by hand:
+    # - @types/node follows the oldest Node the packages support (engines), so
+    #   the code can't use an API that version lacks;
+    # - a new TypeScript major changes the compiler's defaults (TypeScript 7
+    #   loads no @types on its own), so it comes with its tsconfig changes.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       chat-sdk:
         patterns: ["chat", "@chat-adapter/*"]
