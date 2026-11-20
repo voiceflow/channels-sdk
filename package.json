@@ -3,17 +3,50 @@
   "version": "0.0.0",
   "private": true,
   "description": "Connect Voiceflow agents to Slack, WhatsApp, Teams, email and more, through Vercel Chat SDK adapters.",
-  "keywords": ["voiceflow", "chat-sdk", "vercel-chat", "channels", "messaging", "slack", "whatsapp", "teams", "email", "ai-agent"],
+  "keywords": [
+    "voiceflow",
+    "chat-sdk",
+    "vercel-chat",
+    "channels",
+    "messaging",
+    "slack",
+    "whatsapp",
+    "teams",
+    "email",
+    "ai-agent"
+  ],
   "author": "Braden Ream",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "exports": { ".": "./src/index.mjs" },
-  "files": ["src", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "test": "node --test test/"
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "chat": ">=4.44.0 <5"
+    "chat": ">=4.44.0 <5",
+    "@chat-adapter/catalog": ">=4.44.0 <5"
+  },
+  "devDependencies": {
+    "@chat-adapter/catalog": "4.45.0",
+    "@chat-adapter/slack": "4.45.0",
+    "@chat-adapter/state-memory": "4.45.0",
+    "@types/node": "20.19.25",
+    "chat": "4.45.0",
+    "typescript": "5.9.3"
   }
 }

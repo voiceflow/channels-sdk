@@ -3,22 +3,26 @@
 How `@voiceflow/channels-sdk` uses Chat SDK adapters for every platform it can, and
 stays compatible as upstream ships.
 
-## Upstream facts (checked 2026-11-19)
+## Upstream facts (checked 2026-11-19, against 4.45.0)
 
 - `chat` is MIT and lives in `vercel/chat`. All packages (`chat`, `@chat-adapter/*`)
   release together under the same version number.
 - It's on major version 4, with a minor release every 1–2 weeks: 4.38.0 on 2026-08-14,
   4.45.0 on 2026-11-13, 62 releases in 4.x so far.
-- Public exports: `chat`, `chat/adapters`, `chat/ai`, `chat/workflow`,
-  `chat/serialization`, `chat/jsx-runtime`.
-- `chat/adapters` exports a machine-readable catalog: `ADAPTERS`, `ADAPTER_NAMES`,
-  `getAdapter`, `getSecretEnvVars`, `listEnvVars`, `listPlatformAdapters`, and
-  `listStateAdapters`. 36 entries (platform and state adapters).
+- Public exports: `chat`, `chat/ai`, `chat/workflow`, `chat/serialization`,
+  `chat/jsx-runtime`. `chat/adapters` is deprecated: it re-exports `@chat-adapter/catalog`.
+- **`@chat-adapter/catalog`** is the machine-readable catalog, released with `chat`
+  (`chat` 4.44 and later depend on it at the same exact version). It exports `getAdapter`,
+  `listPlatformAdapters`, `listStateAdapters`, `getFeatureSupport`, `listEnvVars` and
+  `getSecretEnvVars`. 4.45.0 lists 32 platforms and 5 state adapters.
   Each platform entry carries:
   - `slug`, `name`, `group` (`official` / vendor), `packageName`, `factoryExport`, `peerDeps`;
   - `features`: post / edit / delete, streaming, `cardFormat`, buttons, select menus,
-    tables, typing indicator, mentions, DMs, `customApiEndpoint`, …;
-  - `env.credentialModes`: every credential, with `key`, `description` and `secret: true|false`.
+    tables, typing indicator, mentions, DMs, `customApiEndpoint`, …, each `yes`, `partial` or `no`;
+  - `env`: every credential, with `key`, `description` and `secret: true|false`. Some entries
+    group them as `credentialModes`, others as `required` / `optional`; `listEnvVars` reads both.
+- **An adapter called with no options reads its own env vars**, the catalog's names
+  (`createSlackAdapter()` reads `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`).
 
 ## 1. Adapters in three tiers
 
@@ -30,18 +34,24 @@ stays compatible as upstream ships.
 
 **How tier 1 works**
 
-1. `channel({ slug, credentials })` looks the slug up in `ADAPTERS`.
-2. It dynamically imports `packageName` and calls `factoryExport`.
-3. Credential names come from `env.credentialModes`. Each catalog key maps to a
-   Voiceflow secret by one rule (`SLACK_BOT_TOKEN` → `slack_bot_token`), so no list is
-   kept by hand.
-4. Rendering reads `features`:
-   - `buttons` absent: a numbered text list;
-   - `cardFormat` absent: markdown;
-   - `streaming`: stream, else post whole replies;
+1. `createChannels({ channels: ['slack'] })` looks each slug up with `getAdapter`
+   (`src/catalog.ts`). An unknown slug, or a state adapter, is refused with a code.
+2. `loadAdapter` dynamically imports `packageName` and calls `factoryExport`
+   (`src/loader.ts`). With no options the adapter reads its own env vars. A missing
+   package is refused with the `npm install` line that fixes it.
+3. Credential names come from `listEnvVars`. Each catalog key maps to a Voiceflow
+   secret by one rule (`secretName`: `SLACK_BOT_TOKEN` → `slack_bot_token`), so no list
+   is kept by hand.
+4. Rendering reads `features` (`src/render.ts`). Only a full `yes` counts; `partial`
+   gets the fallback:
+   - no `buttons`: a numbered list, and a typed number or label picks the choice;
+   - no `cardFormat`: a card goes as markdown, its choices numbered;
+   - no `imagesInCards`: the image goes as its URL;
    - `typingIndicator`: shown while the turn runs.
-5. Credentials are passed as functions wherever the adapter accepts them. That's what
-   lets the hosted version lend a secret for one turn.
+5. Version 1 posts whole replies. Streaming (`streaming`) comes later: the Voiceflow
+   side already folds `completion` traces into one reply.
+6. Credentials pass through to the adapter as given. Where an adapter accepts a
+   function (Slack's `botToken` does), the hosted version can lend a secret for one turn.
 
 **Promotion rule:** an adapter counts as supported only once it passes the contract
 tests (section 4). The catalog says what exists; our tests say what works.
@@ -49,17 +59,22 @@ tests (section 4). The catalog says what exists; our tests say what works.
 ## 2. Dependency model
 
 - `chat`: `peerDependencies` `>=4.44.0 <5`. The customer's copy is the one used.
-- `@chat-adapter/*`: optional peers (`peerDependenciesMeta.optional`). Customers install
-  only the adapters they use. Dev dependencies pin every supported adapter for tests.
+- `@chat-adapter/catalog`: a peer with the same range. It must be the copy `chat` uses,
+  or our capabilities and upstream's would disagree.
+- `@chat-adapter/*` adapters: **not dependencies at all.** Customers install the adapters
+  they use, and the loader imports them by the catalog's package name. Dev dependencies
+  pin every supported adapter for the contract tests.
 - **Never** bundle, fork or `patch-package` upstream code.
 - **Only public exports.** Lint bans:
   - deep imports (`chat/dist/...`, `@chat-adapter/*/dist/...`);
   - underscore-prefixed fields.
 
-  The relay spike sets `slack._botUserId`. That goes away: use the `botUserId` option,
-  or file upstream for a public way.
+  The relay spike set `slack._botUserId`. This package uses Slack's public `botUserId`
+  option instead.
 
 ## 3. Tracking upstream
+
+Not built yet: the plan for before the public release.
 
 | Mechanism | What it catches | Cadence |
 |---|---|---|
@@ -76,6 +91,10 @@ tests (section 4). The catalog says what exists; our tests say what works.
 
 ## 4. Contract tests (what makes an adapter "supported")
 
+Slack's is `test/slack.contract.test.mjs`: the real Chat SDK and the real Slack adapter,
+loaded from the catalog, against a fake Slack Web API and a fake Voiceflow runtime
+(`test/helpers/fakes.mjs`). Each new adapter gets one of the same shape.
+
 Per tier-1 adapter, with fixtures picked by shape, never by content:
 
 1. A recorded inbound webhook, signed with a test secret.
@@ -86,22 +105,33 @@ Per tier-1 adapter, with fixtures picked by shape, never by content:
    - a reply is posted;
    - a forged signature is refused;
    - a follow-up in the same thread reaches the same Voiceflow session;
-   - an unsupported rich element falls back to text.
+   - buttons render natively, and a click sends the button's Voiceflow request;
+   - a click from an earlier turn is answered as stale, never replayed;
+   - a typed number picks an offered choice;
+   - a Voiceflow failure posts the error message instead of going silent.
+
+Read what was posted the way the platform writes it: Slack's adapter sends markdown
+as `markdown_text` and a card as `blocks` with a `text` fallback.
 
 ## 5. Upstream first
 
 - Anything missing goes to `vercel/chat` as an issue or a PR, never a local patch.
   Current candidates:
-  - a documented public way to set the bot user ID;
-  - a stable, documented deferred-verification hook (`webhookVerifier`) for the hosted lease.
+  - a stable, documented deferred-verification hook (`webhookVerifier`) for the hosted lease;
+  - Slack's adapter ignores `PostableCard.fallbackText`. It builds the `text` fallback from
+    the card, and a card of buttons alone has none, so Slack logs a warning and a
+    notification shows nothing. We already pass the labels as `fallbackText`.
 - **Goal:** a Voiceflow guide or template on chat-sdk.dev / vercel.com/kb/chat-sdk.
 
 ## 6. Keeping the Voiceflow side current
 
-- **Trace translation:** reuse `@voiceflow/interface-core`'s translator (Pat Eidt and
-  Andrew Lawrence's work in `creator-app`) instead of writing a second one. Agree
-  the entry point with them first.
-- **Runtime types:** generated from the v4 runtime spec, plus a spec diff in CI.
+- **Trace translation is ours** (`src/translate.ts`). It depends on no other Voiceflow
+  package: traces become platform-neutral replies (text, choices, card, carousel, image).
+  Internal traces are dropped silently. Unknown ones are reported in `skipped`, never thrown.
+- **The runtime client is ours** (`src/voiceflow.ts`): `POST /v4/project/{projectID}/environment/{environmentID}/session`,
+  then `POST /v4/interact`, written from the v4 runtime spec
+  (`content/docs/specs/general-runtime/openapi.public.json` in `voiceflow-website`).
+  Planned: types generated from that spec, plus a spec diff in CI.
 - **Live check:** a nightly conversation against a TypeGlish test agent.
 - **Transcripts:** tag every conversation with `vf-sdk` = `@voiceflow/channels-sdk@<version>`
   (`platform#4521`).
@@ -110,8 +140,8 @@ Per tier-1 adapter, with fixtures picked by shape, never by content:
 
 - [x] License: MIT (matches Chat SDK)
 - [ ] Reserve `@voiceflow/channels-sdk` on npm
-- [ ] Translator reuse agreed with Pat and Andrew
-- [ ] Contract tests passing for Phase 1: Slack, WhatsApp, Messenger, Instagram, Teams, Resend, Gmail
+- [ ] Contract tests passing for Phase 1: Slack (done), WhatsApp, Messenger, Instagram, Teams, Resend, Gmail
+- [ ] Upstream tracking (section 3) running
 - [ ] Docs: the Channels page (native vs Channels SDK) and one page per channel
 - [ ] Security review of credential handling
 - [ ] Remove `"private": true`

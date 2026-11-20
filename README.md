@@ -3,7 +3,8 @@
 Connect Voiceflow agents to Slack, WhatsApp, Teams, email and more, through
 [Vercel Chat SDK](https://chat-sdk.dev) adapters.
 
-> **Status:** pre-release, local only. Not published. See [docs/upstream.md](docs/upstream.md).
+> **Status:** pre-release, local only. Not published. Slack passes its contract tests;
+> the rest of Phase 1 is next. See [docs/upstream.md](docs/upstream.md).
 
 ## What it is, and what it isn't
 
@@ -22,11 +23,61 @@ and are not part of this package.
 1. **The Chat SDK owns platforms, and we own Voiceflow.** This package contains no
    platform code. Webhooks, signatures and posting belong to `@chat-adapter/*`.
 2. **The adapter catalog drives everything.** Supported platforms, what each one can
-   render, and the credentials it needs all come from `chat/adapters`. A new upstream
-   adapter works with no change here.
+   render, and the credentials it needs all come from `@chat-adapter/catalog`. A new
+   upstream adapter works with no change here.
 3. **It ships no interface of its own.**
 4. **Upstream first.** No forks, no patches, no private fields. A missing capability
    becomes an issue or a PR on `vercel/chat`.
+
+## Usage
+
+Install the SDK, Chat SDK, the adapters you use and a state adapter:
+
+```bash
+npm install @voiceflow/channels-sdk chat @chat-adapter/catalog @chat-adapter/slack @chat-adapter/state-redis
+```
+
+Create the bot once, and route each platform's webhook to it. A Next.js route:
+
+```ts
+// app/api/webhooks/[channel]/route.ts
+import { after } from 'next/server';
+import { createChannels } from '@voiceflow/channels-sdk';
+import { createRedisState } from '@chat-adapter/state-redis';
+
+const channels = createChannels({
+  voiceflow: {
+    apiKey: process.env.VOICEFLOW_API_KEY!,
+    projectID: process.env.VOICEFLOW_PROJECT_ID!,
+  },
+  // Each adapter reads its own env vars: Slack reads SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET.
+  channels: ['slack'],
+  state: createRedisState(),
+});
+
+export async function POST(request: Request, { params }: { params: Promise<{ channel: string }> }) {
+  const { channel } = await params;
+  return (await channels).webhook(channel, request, { waitUntil: (task) => after(() => task) });
+}
+```
+
+To pass credentials yourself, or to bring an adapter you built, use the object form:
+`{ slug: 'slack', options: { botToken, signingSecret } }` or `{ slug: 'slack', adapter }`.
+
+## How a conversation works
+
+- **One platform thread is one Voiceflow conversation.** The session key and the
+  choices offered last turn live in the thread's Chat SDK state, so use a durable
+  state adapter (Redis, Postgres) in production.
+- **A mention or a direct message starts it.** Replies in that thread continue it. The
+  bot's own @-mention is removed before the text reaches the agent.
+- **Replies render to what the channel can show**, read from the catalog: native
+  buttons and cards where it has them, a numbered list where it doesn't. A typed
+  number or label picks a choice either way.
+- **A button from an earlier turn is refused as stale**, never replayed.
+- **When the agent ends the conversation**, the next message starts a new one.
+- **A failed turn posts an error message** (`errorMessage`, or `null` for none) and
+  calls `onError`.
 
 ## Hosted version
 
