@@ -29,7 +29,11 @@ export interface SlackApiOptions {
 }
 
 /** `form` sends the params form-encoded; `multipart` as a multipart form, where a `File` goes as an upload. */
-export type SlackApi = <T = any>(method: string, params?: Record<string, unknown>, options?: { form?: boolean; multipart?: boolean; token?: string }) => Promise<T>;
+export type SlackApi = <T = any>(
+  method: string,
+  params?: Record<string, unknown>,
+  options?: { form?: boolean; multipart?: boolean; token?: string },
+) => Promise<T>;
 
 export function createSlackApi(options: SlackApiOptions): SlackApi {
   const base = (options.apiURL ?? 'https://slack.com/api').replace(/\/$/, '');
@@ -77,7 +81,8 @@ export function slackCliLogin(teamId?: string, file = path.join(os.homedir(), '.
   const teams = Object.keys(all).filter((id) => all[id]?.token);
   if (teamId) {
     const login = all[teamId];
-    if (!login?.token) throw new Error(`The Slack CLI isn't logged in to workspace ${teamId}${teams.length ? ` (it is to ${teams.join(', ')})` : ''}. Run \`slack login\`.`);
+    if (!login?.token)
+      throw new Error(`The Slack CLI isn't logged in to workspace ${teamId}${teams.length ? ` (it is to ${teams.join(', ')})` : ''}. Run \`slack login\`.`);
     return { teamId, token: login.token, ...(login.team_domain ? { teamDomain: login.team_domain } : {}) };
   }
   if (teams.length === 1) {
@@ -85,5 +90,7 @@ export function slackCliLogin(teamId?: string, file = path.join(os.homedir(), '.
     return { teamId: teams[0]!, token: only.token!, ...(only.team_domain ? { teamDomain: only.team_domain } : {}) };
   }
   if (!teams.length) throw new Error('The Slack CLI has no login. Run `slack login`.');
-  throw new Error(`The Slack CLI is logged in to several workspaces: name one with --team (${teams.map((id) => `${id}${all[id]!.team_domain ? ` ${all[id]!.team_domain}` : ''}`).join(', ')}).`);
+  throw new Error(
+    `The Slack CLI is logged in to several workspaces: name one with --team (${teams.map((id) => `${id}${all[id]!.team_domain ? ` ${all[id]!.team_domain}` : ''}`).join(', ')}).`,
+  );
 }

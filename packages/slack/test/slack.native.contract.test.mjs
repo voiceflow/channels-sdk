@@ -3,12 +3,13 @@
 // tool call, link buttons, feedback buttons, the agent's launch turn pinned
 // as suggested prompts when someone opens the assistant thread, buttons taken
 // off once their turn is over, and a card Slack refuses sent as text.
-import test from 'node:test';
+
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { createMemoryState } from '@chat-adapter/state-memory';
 import { createChannels } from '@voiceflow/channels-sdk';
-import { slack as slackChannel } from '../dist/index.js';
 import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
+import { slack as slackChannel } from '../dist/index.js';
 import { BOT_TOKEN, SIGNING_SECRET, slackAction, slackEvent, startFakeSlack } from './helpers/fake-slack.mjs';
 
 async function setup(answer, { slack: slackOptions = {}, extension = {}, refuse, ...options } = {}) {
@@ -16,7 +17,9 @@ async function setup(answer, { slack: slackOptions = {}, extension = {}, refuse,
   const vf = fakeVoiceflow(answer);
   const channels = await createChannels({
     voiceflow: { apiKey: 'VF.TEST.key', projectID: 'proj1', environment: 'development', fetch: vf.fetch },
-    channels: [slackChannel({ adapter: { botToken: BOT_TOKEN, signingSecret: SIGNING_SECRET, botUserId: 'UBOT', apiUrl: slack.apiUrl, ...slackOptions }, ...extension })],
+    channels: [
+      slackChannel({ adapter: { botToken: BOT_TOKEN, signingSecret: SIGNING_SECRET, botUserId: 'UBOT', apiUrl: slack.apiUrl, ...slackOptions }, ...extension }),
+    ],
     state: createMemoryState(),
     errorMessage: 'ERROR',
     ...options,
@@ -32,7 +35,16 @@ async function setup(answer, { slack: slackOptions = {}, extension = {}, refuse,
 
 const ROOT = '1700000000.000100';
 // Real message events carry the workspace; Slack streams natively only to a known recipient.
-const mention = (text, ts = ROOT) => ({ type: 'app_mention', user: 'U2', team: 'T1', text: `<@UBOT> ${text}`, ts, channel: 'C1', event_ts: ts, channel_type: 'channel' });
+const mention = (text, ts = ROOT) => ({
+  type: 'app_mention',
+  user: 'U2',
+  team: 'T1',
+  text: `<@UBOT> ${text}`,
+  ts,
+  channel: 'C1',
+  event_ts: ts,
+  channel_type: 'channel',
+});
 const say = (message) => ({ type: 'text', payload: { message, slate: { id: 's', content: [] }, messageID: 'm' } });
 const completion = (id, ...parts) => [
   { type: 'completion', payload: { state: 'start', messageID: id } },
@@ -40,13 +52,29 @@ const completion = (id, ...parts) => [
   { type: 'completion', payload: { state: 'end', messageID: id } },
 ];
 const said = (post) => post.body.markdown_text ?? post.body.text;
-const threadReply = (text, ts) => ({ type: 'message', user: 'U2', team: 'T1', text, ts, thread_ts: ROOT, channel: 'C1', event_ts: ts, channel_type: 'channel' });
-const click = (actionId, value, messageTs = '1700000002.000100') => slackAction({
-  type: 'block_actions', user: { id: 'U2', name: 'person', team_id: 'T1' }, team: { id: 'T1' }, api_app_id: 'A1',
-  channel: { id: 'C1' }, container: { type: 'message', channel_id: 'C1', message_ts: messageTs, thread_ts: ROOT },
-  message: { ts: messageTs, thread_ts: ROOT }, trigger_id: 'trig',
-  actions: [{ type: 'button', action_id: actionId, block_id: 'b', value, action_ts: '1' }],
+const threadReply = (text, ts) => ({
+  type: 'message',
+  user: 'U2',
+  team: 'T1',
+  text,
+  ts,
+  thread_ts: ROOT,
+  channel: 'C1',
+  event_ts: ts,
+  channel_type: 'channel',
 });
+const click = (actionId, value, messageTs = '1700000002.000100') =>
+  slackAction({
+    type: 'block_actions',
+    user: { id: 'U2', name: 'person', team_id: 'T1' },
+    team: { id: 'T1' },
+    api_app_id: 'A1',
+    channel: { id: 'C1' },
+    container: { type: 'message', channel_id: 'C1', message_ts: messageTs, thread_ts: ROOT },
+    message: { ts: messageTs, thread_ts: ROOT },
+    trigger_id: 'trig',
+    actions: [{ type: 'button', action_id: actionId, block_id: 'b', value, action_ts: '1' }],
+  });
 
 test('a streamed answer is written into one live Slack message', async (t) => {
   const { slack, vf, send } = await setup(() => completion('a1', 'Your order ', 'ships ', 'tomorrow.'));
@@ -77,7 +105,10 @@ test('each tool call shows a progress card that completes', async (t) => {
   const [stream] = slack.streams();
   assert.deepEqual(
     stream.tasks.filter((task) => task.id === 'c1').map((task) => [task.title, task.status]),
-    [['Working on it', 'in_progress'], ['Working on it', 'complete']],
+    [
+      ['Working on it', 'in_progress'],
+      ['Working on it', 'complete'],
+    ],
   );
   assert.equal(stream.text, 'Found it.');
 });
@@ -97,14 +128,18 @@ test('buttons after a streamed answer close the stream, then post below it', asy
 
 test('a URL button opens its link and still sends its Voiceflow request', async (t) => {
   const book = { type: 'path-book', payload: { label: 'Book a table', actions: [{ type: 'open_url', payload: { url: 'https://example.com/book' } }] } };
-  const { slack, vf, send } = await setup((action) =>
-    action.type === 'text' ? [{ type: 'choice', payload: { buttons: [{ name: 'Book a table', request: book }] } }] : [say(`picked ${action.type}`)],
+  const { slack, vf, send } = await setup(
+    (action) =>
+      action.type === 'text' ? [{ type: 'choice', payload: { buttons: [{ name: 'Book a table', request: book }] } }] : [say(`picked ${action.type}`)],
     { streaming: false },
   );
   t.after(slack.close);
 
   await send(slackEvent(mention('book')));
-  const button = slack.posts()[0].body.blocks.flatMap((b) => b.elements ?? []).find((e) => e.type === 'button');
+  const button = slack
+    .posts()[0]
+    .body.blocks.flatMap((b) => b.elements ?? [])
+    .find((e) => e.type === 'button');
   assert.equal(button.url, 'https://example.com/book');
   assert.match(button.action_id, /^vf:[a-z0-9]+:0$/);
 
@@ -124,7 +159,9 @@ test('no feedback buttons by default', async (t) => {
 });
 
 test('feedback buttons, when asked for, take your labels', async (t) => {
-  const { slack, send } = await setup(() => completion('a1', 'Done.'), { extension: { feedbackButtons: { positiveLabel: 'Helpful', negativeLabel: 'Not helpful' } } });
+  const { slack, send } = await setup(() => completion('a1', 'Done.'), {
+    extension: { feedbackButtons: { positiveLabel: 'Helpful', negativeLabel: 'Not helpful' } },
+  });
   t.after(slack.close);
   await send(slackEvent(mention('do it')));
   const feedback = feedbackOf(slack.streams()[0]);
@@ -150,7 +187,7 @@ test('feedback buttons, when asked for, close a streamed answer, and a rating re
   assert.equal(vf.interacts.length, 1, 'a rating is not a turn');
 });
 
-test("opening the assistant thread runs the launch turn and pins its buttons as suggested prompts", async (t) => {
+test('opening the assistant thread runs the launch turn and pins its buttons as suggested prompts', async (t) => {
   const order = { type: 'path-order', payload: { label: 'Track order' } };
   const { slack, vf, send } = await setup((action) =>
     action.type === 'launch'
@@ -160,10 +197,13 @@ test("opening the assistant thread runs the launch turn and pins its buttons as 
   t.after(slack.close);
 
   const opened = '1700000100.000100';
-  await send(slackEvent({
-    type: 'assistant_thread_started', event_ts: opened,
-    assistant_thread: { user_id: 'U2', channel_id: 'D1', thread_ts: opened, context: { team_id: 'T1' } },
-  }));
+  await send(
+    slackEvent({
+      type: 'assistant_thread_started',
+      event_ts: opened,
+      assistant_thread: { user_id: 'U2', channel_id: 'D1', thread_ts: opened, context: { team_id: 'T1' } },
+    }),
+  );
   assert.deepEqual(vf.interacts[0].action, { type: 'launch' });
   assert.match(slack.streams()[0]?.text ?? '', /How can I help/);
 
@@ -171,11 +211,26 @@ test("opening the assistant thread runs the launch turn and pins its buttons as 
   assert.ok(pinned, 'prompts pinned');
   assert.equal(pinned.body.channel_id, 'D1');
   assert.equal(pinned.body.thread_ts, opened);
-  assert.deepEqual(pinned.body.prompts, [{ title: 'Track order', message: 'Track order' }, { title: 'Returns', message: 'Returns' }]);
+  assert.deepEqual(pinned.body.prompts, [
+    { title: 'Track order', message: 'Track order' },
+    { title: 'Returns', message: 'Returns' },
+  ]);
   assert.equal(slack.posts().filter((p) => p.body.blocks?.some((b) => b.type === 'actions')).length, 0, 'not also posted as buttons');
 
   // Clicking a prompt sends its text, which picks the button and sends its request.
-  await send(slackEvent({ type: 'message', channel_type: 'im', channel: 'D1', user: 'U2', team: 'T1', text: 'Track order', ts: '1700000101.000100', thread_ts: opened, event_ts: '1700000101.000100' }));
+  await send(
+    slackEvent({
+      type: 'message',
+      channel_type: 'im',
+      channel: 'D1',
+      user: 'U2',
+      team: 'T1',
+      text: 'Track order',
+      ts: '1700000101.000100',
+      thread_ts: opened,
+      event_ts: '1700000101.000100',
+    }),
+  );
   assert.deepEqual(vf.interacts.at(-1).action, order);
   assert.equal(vf.sessions.length, 1, 'the launch session carries on');
 });
@@ -223,8 +278,14 @@ test('a message instead of a click takes the buttons off too: a card keeps its c
   for (const u of updates) assert.ok(!u.body.blocks.some((b) => b.type === 'actions'), 'no buttons left');
 
   const cardNow = updates.find((u) => u.body.ts === card.answer.ts).body.blocks;
-  assert.ok(cardNow.some((b) => b.type === 'header' && b.text.text === 'Lamp'), 'the card keeps its title');
-  assert.ok(cardNow.some((b) => b.type === 'image'), 'and its image');
+  assert.ok(
+    cardNow.some((b) => b.type === 'header' && b.text.text === 'Lamp'),
+    'the card keeps its title',
+  );
+  assert.ok(
+    cardNow.some((b) => b.type === 'image'),
+    'and its image',
+  );
   assert.match(JSON.stringify(cardNow), /Bright\./);
   assert.match(JSON.stringify(updates.find((u) => u.body.ts === buttons.answer.ts).body.blocks), /Track order · Returns/);
   assert.doesNotMatch(JSON.stringify(updates.map((u) => u.body.blocks)), /✓/, 'nothing was picked');
@@ -262,11 +323,24 @@ test('a card Slack refuses goes as text, and the rest of the turn still arrives'
   const refused = slack.calls.filter((c) => c.method === 'chat.postMessage' && c.answer?.ok === false);
   assert.equal(refused.length, 1, 'Slack refused the card once');
 
-  const asText = slack.posts().map(said).find((x) => x?.includes('Hoodie'));
+  const asText = slack
+    .posts()
+    .map(said)
+    .find((x) => x?.includes('Hoodie'));
   assert.ok(asText, 'the refused card went as text');
   for (const part of ['Soft.', '1.', 'View', 'https://shop.test/hoodie']) assert.ok(asText.includes(part), `with ${part}`);
-  assert.ok(slack.posts().some((p) => p.body.blocks?.some((b) => b.type === 'header' && b.text.text === 'Mug')), 'the next card still went as a card');
-  assert.deepEqual(slack.streams().map((s) => s.text), ['Here are our picks.', 'Anything else?'], 'the answer after the carousel arrived');
-  assert.deepEqual(errors.map((e) => e.code), ['post_refused']);
+  assert.ok(
+    slack.posts().some((p) => p.body.blocks?.some((b) => b.type === 'header' && b.text.text === 'Mug')),
+    'the next card still went as a card',
+  );
+  assert.deepEqual(
+    slack.streams().map((s) => s.text),
+    ['Here are our picks.', 'Anything else?'],
+    'the answer after the carousel arrived',
+  );
+  assert.deepEqual(
+    errors.map((e) => e.code),
+    ['post_refused'],
+  );
   assert.ok(!slack.posts().some((p) => said(p) === 'ERROR'), 'the turn did not fail');
 });

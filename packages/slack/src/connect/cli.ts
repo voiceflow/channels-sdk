@@ -6,11 +6,14 @@
 // read from VOICEFLOW_API_KEY, a file (--key-file) or a hidden prompt; the
 // Slack login is the Slack CLI's; the app's credentials go only to a file you
 // name (--env-file), written readable by you alone.
-import { chmod, readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
+import { basename, dirname, join } from 'node:path';
 import readline from 'node:readline';
+import { StringDecoder } from 'node:string_decoder';
 import { parseArgs } from 'node:util';
-import { connectSlack, disconnectSlack, slackCliLogin, slackManifest, type ConnectResult } from './index.js';
+import { type ConnectResult, connectSlack, disconnectSlack, slackCliLogin, slackManifest } from './index.js';
 
 const USAGE = `Usage:
   voiceflow-channels connect slack --project <id> --environment <alias> --public-url <https://host> [options]
@@ -118,7 +121,14 @@ export async function cli(argv: string[]): Promise<number> {
   };
 
   if (action === 'disconnect') {
-    const result = await disconnectSlack({ slack, voiceflow, ...(o.app ? { appId: o.app } : {}), removeTools: o['remove-tools'], confirm, onProgress: (l) => console.log(l) });
+    const result = await disconnectSlack({
+      slack,
+      voiceflow,
+      ...(o.app ? { appId: o.app } : {}),
+      removeTools: o['remove-tools'],
+      confirm,
+      onProgress: (l) => console.log(l),
+    });
     if (result.applied) console.log('\nDisconnected.');
     return 0;
   }
@@ -134,7 +144,14 @@ export async function cli(argv: string[]): Promise<number> {
       ...(o.app ? { appId: o.app } : {}),
       app: { ...app, ...(icon !== undefined ? { icon } : {}) },
       tools,
-      ...(o.restore ? { restore: o.restore.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
+      ...(o.restore
+        ? {
+            restore: o.restore
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean),
+          }
+        : {}),
       confirm: (plan) => confirm(plan.lines),
       onProgress: (line) => console.log(line),
       onCredentials: o['env-file'] ? (c) => writeEnvFile(o['env-file']!, { SLACK_BOT_TOKEN: c.botToken, SLACK_SIGNING_SECRET: c.signingSecret }) : undefined,
@@ -169,9 +186,13 @@ Your server needs:
     channels: [slack()],
   })
 
-Slack sends to ${s.requestUrl}.${r.install ? `
+Slack sends to ${s.requestUrl}.${
+    r.install
+      ? `
 The tools are on the ${s.environment} environment's draft: try them in Voiceflow's test chat.
-Your bot runs ${s.environment}'s published version, so the agent in Slack has them only once you publish ${s.environment} in Voiceflow.` : ''}`);
+Your bot runs ${s.environment}'s published version, so the agent in Slack has them only once you publish ${s.environment} in Voiceflow.`
+      : ''
+  }`);
 }
 
 /** Answers Slack's URL check (and nothing else) on a local port, unless something already listens there. */
@@ -218,8 +239,16 @@ export async function writeEnvFile(path: string, values: Record<string, string |
     if (i >= 0) lines[i] = `${key}=${value}`;
     else lines.push(`${key}=${value}`);
   }
-  await writeFile(path, lines.join('\n') + '\n', { mode: 0o600 });
-  await chmod(path, 0o600);
+  // A new file, readable only by you from the start, renamed over the old one:
+  // the secrets never go into a file someone else can read.
+  const temporary = join(dirname(path), `.${basename(path)}.${randomUUID()}`);
+  try {
+    await writeFile(temporary, `${lines.join('\n')}\n`, { mode: 0o600, flag: 'wx' });
+    await rename(temporary, path);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
 }
 
 async function voiceflowKey(file?: string): Promise<string> {
@@ -235,17 +264,43 @@ async function voiceflowKey(file?: string): Promise<string> {
   return key;
 }
 
-function hidden(prompt: string): Promise<string> {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    (rl as any)._writeToOutput = (s: string) => {
-      if (s.includes(prompt)) process.stdout.write(s);
+/**
+ * Reads a line from the terminal without showing it. It reads raw keystrokes and
+ * writes only the prompt, so nothing typed reaches the screen: not as it's
+ * typed, and not when a terminal would redraw the line (a backspace, a wrap).
+ */
+export function hidden(prompt: string, input: NodeJS.ReadStream = process.stdin, output: NodeJS.WritableStream = process.stdout): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const decoder = new StringDecoder('utf8');
+    const wasRaw = input.isRaw;
+    let value = '';
+    // An escape sequence (an arrow key, say) is skipped whole. inEscape: 1 after ESC, 2 inside `ESC [`, 3 after `ESC O`.
+    let inEscape = 0;
+    const finish = (error?: Error) => {
+      input.off('data', onData);
+      input.setRawMode(wasRaw);
+      input.pause();
+      output.write('\n');
+      if (error) reject(error);
+      else resolve(value.trim());
     };
-    rl.question(prompt, (value) => {
-      rl.close();
-      process.stdout.write('\n');
-      resolve(value.trim());
-    });
+    const onData = (chunk: Buffer) => {
+      for (const key of decoder.write(chunk)) {
+        if (inEscape === 1) inEscape = key === '[' ? 2 : key === 'O' ? 3 : 0;
+        else if (inEscape === 2) inEscape = key >= '@' && key <= '~' ? 0 : 2;
+        else if (inEscape === 3) inEscape = 0;
+        else if (key === '\x1b') inEscape = 1;
+        else if (key === '\r' || key === '\n' || key === '\x04') return finish();
+        else if (key === '\x03') return finish(new Error('Cancelled.'));
+        else if (key === '\x7f' || key === '\b') value = Array.from(value).slice(0, -1).join('');
+        else if (key === '\x15') value = '';
+        else if (key >= ' ') value += key;
+      }
+    };
+    output.write(prompt);
+    input.setRawMode(true);
+    input.on('data', onData);
+    input.resume();
   });
 }
 

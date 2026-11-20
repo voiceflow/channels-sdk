@@ -1,10 +1,11 @@
 // Slack sends every event, button click, dialog and slash command here.
 // `connect slack` points the app at <your public URL>/api/slack.
-import { after } from 'next/server';
+
 import { createMemoryState } from '@chat-adapter/state-memory';
 import { createRedisState } from '@chat-adapter/state-redis';
-import { createChannels, type Channels } from '@voiceflow/channels-sdk';
+import { type Channels, createChannels } from '@voiceflow/channels-sdk';
 import { slack } from '@voiceflow/channels-slack';
+import { after } from 'next/server';
 
 let channels: Promise<Channels> | undefined;
 

@@ -5,7 +5,8 @@
 //
 // The bot can reach more than the person it's talking to, so every tool acts
 // only where that person could: it reads and writes only channels the person
-// is a member of. Who the person is comes from the `slack_user_id` variable
+// is a member of, shows what it reads only where everyone could read it, and
+// leaves the directory to full members. Who the person is comes from the `slack_user_id` variable
 // this package sets from Slack's verified event, wired so the model can't
 // change it. Without it (a turn that didn't come through Slack) the tools refuse.
 //
@@ -104,24 +105,45 @@ export async function resolveChannel(token: string, input: unknown, fallback: un
     cursor = (data.response_metadata && data.response_metadata.next_cursor) || '';
     if (!cursor) break;
   }
-  return { error: `I'm not in a channel named #${name}. If it exists, add me to it first (type /invite @ and my name there).` };
+  // The same answer as for a channel the person isn't in, so it doesn't say which channels exist.
+  return { error: "I can only act in a channel you and I are both in. If you're in that one, add me to it first: type /invite @ and my name there." };
 }
 
 /**
  * Whether the person may act in a channel: they are a member. The conversation
- * they're talking in is theirs by definition.
+ * they're talking in is theirs by definition. A channel the person isn't in
+ * gets the answer a channel the bot isn't in gets, so it says nothing about it.
  */
 export async function mayUse(token: string, channel: string, user: string, here: unknown) {
   if (channel === String(here || '')) return { ok: true };
+  const notShared = "I can only act in a channel you and I are both in. If you're in that one, add me to it first: type /invite @ and my name there.";
   let cursor = '';
   for (let page = 0; page < 50; page++) {
     const data = await slackCall(token, 'conversations.members', { channel, limit: 1000, cursor });
-    if (!data.ok) return { ok: false, problem: slackProblem(data) };
+    if (!data.ok) return { ok: false, problem: data.error === 'channel_not_found' ? notShared : slackProblem(data) };
     if ((data.members || []).indexOf(user) !== -1) return { ok: true };
     cursor = (data.response_metadata && data.response_metadata.next_cursor) || '';
     if (!cursor) break;
   }
-  return { ok: false, problem: "You aren't a member of that channel, so I won't act there for you." };
+  return { ok: false, problem: notShared };
+}
+
+/**
+ * Whether the person is a full member of this workspace, or of its Enterprise
+ * Grid organization. Slack shows a guest, or someone from another organization
+ * in a shared channel, far less of the workspace than the bot can see, so the
+ * directory tools are for full members only.
+ */
+export async function fullMember(token: string, user: string) {
+  const [asker, bot] = await Promise.all([slackCall(token, 'users.info', { user }), slackCall(token, 'auth.test', {})]);
+  if (!asker.ok) return { ok: false, problem: slackProblem(asker) };
+  if (!bot.ok) return { ok: false, problem: slackProblem(bot) };
+  const u = asker.user || {};
+  const org = bot.enterprise_id && u.enterprise_user && u.enterprise_user.enterprise_id === bot.enterprise_id;
+  if (u.is_restricted || u.is_ultra_restricted || (u.team_id !== bot.team_id && !org)) {
+    return { ok: false, problem: 'Only full members of this workspace can look people up or message them through me.' };
+  }
+  return { ok: true };
 }
 
 /** A person the model named (<@U123>, U123, an email, or a name) as their Slack user. */
@@ -287,6 +309,8 @@ export async function slackMessagePerson(args: any) {
   const text = String(input.text || '').trim();
   if (!user) return refused("I can't tell who's asking, so I won't message anyone for them.");
   if (!text) return refused('The message is empty.');
+  const member: any = await fullMember(token, user);
+  if (!member.ok) return refused(member.problem);
   const found: any = await resolvePerson(token, input.person);
   if (found.error) return refused(found.error);
   if (found.user.is_bot || found.user.deleted) return refused("That account can't receive messages.");
@@ -314,6 +338,11 @@ export async function slackReadChannel(args: any) {
   const viewing = String(input.viewing_channel || '').trim();
   const channel: any = await resolveChannel(token, input.channel, /^[CG]/.test(viewing) ? viewing : input.current_channel);
   if (channel.error) return refused(channel.error);
+  // Everyone in this conversation sees what's read, so another channel is read only in a direct message (the assistant panel is one).
+  const here = String(input.current_channel || '');
+  if (channel.id !== here && !here.startsWith('D')) {
+    return refused('Everyone here would see what I read, so in a channel I read only that channel. Ask me in a direct message to read another one.');
+  }
   const allowed: any = await mayUse(token, channel.id, user, input.current_channel);
   if (!allowed.ok) return refused(allowed.problem);
   const limit = Math.max(1, Math.min(100, Math.floor(Number(input.limit) || 20)));
@@ -346,9 +375,12 @@ export async function slackReadChannel(args: any) {
 export async function slackFindPerson(args: any) {
   const input = args.inputVars || {};
   const token = String(input.token || '');
-  if (!personOf(input.user_id)) return refused("I can't tell who's asking, so I won't search Slack for them.");
+  const user = personOf(input.user_id);
+  if (!user) return refused("I can't tell who's asking, so I won't search Slack for them.");
   const query = String(input.query || '').trim().toLowerCase();
   if (!query) return refused('Say who to look for.');
+  const member: any = await fullMember(token, user);
+  if (!member.ok) return refused(member.problem);
   const matches: any[] = [];
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(query)) {
     const data = await slackCall(token, 'users.lookupByEmail', { email: query });
@@ -373,8 +405,8 @@ export async function slackFindPerson(args: any) {
     const p = u.profile || {};
     const parts = [`${u.real_name || u.name} (<@${u.id}>)`];
     if (p.title) parts.push(p.title);
+    // No email: a workspace can hide its members' emails from each other, and the bot sees them all.
     if (u.tz) parts.push(`time zone ${u.tz}`);
-    if (p.email) parts.push(p.email);
     return parts.join(', ');
   });
   return {
@@ -520,7 +552,7 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_post_to_channel',
     kind: 'workspace',
-    version: 2,
+    version: 3,
     description:
       'Post a message in a Slack channel for the person, when they ask you to share or announce something there. Only in channels they are a member of and you have been added to; the post says who it was for.',
     get code() {
@@ -539,11 +571,11 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_message_person',
     kind: 'workspace',
-    version: 2,
+    version: 3,
     description:
-      'Send someone in the workspace a direct message from you, for the person, when they ask you to tell or remind someone something. The message says who it was for.',
+      'Send someone in the workspace a direct message from you, for the person, when they ask you to tell or remind someone something. The message says who it was for. Only for full members of the workspace, not guests.',
     get code() {
-      return functionSource(slackMessagePerson, [...BASE, resolvePerson, messageBlocks, alreadySent]);
+      return functionSource(slackMessagePerson, [...BASE, fullMember, resolvePerson, messageBlocks, alreadySent]);
     },
     inputs: {
       person: { description: 'Who: their @mention, user ID, email, or full name.' },
@@ -557,9 +589,9 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_read_channel',
     kind: 'workspace',
-    version: 2,
+    version: 3,
     description:
-      "Read a Slack channel's recent messages, to summarize or answer questions about what was said. With no channel named it reads this conversation, or in the assistant panel the channel the person has open. Only channels they are a member of.",
+      "Read a Slack channel's recent messages, to summarize or answer questions about what was said. With no channel named it reads this conversation, or in the assistant panel the channel the person has open. Only channels they are a member of, and another channel only in a direct message, where no one else sees what it read.",
     get code() {
       return functionSource(slackReadChannel, [...BASE, ...CHANNELS]);
     },
@@ -577,11 +609,11 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_find_person',
     kind: 'workspace',
-    version: 1,
+    version: 2,
     description:
-      'Look people up in the Slack workspace by name, title or email: who someone is, their title, time zone and @mention. Use it before messaging or mentioning someone you only know by name.',
+      'Look people up in the Slack workspace by name, title or email: who someone is, their title, time zone and @mention (never their email). Use it before messaging or mentioning someone you only know by name. Only for full members of the workspace, not guests.',
     get code() {
-      return functionSource(slackFindPerson, BASE);
+      return functionSource(slackFindPerson, [...BASE, fullMember]);
     },
     inputs: {
       query: { description: 'A name, part of a name, a title (designer), or an email.' },
@@ -594,7 +626,7 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_schedule_message',
     kind: 'workspace',
-    version: 2,
+    version: 3,
     description:
       "Schedule a Slack message for later: a reminder in this thread, or a post in a channel at a set time. Pass a relative time as the person said it (in 10 minutes, in 2 hours): you don't need to know the current time. Dates without an offset are in the person's time zone. Only in channels they are a member of.",
     get code() {
@@ -616,7 +648,7 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_pin_message',
     kind: 'workspace',
-    version: 1,
+    version: 2,
     description:
       "Pin a message so the channel keeps it at hand: by default this thread's first message, or a message the person links to. Only in channels they are a member of.",
     get code() {
@@ -635,7 +667,7 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_add_bookmark',
     kind: 'workspace',
-    version: 2,
+    version: 3,
     description: "Add a link to a channel's bookmarks bar, by default this one's. Only in channels the person is a member of.",
     get code() {
       return functionSource(slackAddBookmark, [...BASE, ...CHANNELS]);

@@ -2,13 +2,16 @@
 // manifest it makes, the plan it shows before changing anything, where it
 // stops, and where the app's secrets go (memory and the file you name, never
 // a log line).
-import test from 'node:test';
+
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough, Writable } from 'node:stream';
+import test from 'node:test';
 import { memoryRecordStore } from '@voiceflow/channels-sdk/install';
 import { fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
+import { hidden, urlChecker, writeEnvFile } from '../dist/connect/cli.js';
 import {
   appNameOf,
   BOT_EVENTS,
@@ -20,8 +23,7 @@ import {
   requiredScopes,
   slackManifest,
 } from '../dist/connect/index.js';
-import { urlChecker, writeEnvFile } from '../dist/connect/cli.js';
-import { slackTools, slackToolScopes } from '../dist/index.js';
+import { slackToolScopes, slackTools } from '../dist/index.js';
 
 const URL_ = 'https://bot.example.com/api/slack';
 const PROJECT = { id: 'proj1', name: 'Spike', workspaceID: 'ws1' };
@@ -48,7 +50,11 @@ function fakeSlack({ team = 'T1', invalid, apps: existing = {}, images = {}, ico
     const auth = new Headers(init.headers).get('authorization');
     const form = String(new Headers(init.headers).get('content-type')).startsWith('application/x-www-form-urlencoded');
     const multipart = init.body instanceof FormData;
-    const body = multipart ? Object.fromEntries(init.body.entries()) : form ? Object.fromEntries(new URLSearchParams(init.body)) : JSON.parse(init.body || '{}');
+    const body = multipart
+      ? Object.fromEntries(init.body.entries())
+      : form
+        ? Object.fromEntries(new URLSearchParams(init.body))
+        : JSON.parse(init.body || '{}');
     calls.push({ method, body, form, multipart, token: auth?.replace('Bearer ', '') });
     const ok = (more = {}) => Response.json({ ok: true, ...more });
     const no = (error, more = {}) => Response.json({ ok: false, error, ...more });
@@ -84,7 +90,9 @@ function fakeSlack({ team = 'T1', invalid, apps: existing = {}, images = {}, ico
         }
       case 'apps.developerInstall':
         if (!form) return no('invalid_arguments');
-        return apps.has(body.app_id) ? ok({ api_access_tokens: { bot: BOT_TOKEN, app_level: null, user: body.user_scopes ? USER_TOKEN : null } }) : no('app_not_found');
+        return apps.has(body.app_id)
+          ? ok({ api_access_tokens: { bot: BOT_TOKEN, app_level: null, user: body.user_scopes ? USER_TOKEN : null } })
+          : no('app_not_found');
       default:
         return no('unknown_method');
     }
@@ -112,7 +120,8 @@ function setup({ slack: slackOptions, voiceflow: vfOptions = {}, more = {}, proj
 }
 
 const noSecrets = (text) => {
-  for (const secret of [CLI_TOKEN, BOT_TOKEN, SIGNING, VF_KEY, USER_TOKEN]) assert.ok(!String(text).includes(secret), `a secret leaked into: ${String(text).slice(0, 200)}`);
+  for (const secret of [CLI_TOKEN, BOT_TOKEN, SIGNING, VF_KEY, USER_TOKEN])
+    assert.ok(!String(text).includes(secret), `a secret leaked into: ${String(text).slice(0, 200)}`);
 };
 
 // ── The manifest ────────────────────────────────────────────────────────────
@@ -128,7 +137,10 @@ test('the manifest asks for every scope and event the package and its tools use'
   assert.equal(m.settings.socket_mode_enabled, false);
   assert.equal(m.features.app_home.home_tab_enabled, true);
   assert.ok(m.features.assistant_view, 'the assistant panel');
-  assert.deepEqual(m.features.slash_commands.map((c) => [c.command, c.url]), [['/ask', URL_]]);
+  assert.deepEqual(
+    m.features.slash_commands.map((c) => [c.command, c.url]),
+    [['/ask', URL_]],
+  );
   // What the bot's own behaviours need, each for a reason.
   for (const s of ['reactions:write', 'reactions:read', 'commands', 'assistant:write', 'users:read.email', 'mpim:history']) assert.ok(scopes.includes(s), s);
 });
@@ -150,9 +162,18 @@ test('the manifest follows the options: name, command, which tools', () => {
 test('merging into an app you have only adds, and points it at the request URL', () => {
   const existing = {
     display_information: { name: 'Ours' },
-    features: { bot_user: { display_name: 'ours' }, slash_commands: [{ command: '/ask', url: 'https://old.example.com/x' }, { command: '/other', url: 'https://old.example.com/y' }] },
+    features: {
+      bot_user: { display_name: 'ours' },
+      slash_commands: [
+        { command: '/ask', url: 'https://old.example.com/x' },
+        { command: '/other', url: 'https://old.example.com/y' },
+      ],
+    },
     oauth_config: { scopes: { bot: ['chat:write', 'files:read'] } },
-    settings: { event_subscriptions: { request_url: 'https://old.example.com/x', bot_events: ['app_mention', 'team_join'] }, interactivity: { is_enabled: false } },
+    settings: {
+      event_subscriptions: { request_url: 'https://old.example.com/x', bot_events: ['app_mention', 'team_join'] },
+      interactivity: { is_enabled: false },
+    },
   };
   const { manifest, changes } = mergeManifest(existing, slackManifest({ requestUrl: URL_ }));
   assert.ok(manifest.oauth_config.scopes.bot.includes('files:read'), 'a scope of yours stays');
@@ -185,13 +206,16 @@ test('the plan comes first, and saying no changes nothing anywhere', async () =>
   assert.equal(appRecords.apps.size, 0);
   assert.equal(shown.app.action, 'create');
   const text = shown.lines.join('\n');
-  assert.match(text, /\+ create app "Spike" from the manifest: \d+ bot scopes, 10 events/, "named after the agent");
+  assert.match(text, /\+ create app "Spike" from the manifest: \d+ bot scopes, 10 events/, 'named after the agent');
   assert.match(text, /\+ install it in Example/);
   assert.match(text, /environment sdk-test \(nothing is published\)/);
   assert.match(text, /\+ secret slack_bot_token \(new, restricted; value: the app's bot token\)/);
   assert.match(text, /\+ tool slack_post_to_channel: create and attach/);
   assert.match(text, /~ compile the environment/);
-  assert.ok(slack.calls.some((c) => c.method === 'apps.manifest.validate'), 'Slack checked the manifest');
+  assert.ok(
+    slack.calls.some((c) => c.method === 'apps.manifest.validate'),
+    'Slack checked the manifest',
+  );
   noSecrets(text);
 });
 
@@ -207,19 +231,31 @@ test('connect makes the app, installs it, and puts the bot token on the agent as
   assert.equal(result.botUserId, 'UBOT');
 
   // Slack: made from the manifest, then installed with every scope in it.
-  assert.deepEqual(slack.writes().map((c) => c.method), ['apps.manifest.create', 'apps.icon.set', 'apps.developerInstall']);
+  assert.deepEqual(
+    slack.writes().map((c) => c.method),
+    ['apps.manifest.create', 'apps.icon.set', 'apps.developerInstall'],
+  );
   const install = slack.calls.find((c) => c.method === 'apps.developerInstall');
   assert.equal(install.form, true);
   assert.deepEqual(install.body.bot_scopes.split(','), slack.apps.get('A1').oauth_config.scopes.bot);
 
   // The credentials reach the caller as soon as each exists: the signing secret before the install can fail.
-  assert.deepEqual(credentials, [{ appId: 'A1', signingSecret: SIGNING }, { appId: 'A1', botToken: BOT_TOKEN, botUserId: 'UBOT' }]);
+  assert.deepEqual(credentials, [
+    { appId: 'A1', signingSecret: SIGNING },
+    { appId: 'A1', botToken: BOT_TOKEN, botUserId: 'UBOT' },
+  ]);
 
   // Voiceflow: the token as the secret's value on the environment (draft and published), tools attached, compiled, never published.
   const secret = vf.state.secrets.find((s) => s.name === 'slack_bot_token');
   assert.equal(secret.visibility, 'restricted');
   const values = vf.state.secretValues.filter((v) => v.secretID === secret.id);
-  assert.deepEqual(values.map((v) => [v.value, v.environmentAlias, v.versionVariant]), [[BOT_TOKEN, 'sdk-test', 'draft'], [BOT_TOKEN, 'sdk-test', 'published']]);
+  assert.deepEqual(
+    values.map((v) => [v.value, v.environmentAlias, v.versionVariant]),
+    [
+      [BOT_TOKEN, 'sdk-test', 'draft'],
+      [BOT_TOKEN, 'sdk-test', 'published'],
+    ],
+  );
   assert.equal(vf.state.functions.length, slackTools().tools.length);
   assert.equal(vf.state.tools.length, slackTools().tools.length);
   assert.deepEqual(vf.state.compiles, ['sdk-test']);
@@ -249,7 +285,7 @@ test('a Slack login for another workspace stops connect, changing nothing', asyn
   assert.deepEqual(vf.writes(), []);
 });
 
-test('a manifest Slack refuses stops connect with Slack\'s reasons, changing nothing', async () => {
+test("a manifest Slack refuses stops connect with Slack's reasons, changing nothing", async () => {
   const { slack, vf, options } = setup({ slack: { invalid: 'assistant_view requires assistant:write' } });
   await assert.rejects(connectSlack(options()), /Slack refused the manifest, so nothing was changed:\n\s+\/features assistant_view requires/);
   assert.deepEqual(slack.writes(), []);
@@ -266,12 +302,18 @@ test('running connect again reuses the app, changing only what is missing', asyn
   assert.match(plan.lines.join('\n'), /= app A1 "Spike" has everything this package uses/);
   assert.equal(again.created, false);
   assert.equal(again.signingSecret, undefined, 'Slack gives the signing secret once');
-  const slackWrites = slack.writes().slice(writesBefore.slack).map((c) => c.method);
+  const slackWrites = slack
+    .writes()
+    .slice(writesBefore.slack)
+    .map((c) => c.method);
   assert.deepEqual(slackWrites, ['apps.developerInstall'], 'no new app, no update');
   assert.equal(slack.apps.size, 1);
   for (const s of plan.voiceflow.steps.filter((s) => s.kind === 'tool')) assert.equal(s.action, 'current', s.name);
   const vfWrites = vf.writes().slice(writesBefore.vf);
-  assert.ok(vfWrites.every((w) => /secret|compile/.test(w.path)), `only the token is written again: ${vfWrites.map((w) => w.path)}`);
+  assert.ok(
+    vfWrites.every((w) => /secret|compile/.test(w.path)),
+    `only the token is written again: ${vfWrites.map((w) => w.path)}`,
+  );
 });
 
 // ── The app's name and icon ─────────────────────────────────────────────────
@@ -279,8 +321,12 @@ test('running connect again reuses the app, changing only what is missing', asyn
 const AVATAR = 'https://assets.example.com/1768-agent%20face.png';
 const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
 const VOICEFLOW_ICON = new Uint8Array(await readFile(new URL('../assets/voiceflow-icon.png', import.meta.url)));
-const isVoiceflowIcon = async (file) => file.name === 'voiceflow-icon.png' && file.type === 'image/png' && Buffer.from(await file.arrayBuffer()).equals(VOICEFLOW_ICON);
-const withAvatar = (slack = {}) => ({ project: { ...PROJECT, name: 'Acme Support', image: AVATAR }, slack: { images: { [AVATAR]: { bytes: PNG_BYTES, type: 'image/png' } }, ...slack } });
+const isVoiceflowIcon = async (file) =>
+  file.name === 'voiceflow-icon.png' && file.type === 'image/png' && Buffer.from(await file.arrayBuffer()).equals(VOICEFLOW_ICON);
+const withAvatar = (slack = {}) => ({
+  project: { ...PROJECT, name: 'Acme Support', image: AVATAR },
+  slack: { images: { [AVATAR]: { bytes: PNG_BYTES, type: 'image/png' } }, ...slack },
+});
 
 test("an agent's name becomes an app name Slack takes", () => {
   // Each pair checked against Slack's apps.manifest.validate on 2026-11-20.
@@ -308,7 +354,10 @@ test("a new app takes the agent's name and avatar from Voiceflow", async () => {
   const app = slack.apps.get('A1');
   assert.equal(app.display_information.name, '(BETA) Acme Support', 'in the characters Slack takes');
   assert.equal(app.features.bot_user.display_name, 'beta-acme-support');
-  assert.match(plan.lines.join('\n'), /\+ set its icon to the agent's avatar in Voiceflow \(Voiceflow's icon if Slack won't take it\): https:\/\/assets\.example\.com\/1768-agent%20face\.png/);
+  assert.match(
+    plan.lines.join('\n'),
+    /\+ set its icon to the agent's avatar in Voiceflow \(Voiceflow's icon if Slack won't take it\): https:\/\/assets\.example\.com\/1768-agent%20face\.png/,
+  );
   const [icon] = slack.of('apps.icon.set');
   assert.equal(icon.body.app_id, 'A1');
   assert.equal(icon.token, CLI_TOKEN, "set with the CLI login, like the app's manifest");
@@ -320,14 +369,22 @@ test("a new app takes the agent's name and avatar from Voiceflow", async () => {
   noSecrets(progress.join('\n'));
 });
 
-test("a name or icon you give wins, and an app that exists keeps its icon unless you name one", async () => {
+test('a name or icon you give wins, and an app that exists keeps its icon unless you name one', async () => {
   const named = setup(withAvatar());
   await connectSlack(named.options({ app: { name: 'Help & Desk', icon: false } }));
-  assert.equal(named.slack.apps.get('A1').display_information.name, 'Help & Desk', "a name you give is used as you gave it (Slack's check says if it can't be)");
+  assert.equal(
+    named.slack.apps.get('A1').display_information.name,
+    'Help & Desk',
+    "a name you give is used as you gave it (Slack's check says if it can't be)",
+  );
   assert.equal(named.slack.of('apps.icon.set').length, 0, 'icon: false sets none');
   assert.equal(named.slack.downloads.length, 0);
 
-  const { slack, options } = setup(withAvatar({ images: { [AVATAR]: { bytes: PNG_BYTES, type: 'image/png' }, 'https://cdn.example.com/other.jpg': { bytes: PNG_BYTES, type: 'image/jpeg' } } }));
+  const { slack, options } = setup(
+    withAvatar({
+      images: { [AVATAR]: { bytes: PNG_BYTES, type: 'image/png' }, 'https://cdn.example.com/other.jpg': { bytes: PNG_BYTES, type: 'image/jpeg' } },
+    }),
+  );
   await connectSlack(options());
   await connectSlack(options());
   assert.equal(slack.of('apps.icon.set').length, 1, 'a second connect leaves the icon alone');
@@ -346,7 +403,7 @@ test("a name or icon you give wins, and an app that exists keeps its icon unless
   assert.equal(plain.slack.downloads.length, 0, 'from the package, not the web');
   assert.ok(plain.progress.includes("+ set the app's icon to Voiceflow's icon"));
   await connectSlack(plain.options());
-  assert.equal(plain.slack.of('apps.icon.set').length, 1, "and an app that exists keeps whatever icon it has");
+  assert.equal(plain.slack.of('apps.icon.set').length, 1, 'and an app that exists keeps whatever icon it has');
   const none = setup({ project: { ...PROJECT, image: null } });
   await connectSlack(none.options({ app: { icon: false } }));
   assert.equal(none.slack.of('apps.icon.set').length, 0, "icon: false means none, not Voiceflow's");
@@ -380,7 +437,10 @@ test("an avatar Slack refuses, or one that won't download, gives way to Voiceflo
   // An avatar that won't download: Voiceflow's icon, and only that is sent to Slack.
   const gone = setup(withAvatar({ images: {} }));
   const missing = await connectSlack(gone.options());
-  assert.match(missing.notes[0], /^Slack didn't take the agent's avatar as the app's icon: it couldn't be downloaded \(HTTP 404\)\. It has Voiceflow's icon instead/);
+  assert.match(
+    missing.notes[0],
+    /^Slack didn't take the agent's avatar as the app's icon: it couldn't be downloaded \(HTTP 404\)\. It has Voiceflow's icon instead/,
+  );
   assert.equal(gone.slack.of('apps.icon.set').length, 1);
   assert.ok(await isVoiceflowIcon(gone.slack.of('apps.icon.set')[0].body.file));
 
@@ -396,7 +456,10 @@ test("an avatar Slack refuses, or one that won't download, gives way to Voiceflo
   // An icon you named isn't swapped for Voiceflow's: it's yours to fix.
   const named = setup(withAvatar({ images: {} }));
   const yours = await connectSlack(named.options({ app: { icon: 'https://cdn.example.com/mine.png' } }));
-  assert.equal(yours.notes[0], "Slack didn't take the icon as the app's icon: it couldn't be downloaded (HTTP 404). Set one in Basic Information, https://api.slack.com/apps/A1/general");
+  assert.equal(
+    yours.notes[0],
+    "Slack didn't take the icon as the app's icon: it couldn't be downloaded (HTTP 404). Set one in Basic Information, https://api.slack.com/apps/A1/general",
+  );
   assert.equal(named.slack.of('apps.icon.set').length, 0);
 });
 
@@ -437,7 +500,10 @@ test('an app you name is updated with what is missing, and its old manifest is r
   assert.match(line, /nothing is taken away/);
   assert.deepEqual(result.plan.app.previous, theirs);
   assert.ok(slack.apps.get('A77').oauth_config.scopes.bot.includes('files:read'));
-  assert.deepEqual(slack.writes().map((c) => c.method), ['apps.manifest.update', 'apps.developerInstall']);
+  assert.deepEqual(
+    slack.writes().map((c) => c.method),
+    ['apps.manifest.update', 'apps.developerInstall'],
+  );
 });
 
 test('an app you name that does not exist is an error, not a new app', async () => {
@@ -460,7 +526,9 @@ test('user scopes are asked for only when named, and their token comes back in m
   assert.equal(slackManifest({ requestUrl: URL_ }).oauth_config.scopes.user, undefined, 'none by default');
   const { slack, options, progress } = setup();
   let plan;
-  const result = await connectSlack(options({ tools: false, app: { userScopes: ['chat:write', 'im:history', 'chat:write'] }, confirm: (p) => ((plan = p), true) }));
+  const result = await connectSlack(
+    options({ tools: false, app: { userScopes: ['chat:write', 'im:history', 'chat:write'] }, confirm: (p) => ((plan = p), true) }),
+  );
   assert.match(plan.lines.join('\n'), /and user scopes, so it can act as you: chat:write, im:history/);
   const install = slack.calls.find((c) => c.method === 'apps.developerInstall');
   assert.equal(install.body.user_scopes, 'chat:write,im:history');
@@ -485,7 +553,7 @@ test('an expired Slack CLI login says how to refresh it', async () => {
 
 // ── Disconnecting ───────────────────────────────────────────────────────────
 
-test('disconnect deletes the app and leaves the tools, which are the agent\'s now', async () => {
+test("disconnect deletes the app and leaves the tools, which are the agent's now", async () => {
   const { slack, vf, options, appRecords } = setup();
   await connectSlack(options());
   const before = vf.writes().length;
@@ -525,11 +593,71 @@ test('the env file gets the keys, keeps its other lines, and is readable only by
   assert.equal((await stat(file)).mode & 0o777, 0o600);
 });
 
+test('the secrets never go into a file someone else can read: the env file is replaced, not rewritten', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vf-connect-'));
+  const file = join(dir, '.env.local');
+  await writeFile(file, 'OTHER=1\n', { mode: 0o644 });
+  const before = await stat(file);
+  await writeEnvFile(file, { SLACK_BOT_TOKEN: BOT_TOKEN });
+  const after = await stat(file);
+  assert.notEqual(after.ino, before.ino, 'a new file, readable only by you from the start');
+  assert.equal(after.mode & 0o777, 0o600);
+  assert.equal(await readFile(file, 'utf8'), `OTHER=1\nSLACK_BOT_TOKEN=${BOT_TOKEN}\n`);
+  assert.deepEqual(await readdir(dir), ['.env.local'], 'no temporary file is left behind');
+});
+
+/** A terminal: keystrokes in, what it would show out. */
+function terminal(columns = 20) {
+  const input = new PassThrough();
+  input.isTTY = true;
+  input.isRaw = false;
+  input.modes = [];
+  input.setRawMode = (mode) => {
+    input.modes.push(mode);
+    input.isRaw = mode;
+    return input;
+  };
+  const screen = { text: '' };
+  const output = new Writable({
+    write(chunk, _encoding, done) {
+      screen.text += chunk;
+      done();
+    },
+  });
+  output.isTTY = true;
+  output.columns = columns;
+  return { input, output, screen };
+}
+
+test('the hidden prompt shows nothing typed, even when a backspace or a wrap would redraw the line', async () => {
+  const { input, output, screen } = terminal(20);
+  const key = 'VF.DM.0123456789abcdefghijklmnopqrstuvwxyz';
+  const answer = hidden('API key: ', input, output);
+  for (const ch of key) input.write(ch);
+  input.write('\x7f'); // a backspace
+  input.write('\x1b[D'); // the left arrow
+  input.write('Z\r');
+  assert.equal(await answer, `${key.slice(0, -1)}Z`);
+  assert.equal(screen.text, 'API key: \n', 'the prompt, then the line ending: nothing typed');
+  assert.deepEqual(input.modes, [true, false], 'the terminal is back as it was');
+});
+
+test('Ctrl-C at the hidden prompt cancels', async () => {
+  const { input, output } = terminal();
+  const answer = hidden('API key: ', input, output);
+  input.write('abc\x03');
+  await assert.rejects(answer, /Cancelled/);
+  assert.deepEqual(input.modes, [true, false]);
+});
+
 test("the URL checker answers Slack's challenge and nothing else", async () => {
   const port = 38000 + Math.floor(Math.random() * 1000);
   const checker = await urlChecker(port);
   try {
-    const challenge = await fetch(`http://127.0.0.1:${port}/api/slack`, { method: 'POST', body: JSON.stringify({ type: 'url_verification', challenge: 'abc' }) });
+    const challenge = await fetch(`http://127.0.0.1:${port}/api/slack`, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'url_verification', challenge: 'abc' }),
+    });
     assert.deepEqual(await challenge.json(), { challenge: 'abc' });
     const event = await fetch(`http://127.0.0.1:${port}/api/slack`, { method: 'POST', body: JSON.stringify({ type: 'event_callback' }) });
     assert.equal(event.status, 503);

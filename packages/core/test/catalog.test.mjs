@@ -1,7 +1,7 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { listStateAdapters } from '@chat-adapter/catalog';
-import { capabilities, credentialVars, listChannels, loadAdapter, platformEntry, secretName, secretVars, ChannelsError } from '../dist/index.js';
+import { ChannelsError, capabilities, credentialVars, listChannels, loadAdapter, platformEntry, secretName, secretVars } from '../dist/index.js';
 
 test('every platform in the catalog has what the loader needs', () => {
   const list = listChannels();
@@ -14,9 +14,15 @@ test('every platform in the catalog has what the loader needs', () => {
 });
 
 test('an unknown slug and a state adapter are refused with codes', () => {
-  assert.throws(() => platformEntry('not-a-platform'), (e) => e instanceof ChannelsError && e.code === 'unknown_channel');
+  assert.throws(
+    () => platformEntry('not-a-platform'),
+    (e) => e instanceof ChannelsError && e.code === 'unknown_channel',
+  );
   const [state] = listStateAdapters();
-  assert.throws(() => platformEntry(state.slug), (e) => e instanceof ChannelsError && e.code === 'not_a_platform');
+  assert.throws(
+    () => platformEntry(state.slug),
+    (e) => e instanceof ChannelsError && e.code === 'not_a_platform',
+  );
 });
 
 test('capabilities come from the catalog: only a full "yes" counts', () => {
@@ -49,21 +55,33 @@ test('the loader builds an adapter from the catalog with its own options', async
 });
 
 test('the loader names the package to install when it is missing', async () => {
-  const importer = async () => { throw new Error('Cannot find package'); };
-  await assert.rejects(loadAdapter('whatsapp', { importer }), (e) => e.code === 'adapter_not_installed' && /npm install @chat-adapter\/whatsapp/.test(e.message));
+  const importer = async () => {
+    throw new Error('Cannot find package');
+  };
+  await assert.rejects(
+    loadAdapter('whatsapp', { importer }),
+    (e) => e.code === 'adapter_not_installed' && /npm install @chat-adapter\/whatsapp/.test(e.message),
+  );
 });
 
 test("the loader uses the adapter module it's given, importing nothing by name", async () => {
   // A bundler (Next.js, say) can't follow import(name); a bundled server passes the module instead.
-  const importer = async () => { throw new Error('Cannot find module as expression is too dynamic'); };
+  const importer = async () => {
+    throw new Error('Cannot find module as expression is too dynamic');
+  };
   const module = { createSlackAdapter: (options) => ({ name: 'slack', options }) };
   const adapter = await loadAdapter('slack', { module, importer, options: { botToken: 'xoxb-test' } });
   assert.deepEqual(adapter, { name: 'slack', options: { botToken: 'xoxb-test' } });
 });
 
 test('the loader says how to pass the module when a bundler stops it', async () => {
-  const importer = async () => { throw new Error('Cannot find module as expression is too dynamic'); };
-  await assert.rejects(loadAdapter('slack', { importer }), (e) => e.code === 'adapter_not_installed' && e.message.includes("{ slug: 'slack', module: await import('@chat-adapter/slack') }"));
+  const importer = async () => {
+    throw new Error('Cannot find module as expression is too dynamic');
+  };
+  await assert.rejects(
+    loadAdapter('slack', { importer }),
+    (e) => e.code === 'adapter_not_installed' && e.message.includes("{ slug: 'slack', module: await import('@chat-adapter/slack') }"),
+  );
 });
 
 test('the loader says when a package lacks the catalog factory', async () => {

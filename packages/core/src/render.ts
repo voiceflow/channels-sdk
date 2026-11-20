@@ -56,9 +56,7 @@ export function parseActionId(id: string, value?: string): { nonce: string; inde
  * without them once its turn is over. `first` is the number its first choice
  * had in the turn (from 0).
  */
-export type ButtonsShown =
-  | { kind: 'card'; card: CardData; first: number }
-  | { kind: 'choices'; choices: Choice[]; first: number };
+export type ButtonsShown = { kind: 'card'; card: CardData; first: number } | { kind: 'choices'; choices: Choice[]; first: number };
 
 export interface Renderer {
   /** The Chat SDK posts for one reply. Choices are numbered across everything this renderer has shown. */
@@ -92,8 +90,7 @@ export function createRenderer(caps: ChannelCapabilities, options: RenderOptions
   // A link the channel can't attach to a button would be lost, so a group with one goes as text.
   const canButton = (list: readonly Choice[]) => caps.buttons && (caps.linkButtons || list.every((c) => !c.url));
   // A long list is a menu where the channel has one. A menu can't open a link, so a list with one keeps its buttons.
-  const asMenu = (list: readonly Choice[]) =>
-    caps.selectMenus && list.length > (options.maxButtons ?? DEFAULT_MAX_BUTTONS) && list.every((c) => !c.url);
+  const asMenu = (list: readonly Choice[]) => caps.selectMenus && list.length > (options.maxButtons ?? DEFAULT_MAX_BUTTONS) && list.every((c) => !c.url);
 
   const menu = (offered: Offered) =>
     Actions([

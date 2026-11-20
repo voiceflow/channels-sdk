@@ -2,13 +2,14 @@
 // and Slack adapter: who and where reach the agent as variables, a working
 // reaction, catching up on a thread, the assistant panel's titles and context,
 // reactions as feedback, menus for long lists, slash commands and App Home.
-import test from 'node:test';
+
 import assert from 'node:assert/strict';
+import test from 'node:test';
+import * as slackAdapter from '@chat-adapter/slack';
 import { createMemoryState } from '@chat-adapter/state-memory';
 import { createChannels } from '@voiceflow/channels-sdk';
 import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
-import * as slackAdapter from '@chat-adapter/slack';
-import { slack as slackChannel, DEFAULT_HOME_TEXT } from '../dist/index.js';
+import { CONTEXT_VARIABLES, DEFAULT_HOME_TEXT, slack as slackChannel } from '../dist/index.js';
 import { BOT_TOKEN, SIGNING_SECRET, slackAction, slackCommand, slackEvent, startFakeSlack } from './helpers/fake-slack.mjs';
 
 async function setup(answer, { extension = {}, fake = {}, ...options } = {}) {
@@ -32,8 +33,28 @@ async function setup(answer, { extension = {}, fake = {}, ...options } = {}) {
 }
 
 const ROOT = '1700000000.000100';
-const mention = (text, ts = ROOT, extra = {}) => ({ type: 'app_mention', user: 'U2', team: 'T1', text: `<@UBOT> ${text}`, ts, channel: 'C1', event_ts: ts, channel_type: 'channel', ...extra });
-const threadReply = (text, ts) => ({ type: 'message', user: 'U2', team: 'T1', text, ts, thread_ts: ROOT, channel: 'C1', event_ts: ts, channel_type: 'channel' });
+const mention = (text, ts = ROOT, extra = {}) => ({
+  type: 'app_mention',
+  user: 'U2',
+  team: 'T1',
+  text: `<@UBOT> ${text}`,
+  ts,
+  channel: 'C1',
+  event_ts: ts,
+  channel_type: 'channel',
+  ...extra,
+});
+const threadReply = (text, ts) => ({
+  type: 'message',
+  user: 'U2',
+  team: 'T1',
+  text,
+  ts,
+  thread_ts: ROOT,
+  channel: 'C1',
+  event_ts: ts,
+  channel_type: 'channel',
+});
 const say = (message) => ({ type: 'text', payload: { message, slate: { id: 's', content: [] }, messageID: 'm' } });
 const said = (post) => post.body.markdown_text ?? post.body.text;
 
@@ -62,7 +83,16 @@ test('who and where reach the agent as slack_* variables on every turn', async (
   });
 });
 
-test('the agent\'s own variables win over the context, and context: false sets none', async (t) => {
+test("every slack_* variable goes on every turn, empty when unknown, so none keeps an earlier turn's value", async () => {
+  const { extension } = slackChannel({ adapter: { botToken: BOT_TOKEN, signingSecret: SIGNING_SECRET, botUserId: 'UBOT' } });
+  // A thread whose place can't be read: the hook still answers, with every variable.
+  const variables = await extension.variables({ thread: { id: 'slack:?' }, userId: 'U3' });
+  assert.deepEqual(Object.keys(variables).sort(), Object.keys(CONTEXT_VARIABLES).sort());
+  assert.equal(variables.slack_user_id, 'U3', 'who is asking comes from the event, before any lookup');
+  for (const [name, value] of Object.entries(variables)) if (name !== 'slack_user_id') assert.equal(value, '', name);
+});
+
+test("the agent's own variables win over the context, and context: false sets none", async (t) => {
   const { slack, vf, send } = await setup(() => [say('Hi')], { variables: () => ({ slack_user_name: 'Override', plan: 'pro' }) });
   t.after(slack.close);
   await send(slackEvent(mention('hello')));
@@ -75,7 +105,7 @@ test('the agent\'s own variables win over the context, and context: false sets n
   assert.deepEqual(off.vf.interacts[0].variables, {});
 });
 
-test('👀 shows on the person\'s message while the agent works, and comes off when it answers', async (t) => {
+test("👀 shows on the person's message while the agent works, and comes off when it answers", async (t) => {
   const { slack, send } = await setup(() => [say('Done')]);
   t.after(slack.close);
 
@@ -89,19 +119,28 @@ test('👀 shows on the person\'s message while the agent works, and comes off w
     slack.of('reactions.add').map((c) => [c.body.name, c.body.timestamp, c.body.channel]),
     [['eyes', ROOT, 'C1']],
   );
-  assert.deepEqual(slack.of('reactions.remove').map((c) => [c.body.name, c.body.timestamp]), [['eyes', ROOT]]);
+  assert.deepEqual(
+    slack.of('reactions.remove').map((c) => [c.body.name, c.body.timestamp]),
+    [['eyes', ROOT]],
+  );
 });
 
 test('a done reaction can be left, and the working one turned off', async (t) => {
   const { slack, send } = await setup(() => [say('Done')], { extension: { workingReaction: null, doneReaction: 'white_check_mark' } });
   t.after(slack.close);
   await send(slackEvent(mention('hello')));
-  assert.deepEqual(slack.of('reactions.add').map((c) => c.body.name), []);
+  assert.deepEqual(
+    slack.of('reactions.add').map((c) => c.body.name),
+    [],
+  );
 
   const done = await setup(() => [say('Done')], { extension: { doneReaction: 'white_check_mark' } });
   t.after(done.slack.close);
   await done.send(slackEvent(mention('hello')));
-  assert.deepEqual(done.slack.of('reactions.add').map((c) => c.body.name), ['eyes', 'white_check_mark']);
+  assert.deepEqual(
+    done.slack.of('reactions.add').map((c) => c.body.name),
+    ['eyes', 'white_check_mark'],
+  );
 });
 
 test('mentioned partway through a thread, the agent reads what came before', async (t) => {
@@ -143,15 +182,19 @@ test('the assistant panel: no 👀, the thread is named after the first message,
   t.after(slack.close);
 
   const opened = '1700000100.000100';
-  await send(slackEvent({
-    type: 'assistant_thread_started', event_ts: opened,
-    assistant_thread: { user_id: 'U2', channel_id: 'D1', thread_ts: opened, context: { channel_id: 'C9', team_id: 'T1' } },
-  }));
+  await send(
+    slackEvent({
+      type: 'assistant_thread_started',
+      event_ts: opened,
+      assistant_thread: { user_id: 'U2', channel_id: 'D1', thread_ts: opened, context: { channel_id: 'C9', team_id: 'T1' } },
+    }),
+  );
   assert.deepEqual(vf.interacts[0].action, { type: 'launch' });
   assert.equal(vf.interacts[0].variables.slack_user_id, 'U2');
   assert.equal(vf.interacts[0].variables.slack_viewing_channel_id, 'C9');
 
-  const ask = (text, ts) => slackEvent({ type: 'message', channel_type: 'im', channel: 'D1', user: 'U2', team: 'T1', text, ts, thread_ts: opened, event_ts: ts });
+  const ask = (text, ts) =>
+    slackEvent({ type: 'message', channel_type: 'im', channel: 'D1', user: 'U2', team: 'T1', text, ts, thread_ts: opened, event_ts: ts });
   await send(ask('What changed in our refund policy this quarter for annual plans?', '1700000101.000100'));
   await send(ask('And for monthly?', '1700000102.000100'));
 
@@ -164,7 +207,7 @@ test('the assistant panel: no 👀, the thread is named after the first message,
   assert.equal(vf.interacts.at(-1).variables.slack_viewing_channel_id, 'C9');
 });
 
-test('a 👍 or 👎 on the agent\'s message is feedback; other reactions reach onReaction only', async (t) => {
+test("a 👍 or 👎 on the agent's message is feedback; other reactions reach onReaction only", async (t) => {
   const ratings = [];
   const reactions = [];
   const { slack, vf, send } = await setup(() => [say('Hi')], {
@@ -173,10 +216,15 @@ test('a 👍 or 👎 on the agent\'s message is feedback; other reactions reach 
   });
   t.after(slack.close);
 
-  const reaction = (reaction, item_user, user = 'U2', type = 'reaction_added') => slackEvent({
-    type, user, reaction, item_user, event_ts: '1700000200.000100',
-    item: { type: 'message', channel: 'C1', ts: '1700000001.000100' },
-  });
+  const reaction = (reaction, item_user, user = 'U2', type = 'reaction_added') =>
+    slackEvent({
+      type,
+      user,
+      reaction,
+      item_user,
+      event_ts: '1700000200.000100',
+      item: { type: 'message', channel: 'C1', ts: '1700000001.000100' },
+    });
   await send(reaction('+1', 'UBOT'));
   await send(reaction('-1::skin-tone-3', 'UBOT'));
   await send(reaction('tada', 'UBOT'));
@@ -188,7 +236,17 @@ test('a 👍 or 👎 on the agent\'s message is feedback; other reactions reach 
     [true, '+1', 'reaction', '1700000001.000100', 'U2'],
     [false, '-1', 'reaction', '1700000001.000100', 'U2'],
   ]);
-  assert.deepEqual(reactions, [['+1', true, 'U2'], ['-1::skin-tone-3', true, 'U2'], ['tada', true, 'U2'], ['+1', true, 'U2'], ['+1', false, 'U2']], 'the bot\'s own reactions are not reported');
+  assert.deepEqual(
+    reactions,
+    [
+      ['+1', true, 'U2'],
+      ['-1::skin-tone-3', true, 'U2'],
+      ['tada', true, 'U2'],
+      ['+1', true, 'U2'],
+      ['+1', false, 'U2'],
+    ],
+    "the bot's own reactions are not reported",
+  );
   assert.equal(vf.interacts.length, 0, 'a reaction is not a turn');
 });
 
@@ -205,15 +263,33 @@ test('more than five choices become one menu, and picking an option sends its re
   const post = slack.posts()[0];
   const select = post.body.blocks.flatMap((b) => b.elements ?? (b.accessory ? [b.accessory] : [])).find((e) => e.type === 'static_select');
   assert.ok(select, 'a Slack menu');
-  assert.deepEqual(select.options.map((o) => o.text.text), labels);
+  assert.deepEqual(
+    select.options.map((o) => o.text.text),
+    labels,
+  );
   assert.ok(!post.body.blocks.some((b) => b.elements?.some((e) => e.type === 'button')), 'no buttons');
 
-  await send(slackAction({
-    type: 'block_actions', user: { id: 'U2', name: 'person', team_id: 'T1' }, team: { id: 'T1' }, api_app_id: 'A1',
-    channel: { id: 'C1' }, container: { type: 'message', channel_id: 'C1', message_ts: post.answer.ts, thread_ts: ROOT },
-    message: { ts: post.answer.ts, thread_ts: ROOT }, trigger_id: 'trig',
-    actions: [{ type: 'static_select', action_id: select.action_id, block_id: 'b', selected_option: { text: { type: 'plain_text', text: 'Orders' }, value: select.options[5].value }, action_ts: '1' }],
-  }));
+  await send(
+    slackAction({
+      type: 'block_actions',
+      user: { id: 'U2', name: 'person', team_id: 'T1' },
+      team: { id: 'T1' },
+      api_app_id: 'A1',
+      channel: { id: 'C1' },
+      container: { type: 'message', channel_id: 'C1', message_ts: post.answer.ts, thread_ts: ROOT },
+      message: { ts: post.answer.ts, thread_ts: ROOT },
+      trigger_id: 'trig',
+      actions: [
+        {
+          type: 'static_select',
+          action_id: select.action_id,
+          block_id: 'b',
+          selected_option: { text: { type: 'plain_text', text: 'Orders' }, value: select.options[5].value },
+          action_ts: '1',
+        },
+      ],
+    }),
+  );
   assert.deepEqual(vf.interacts.at(-1).action, { type: 'path-orders' });
   assert.match(JSON.stringify(slack.updates().at(-1).body.blocks), /✓ Orders/, 'the menu comes off, with the pick marked');
 });
@@ -222,7 +298,9 @@ test('a slash command posts the question in the channel and answers in its threa
   const { slack, vf, send } = await setup((action) => [say(`About ${action.payload}`)]);
   t.after(slack.close);
 
-  const res = await send(slackCommand({ command: '/ask', text: 'our refund policy', user_id: 'U2', user_name: 'person', channel_id: 'C1', response_url: `${slack.apiUrl}response` }));
+  const res = await send(
+    slackCommand({ command: '/ask', text: 'our refund policy', user_id: 'U2', user_name: 'person', channel_id: 'C1', response_url: `${slack.apiUrl}response` }),
+  );
   assert.equal(res.status, 200);
   const [question, answer] = slack.posts();
   assert.equal(said(question), '<@U2> asked: our refund policy');

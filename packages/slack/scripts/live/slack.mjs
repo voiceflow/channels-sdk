@@ -63,7 +63,21 @@ const BEFORE = '.run/slack-manifest.before.json';
 const DRIVE_SOCKET = '.run/drive.sock';
 const DRIVE_CHANNEL = 'vf-sdk-test';
 // What the driver may do as you: post and react (in the DM and the test channel only), make the test channel, and read.
-const DRIVE_USER_SCOPES = ['bookmarks:read', 'channels:read', 'chat:write', 'files:read', 'groups:history', 'groups:read', 'groups:write', 'im:history', 'im:write', 'pins:read', 'reactions:read', 'reactions:write', 'users:read'];
+const DRIVE_USER_SCOPES = [
+  'bookmarks:read',
+  'channels:read',
+  'chat:write',
+  'files:read',
+  'groups:history',
+  'groups:read',
+  'groups:write',
+  'im:history',
+  'im:write',
+  'pins:read',
+  'reactions:read',
+  'reactions:write',
+  'users:read',
+];
 /** What happened, for the driver: turns, failures, feedback and each streamed turn's trace types. */
 const events = [];
 const note = (event) => events.push({ at: Date.now(), ...event });
@@ -80,7 +94,13 @@ if (args.restore) {
 }
 
 const apiKey = fs.readFileSync(need('key-file'), 'utf8').trim();
-const voiceflowTarget = { apiKey, projectID: need('project'), environment: need('environment'), ...(args.workspace ? { expectWorkspace: args.workspace } : {}), record };
+const voiceflowTarget = {
+  apiKey,
+  projectID: need('project'),
+  environment: need('environment'),
+  ...(args.workspace ? { expectWorkspace: args.workspace } : {}),
+  record,
+};
 
 async function confirm(lines) {
   console.log(lines.join('\n'));
@@ -219,7 +239,9 @@ const channels = await createChannels({
   userName,
   chat: { logger: 'warn' },
   onTurn: (t) => {
-    log(`turn: replies ${t.replies.map((r) => r.type).join(', ') || '(none)'}${t.skipped.length ? `; skipped ${t.skipped.join(', ')}` : ''}${t.ended ? '; ended' : ''}`);
+    log(
+      `turn: replies ${t.replies.map((r) => r.type).join(', ') || '(none)'}${t.skipped.length ? `; skipped ${t.skipped.join(', ')}` : ''}${t.ended ? '; ended' : ''}`,
+    );
     note({ kind: 'turn', replies: t.replies.map((r) => r.type), skipped: t.skipped, ended: Boolean(t.ended) });
   },
   onError: (error) => {
@@ -276,7 +298,18 @@ async function startDriver() {
   });
   const writable = new Set([dm, channel]);
   const allowed = {
-    user: new Set(['chat.postMessage', 'reactions.add', 'reactions.get', 'conversations.replies', 'conversations.history', 'conversations.list', 'users.conversations', 'pins.list', 'bookmarks.list', 'files.info']),
+    user: new Set([
+      'chat.postMessage',
+      'reactions.add',
+      'reactions.get',
+      'conversations.replies',
+      'conversations.history',
+      'conversations.list',
+      'users.conversations',
+      'pins.list',
+      'bookmarks.list',
+      'files.info',
+    ]),
     bot: new Set(['conversations.replies', 'conversations.history', 'chat.scheduledMessages.list', 'reactions.get', 'files.info', 'conversations.members']),
   };
   const writes = new Set(['chat.postMessage', 'reactions.add']);
@@ -297,7 +330,8 @@ async function startDriver() {
       if (req.url === '/call') {
         const who = body.as === 'bot' ? 'bot' : 'user';
         if (!allowed[who].has(body.method)) return send(403, { error: `the driver doesn't call ${body.method} as ${who}` });
-        if (writes.has(body.method) && !writable.has(body.params?.channel)) return send(403, { error: `the driver writes only in the DM and #${DRIVE_CHANNEL}` });
+        if (writes.has(body.method) && !writable.has(body.params?.channel))
+          return send(403, { error: `the driver writes only in the DM and #${DRIVE_CHANNEL}` });
         if (writes.has(body.method)) log(`driver: ${body.method} as you in ${body.params.channel === dm ? 'the DM' : `#${DRIVE_CHANNEL}`}`);
         return send(200, await slackAs(who, body.method, body.params ?? {}));
       }

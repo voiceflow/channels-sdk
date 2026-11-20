@@ -167,7 +167,15 @@ act only within what that person can see:
   event, so the agent can't fill them in.
 - **Only where the person is.** A tool that reads or posts in a channel checks
   the person is a member of it first (the conversation they're in always
-  passes), and refuses otherwise.
+  passes), and refuses otherwise. The refusal is the same whether the channel
+  exists or not, so it says nothing about private channels.
+- **What's read stays with those who could read it.** In a channel, the agent
+  reads only that channel: everyone there sees what it says. Another channel is
+  read only in a direct message (the assistant panel is one).
+- **The directory is for full members.** Guests, and people from another
+  organization in a shared channel, can't look people up or message them
+  through the agent. A lookup never shows an email: a workspace can hide its
+  members' emails from each other, and the bot sees them all.
 - **Posts say who asked.** A post or message made for someone carries a line
   saying so ("Posted for @ada").
 - **Times are the person's.** A relative time (`in 10 minutes`) counts from

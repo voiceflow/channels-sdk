@@ -73,7 +73,8 @@ export function functionSource(entry: (args: any) => Promise<unknown>, helpers: 
   };
   const main = entry.toString();
   if (!/^async\s+function\s+[A-Za-z_$][\w$]*\s*\(/.test(main)) throw new TypeError('functionSource: the entry must be a named async function declaration');
-  return [...helpers.map(text), `export default ${main.replace(/^async\s+function\s+[A-Za-z_$][\w$]*\s*\(/, 'async function main(')}`].join('\n\n') + '\n';
+  const parts = [...helpers.map(text), `export default ${main.replace(/^async\s+function\s+[A-Za-z_$][\w$]*\s*\(/, 'async function main(')}`];
+  return `${parts.join('\n\n')}\n`;
 }
 
 /** Every scope (or other requirement) a set's tools need, deduplicated and sorted. */

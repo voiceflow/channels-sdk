@@ -1,7 +1,7 @@
 // The Slack app this package needs: every scope, event and feature it uses, and
 // the scopes Slack's tools need. `connect slack` creates the app from it; you can
 // also paste it into api.slack.com ("Create New App" > "From a manifest").
-import { slackTools, slackToolScopes, type SlackToolsOptions } from '../tools/index.js';
+import { type SlackToolsOptions, slackToolScopes, slackTools } from '../tools/index.js';
 
 /** What the bot itself uses: mentions, threads, DMs, the assistant panel, reactions, slash commands, the person's profile. */
 export const BOT_SCOPES = [
@@ -91,7 +91,10 @@ export function appNameOf(agentName: string): string {
 }
 
 function botNameOf(name: string): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
   return (slug || 'voiceflow-agent').slice(0, MAX_BOT_NAME);
 }
 
@@ -154,7 +157,10 @@ export function mergeManifest(existing: SlackManifest, wanted: SlackManifest): {
   const scopes = [...new Set([...before.scopes, ...wanted.oauth_config.scopes.bot])].sort();
   const events = [...new Set([...before.events, ...wanted.settings.event_subscriptions.bot_events])].sort();
   const userScopes = [...new Set([...before.userScopes, ...(wanted.oauth_config.scopes.user ?? [])])].sort();
-  manifest.oauth_config = { ...manifest.oauth_config, scopes: { ...manifest.oauth_config?.scopes, bot: scopes, ...(userScopes.length ? { user: userScopes } : {}) } };
+  manifest.oauth_config = {
+    ...manifest.oauth_config,
+    scopes: { ...manifest.oauth_config?.scopes, bot: scopes, ...(userScopes.length ? { user: userScopes } : {}) },
+  };
 
   const features = (manifest.features ??= {});
   const assistantAdded = !features.assistant_view;
@@ -200,7 +206,8 @@ export function mergeManifest(existing: SlackManifest, wanted: SlackManifest): {
 }
 
 function slashCommand(command: string, url: string, name: string) {
-  if (!/^\/[a-z0-9_-]{1,31}$/.test(command)) throw new Error(`"${command}" isn't a slash command Slack accepts: a "/" and up to 31 lowercase letters, digits, "-" or "_".`);
+  if (!/^\/[a-z0-9_-]{1,31}$/.test(command))
+    throw new Error(`"${command}" isn't a slash command Slack accepts: a "/" and up to 31 lowercase letters, digits, "-" or "_".`);
   return { command, url, description: `Ask ${name} a question`, usage_hint: "what's our refund policy?", should_escape: false };
 }
 

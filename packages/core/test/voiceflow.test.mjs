@@ -1,10 +1,19 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { createVoiceflowClient, traceEvents } from '../dist/index.js';
 
 function memorySessions() {
   let key = null;
-  return { get: async () => key, set: async (k) => { key = k; }, delete: async () => { key = null; }, peek: () => key };
+  return {
+    get: async () => key,
+    set: async (k) => {
+      key = k;
+    },
+    delete: async () => {
+      key = null;
+    },
+    peek: () => key,
+  };
 }
 
 function runtime(handler) {
@@ -25,9 +34,10 @@ test('starts a session once and reuses it for the next turn', async () => {
   await client.turn({ userID: 'slack:C1:1', action: { type: 'text', payload: 'a' }, sessions });
   const second = await client.turn({ userID: 'slack:C1:1', action: { type: 'text', payload: 'b' }, sessions });
   assert.equal(second.traces[0].payload.message, 'hi');
-  assert.deepEqual(rt.calls.map((c) => c.url.replace('https://general-runtime.voiceflow.com', '')), [
-    '/v4/project/p1/environment/development/session', '/v4/interact', '/v4/interact',
-  ]);
+  assert.deepEqual(
+    rt.calls.map((c) => c.url.replace('https://general-runtime.voiceflow.com', '')),
+    ['/v4/project/p1/environment/development/session', '/v4/interact', '/v4/interact'],
+  );
   assert.equal(rt.calls[0].headers.authorization, 'Bearer VF.SERVICE.key');
   assert.deepEqual(rt.calls[0].body, { userID: 'slack:C1:1' });
   assert.equal(rt.calls[1].headers.authorization, 'sk-1');
@@ -50,15 +60,27 @@ test('a rejected session key is replaced once', async () => {
 });
 
 test('out of credits returns the explaining traces; other errors throw with a code', async () => {
-  const credits = runtime((url) => (url.endsWith('/session') ? ok({ sessionKey: 'sk' }) : ok({ traces: [{ type: 'debug', payload: { type: 'credit_limit_reached' } }] }, 402)));
-  const r = await createVoiceflowClient({ apiKey: 'k', projectID: 'p', fetch: credits.fetch }).turn({ userID: 'u', action: { type: 'launch' }, sessions: memorySessions() });
+  const credits = runtime((url) =>
+    url.endsWith('/session') ? ok({ sessionKey: 'sk' }) : ok({ traces: [{ type: 'debug', payload: { type: 'credit_limit_reached' } }] }, 402),
+  );
+  const r = await createVoiceflowClient({ apiKey: 'k', projectID: 'p', fetch: credits.fetch }).turn({
+    userID: 'u',
+    action: { type: 'launch' },
+    sessions: memorySessions(),
+  });
   assert.equal(r.outOfCredits, true);
 
   const broken = runtime((url) => (url.endsWith('/session') ? ok({ sessionKey: 'sk' }) : ok({ error: 'boom' }, 500)));
-  await assert.rejects(createVoiceflowClient({ apiKey: 'k', projectID: 'p', fetch: broken.fetch }).turn({ userID: 'u', action: { type: 'launch' }, sessions: memorySessions() }), (e) => e.code === 'voiceflow_http');
+  await assert.rejects(
+    createVoiceflowClient({ apiKey: 'k', projectID: 'p', fetch: broken.fetch }).turn({ userID: 'u', action: { type: 'launch' }, sessions: memorySessions() }),
+    (e) => e.code === 'voiceflow_http',
+  );
 
   const refused = runtime(() => ok({ message: 'bad key' }, 401));
-  await assert.rejects(createVoiceflowClient({ apiKey: 'k', projectID: 'p', fetch: refused.fetch }).turn({ userID: 'u', action: { type: 'launch' }, sessions: memorySessions() }), (e) => e.code === 'voiceflow_http' && /session/.test(e.message));
+  await assert.rejects(
+    createVoiceflowClient({ apiKey: 'k', projectID: 'p', fetch: refused.fetch }).turn({ userID: 'u', action: { type: 'launch' }, sessions: memorySessions() }),
+    (e) => e.code === 'voiceflow_http' && /session/.test(e.message),
+  );
 });
 
 const sseBody = (text, split = 7) => {
@@ -86,7 +108,10 @@ test('server-sent events become traces: bare or wrapped, CRLF or LF, comments ig
     'event: end\ndata: {}\n\n' +
     'event: trace\ndata: {"type":"text","payload":{"message":"after the end"}}\n\n';
   const traces = await collect(traceEvents(sseBody(text)));
-  assert.deepEqual(traces.map((t) => t.type), ['text', 'completion']);
+  assert.deepEqual(
+    traces.map((t) => t.type),
+    ['text', 'completion'],
+  );
   assert.equal(traces[0].payload.message, 'héllo');
 });
 
@@ -99,7 +124,10 @@ test('a streamed turn asks for completion events and reads the stream', async ()
   const client = createVoiceflowClient({ apiKey: 'VF.SERVICE.key', projectID: 'p1', fetch: rt.fetch });
   const result = await client.stream({ userID: 'u', action: { type: 'text', payload: 'a' }, sessions: memorySessions() });
   assert.equal(result.outOfCredits, false);
-  assert.deepEqual((await collect(result.traces)).map((t) => t.payload.message), ['hi']);
+  assert.deepEqual(
+    (await collect(result.traces)).map((t) => t.payload.message),
+    ['hi'],
+  );
   const call = rt.calls.at(-1);
   assert.match(call.url, /\/v4\/interact\/stream$/);
   assert.equal(call.headers.accept, 'text/event-stream');
@@ -117,6 +145,9 @@ test('a streamed turn out of credits returns the explaining traces; a refused se
   const client = createVoiceflowClient({ apiKey: 'VF.SERVICE.key', projectID: 'p1', fetch: rt.fetch });
   const result = await client.stream({ userID: 'u', action: { type: 'text', payload: 'a' }, sessions });
   assert.equal(result.outOfCredits, true);
-  assert.deepEqual((await collect(result.traces)).map((t) => t.type), ['debug']);
+  assert.deepEqual(
+    (await collect(result.traces)).map((t) => t.type),
+    ['debug'],
+  );
   assert.equal(sessions.peek(), 'sk-2');
 });

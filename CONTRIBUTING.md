@@ -2,16 +2,18 @@
 
 ## Setup
 
-Node 20 or later.
+Node 22.11 or later (`.nvmrc` says 24; `nvm use`).
 
 ```bash
 npm ci
-npm run validate   # build, typecheck and test, as CI does
+npm run validate   # lint, build, typecheck and test, as CI does
+npm run fix        # apply the formatter and the linter's safe fixes
 ```
 
 The tests run against fakes of Slack's and Voiceflow's APIs: they need no
-accounts, secrets or network. CI runs the same steps on Node 20, 22 and 24 for
-every pull request.
+accounts, secrets or network. CI runs the same steps on Node 22 and 24 for
+every pull request, and again against the oldest Chat SDK version the
+packages support.
 
 ## Layout
 
@@ -34,7 +36,8 @@ every pull request.
   tool on an agent only when its version rises, so `slack.versions.test.mjs`
   fails when a tool's code changes and its version doesn't. Raise the tool's
   `version` and add the new hash the failure prints to
-  `packages/slack/test/tool-versions.json`.
+  `packages/slack/test/tool-versions.json`. For the same reason, the formatter
+  leaves `packages/slack/src/tools/` as it is.
 - **Secrets are never printed.** Tests check plans, progress lines and saved
   records for token values. Keep it that way in anything new.
 - **A change comes with a test**, and a test that can't fail isn't one: break
@@ -61,9 +64,6 @@ npx changeset
   "chore(release): version packages" pull request with the new versions and
   changelogs. Merging it publishes to npm with provenance, through npm's trusted
   publishing: no npm token is stored in this repository.
-
-The changesets CLI needs Node 22.11 or later; `.nvmrc` names the version the
-tooling uses (`nvm use`). The packages themselves run on Node 20 and later.
 
 ## Trying it against real Slack
 

@@ -173,7 +173,13 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 - [ ] Contract tests passing for Phase 1: Slack (done), WhatsApp, Messenger, Instagram, Teams, Resend, Gmail
 - [ ] Upstream tracking (section 3) running
 - [ ] Docs: the Channels page (native vs Channels SDK) and one page per channel
-- [ ] Security review of credential handling
+- [x] Security review of credential handling (2026-11-20): the API-key
+      prompt, the bot token's secret, the env file, and what the workspace
+      tools show and to whom were fixed with tests
+- [ ] Sign the identity variables the workspace tools trust (an HMAC keyed by
+      a second restricted secret), so a session variable set outside Slack
+      can't act for someone
+- [ ] Strip known secret values from every error the CLI prints
 - [ ] Remove `"private": true`
 
 ### The first publish
@@ -191,10 +197,10 @@ few things done by hand, once:
       comes off.
 - [ ] Turn on private vulnerability reporting (Settings, Security), which
       SECURITY.md promises.
-- [ ] Protect `main`: require pull requests, the `ci` checks and code owners'
-      review.
+- [ ] Protect `main`: require pull requests, CI's `all checks` check and code
+      owners' review.
 - [ ] Give the release workflow a GitHub App token (changesets/action's
       `github-token`), so CI runs on the version pull request it opens. One
       opened with the default `GITHUB_TOKEN` starts no workflows.
-- [ ] Decide the oldest Node version supported. Node 20's support ended on
-      2026-04-30; Vercel Chat SDK tests 22 and 24.
+- [x] Decide the oldest Node version supported: 22. Node 20's support ended
+      on 2026-04-30; Vercel Chat SDK tests 22 and 24.

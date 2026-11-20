@@ -98,7 +98,10 @@ async function botMessages(channel, after, root) {
 // produced: data the agent can't otherwise know, or the change in Slack.
 const declined = (text) => /don't have|do not have|can't|cannot|unable|not able|isn't something/i.test(text);
 const blockTypes = (messages) => messages.flatMap((m) => (m.blocks ?? []).map((b) => b.type));
-const short = (text, n = 160) => String(text ?? '').replace(/\s+/g, ' ').slice(0, n);
+const short = (text, n = 160) =>
+  String(text ?? '')
+    .replace(/\s+/g, ' ')
+    .slice(0, n);
 
 const results = [];
 const state = {};
@@ -116,13 +119,17 @@ async function check(name, run) {
   fs.writeFileSync(args.out, JSON.stringify({ info: { ...info }, results }, null, 2));
 }
 /** Trace types without the noise: debug dropped, repeats counted (completion:content×24). */
-const traceList = (types) =>
-  types
-    .filter((x) => x !== 'debug')
-    .reduce((out, x) => (out.at(-1)?.[0] === x ? (out.at(-1)[1]++, out) : [...out, [x, 1]]), [])
-    .map(([x, n]) => (n > 1 ? `${x}×${n}` : x))
-    .join(' ');
-const summary = (t) => `replies ${t.replies.length}; traces [${traceList(t.traces)}]${t.errors.length ? `; errors ${t.errors.map((e) => `${e.code} ${short(e.message, 80)}`).join(' | ')}` : ''}; said "${short(t.text)}"`;
+const traceList = (types) => {
+  const runs = [];
+  for (const x of types) {
+    if (x === 'debug') continue;
+    if (runs.at(-1)?.[0] === x) runs.at(-1)[1]++;
+    else runs.push([x, 1]);
+  }
+  return runs.map(([x, n]) => (n > 1 ? `${x}×${n}` : x)).join(' ');
+};
+const summary = (t) =>
+  `replies ${t.replies.length}; traces [${traceList(t.traces)}]${t.errors.length ? `; errors ${t.errors.map((e) => `${e.code} ${short(e.message, 80)}`).join(' | ')}` : ''}; said "${short(t.text)}"`;
 
 // ── The bot's own behaviours ────────────────────────────────────────────────
 
@@ -144,7 +151,10 @@ await check('mention-thread', async () => {
   const t = await send(info.channel, `${BOT} In one sentence, who are you?`);
   state.mention = t;
   const inThread = t.replies.every((m) => m.thread_ts === t.ts);
-  return { pass: t.replies.length > 0 && inThread && !t.errors.length, evidence: `${inThread ? 'answered in your thread' : 'NOT in your thread'}; ${summary(t)}` };
+  return {
+    pass: t.replies.length > 0 && inThread && !t.errors.length,
+    evidence: `${inThread ? 'answered in your thread' : 'NOT in your thread'}; ${summary(t)}`,
+  };
 });
 
 await check('thread-follow-up', async () => {
@@ -176,7 +186,10 @@ await check('feedback-reaction', async () => {
     const f = events.find((e) => e.kind === 'feedback');
     if (f) {
       cursor = next;
-      return { pass: f.positive === true && f.messageId === target.ts, evidence: `onFeedback got ${f.positive ? '👍' : '👎'} (${f.value}) via ${f.via} on ${f.messageId}` };
+      return {
+        pass: f.positive === true && f.messageId === target.ts,
+        evidence: `onFeedback got ${f.positive ? '👍' : '👎'} (${f.value}) via ${f.via} on ${f.messageId}`,
+      };
     }
     await pause(750);
   }
@@ -188,7 +201,10 @@ await check('feedback-reaction', async () => {
 await check('slack_react', async () => {
   const t = await send(info.channel, `${BOT} Use your reaction tool to react to this message with :tada:, then reply with the word done.`);
   const kept = t.reactionsAfter.filter((r) => r !== 'eyes');
-  return { pass: t.traces.includes('slack_react') && kept.length > 0, evidence: `bot's reactions after the turn [${t.reactionsAfter.join(' ')}]; ${summary(t)}` };
+  return {
+    pass: t.traces.includes('slack_react') && kept.length > 0,
+    evidence: `bot's reactions after the turn [${t.reactionsAfter.join(' ')}]; ${summary(t)}`,
+  };
 });
 
 await check('slack_show_table', async () => {
@@ -200,7 +216,10 @@ await check('slack_show_table', async () => {
 await check('slack_show_chart', async () => {
   const t = await send(info.channel, `${BOT} Use your chart tool to show a bar chart titled Sales with Q1 10, Q2 15 and Q3 12.`);
   const types = blockTypes(t.replies);
-  return { pass: t.traces.includes('slack_show_chart') && types.some((x) => /visual|chart/.test(x)), evidence: `block types [${types.join(' ')}]; ${summary(t)}` };
+  return {
+    pass: t.traces.includes('slack_show_chart') && types.some((x) => /visual|chart/.test(x)),
+    evidence: `block types [${types.join(' ')}]; ${summary(t)}`,
+  };
 });
 
 // The message is given, so the check tests the tool alone: the agent sees a slack_* value (your time zone, say)
@@ -233,7 +252,10 @@ await check('slack_find_person', async () => {
 });
 
 await check('slack_read_channel', async () => {
-  const t = await send(info.channel, `${BOT} Use your read channel tool to read the recent messages in this channel, and tell me the launch date someone mentioned.`);
+  const t = await send(
+    info.channel,
+    `${BOT} Use your read channel tool to read the recent messages in this channel, and tell me the launch date someone mentioned.`,
+  );
   // "March 3" is in an earlier top-level message: only reading the channel finds it.
   const found = /march\s*3|3\s*march/i.test(t.text);
   return { pass: found && !t.errors.length, evidence: `launch date ${found ? 'found' : 'NOT FOUND'}; ${summary(t)}` };
@@ -256,7 +278,7 @@ await check('refuses-channel-you-are-not-in', async () => {
   const mine = new Set();
   for (let c = ''; ; ) {
     const page = await call('user', 'users.conversations', { types: 'public_channel', limit: 200, ...(c ? { cursor: c } : {}) });
-    page.channels.forEach((ch) => mine.add(ch.id));
+    for (const ch of page.channels) mine.add(ch.id);
     c = page.response_metadata?.next_cursor;
     if (!c) break;
   }
@@ -296,19 +318,28 @@ await check('slack_schedule_message', async () => {
 await check('slack_pin_message', async () => {
   const t = await send(info.channel, `${BOT} Pin this thread's first message.`);
   const pins = (await call('user', 'pins.list', { channel: info.channel })).items ?? [];
-  return { pass: pins.some((p) => p.message?.ts === t.ts), evidence: `pinned [${pins.map((p) => p.message?.ts).join(' ')}], your message ${t.ts}; ${summary(t)}` };
+  return {
+    pass: pins.some((p) => p.message?.ts === t.ts),
+    evidence: `pinned [${pins.map((p) => p.message?.ts).join(' ')}], your message ${t.ts}; ${summary(t)}`,
+  };
 });
 
 await check('slack_add_bookmark', async () => {
   const t = await send(info.channel, `${BOT} Add a bookmark to this channel for https://www.voiceflow.com titled Voiceflow.`);
   const marks = (await call('user', 'bookmarks.list', { channel_id: info.channel })).bookmarks ?? [];
-  return { pass: marks.some((b) => /voiceflow\.com/.test(b.link ?? '')), evidence: `bookmarks [${marks.map((b) => `${b.title} ${b.link}`).join(', ')}]; ${summary(t)}` };
+  return {
+    pass: marks.some((b) => /voiceflow\.com/.test(b.link ?? '')),
+    evidence: `bookmarks [${marks.map((b) => `${b.title} ${b.link}`).join(', ')}]; ${summary(t)}`,
+  };
 });
 
 await check('slack_create_canvas', async () => {
   const t = await send(info.channel, `${BOT} Create a canvas titled "SDK test notes" with three short bullet points about this test, and give me its link.`);
   // Slack turns a canvas link into its own element (a canvas chip carrying the url); the text fallback keeps only the ID.
-  const urls = t.replies.flatMap((m) => (m.blocks ?? []).flatMap((b) => (b.elements ?? []).flatMap((s) => s.elements ?? []))).map((e) => e.url).filter(Boolean);
+  const urls = t.replies
+    .flatMap((m) => (m.blocks ?? []).flatMap((b) => (b.elements ?? []).flatMap((s) => s.elements ?? [])))
+    .map((e) => e.url)
+    .filter(Boolean);
   const link = urls.find((u) => /slack\.com\/docs\//.test(u)) ?? t.text.match(/https:\/\/\S+slack\.com\/docs\/\S+/)?.[0];
   return { pass: Boolean(link) && !t.errors.length, evidence: `canvas link ${link ?? 'NOT IN THE REPLY'}; ${summary(t)}` };
 });
@@ -316,7 +347,10 @@ await check('slack_create_canvas', async () => {
 await check('slack_send_file', async () => {
   const t = await send(info.channel, `${BOT} Send me a CSV file named fruits.csv with 3 fruits and their colors, here in this thread.`);
   const files = t.replies.flatMap((m) => m.files ?? []);
-  return { pass: files.some((f) => /fruits/i.test(f.name ?? f.title ?? '')), evidence: `files [${files.map((f) => `${f.name} ${f.filetype}`).join(', ')}]; ${summary(t)}` };
+  return {
+    pass: files.some((f) => /fruits/i.test(f.name ?? f.title ?? '')),
+    evidence: `files [${files.map((f) => `${f.name} ${f.filetype}`).join(', ')}]; ${summary(t)}`,
+  };
 });
 
 const failed = results.filter((r) => r.result === 'fail');

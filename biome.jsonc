@@ -1,0 +1,44 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.5/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "ignoreUnknown": true },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 160 },
+  "javascript": { "formatter": { "quoteStyle": "single", "semicolons": "always", "trailingCommas": "all" } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // Slack's and Voiceflow's payloads are loosely typed, and these idioms are
+      // deliberate: `(map[k] ??= [])`, `if ((m = path.match(...)))`, and
+      // `confirm: (p) => ((plan = p), true)` in tests.
+      "suspicious": { "noExplicitAny": "off", "noAssignInExpressions": "off" },
+      "style": { "noNonNullAssertion": "off" },
+      "complexity": { "noCommaOperator": "off" }
+    }
+  },
+  "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } },
+  "overrides": [
+    {
+      // Prose is wrapped by hand, and padded tables would rewrite every row
+      // when one cell grows.
+      "includes": ["**/*.md"],
+      "formatter": { "enabled": false }
+    },
+    {
+      // A tool's code is the text of its functions, hashed in
+      // packages/slack/test/tool-versions.json: changing that text needs a new
+      // tool version (CONTRIBUTING.md). So nothing here only restyles it.
+      "includes": ["packages/slack/src/tools/**"],
+      "formatter": { "enabled": false },
+      "assist": { "enabled": false },
+      "linter": {
+        "rules": {
+          "complexity": { "useOptionalChain": "off" },
+          "correctness": { "noUnusedVariables": "off" },
+          "suspicious": { "noGlobalIsFinite": "off" },
+          "style": { "useTemplate": "off" }
+        }
+      }
+    }
+  ]
+}

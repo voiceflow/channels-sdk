@@ -12,21 +12,33 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  type ApiOptions,
   checkProject,
   formatStep,
-  installTools,
-  uninstallTools,
-  type ApiOptions,
   type InstallResult,
+  installTools,
   type RecordStore,
   type Step,
+  secretState,
+  uninstallTools,
 } from '@voiceflow/channels-sdk/install';
-import { slackTools, type SlackToolsOptions } from '../tools/index.js';
-import { createSlackApi, SlackApiError, type SlackApi } from './api.js';
-import { appNameOf, mergeManifest, slackManifest, type ManifestChanges, type ManifestOptions, type SlackManifest } from './manifest.js';
+import { type SlackToolsOptions, slackTools } from '../tools/index.js';
+import { createSlackApi, type SlackApi, SlackApiError } from './api.js';
+import { appNameOf, type ManifestChanges, type ManifestOptions, mergeManifest, type SlackManifest, slackManifest } from './manifest.js';
 
-export { createSlackApi, slackCliLogin, SlackApiError, type SlackApi, type SlackApiOptions, type SlackCliLogin } from './api.js';
-export { appNameOf, BOT_EVENTS, BOT_SCOPES, DEFAULT_COMMAND, mergeManifest, requiredScopes, slackManifest, type ManifestChanges, type ManifestOptions, type SlackManifest } from './manifest.js';
+export { createSlackApi, type SlackApi, SlackApiError, type SlackApiOptions, type SlackCliLogin, slackCliLogin } from './api.js';
+export {
+  appNameOf,
+  BOT_EVENTS,
+  BOT_SCOPES,
+  DEFAULT_COMMAND,
+  type ManifestChanges,
+  type ManifestOptions,
+  mergeManifest,
+  requiredScopes,
+  type SlackManifest,
+  slackManifest,
+} from './manifest.js';
 
 export const DEFAULT_APP_RECORD_PATH = '.voiceflow/channels-slack-apps.json';
 const BOT_TOKEN_SECRET = 'slack_bot_token';
@@ -72,7 +84,7 @@ export function fileAppRecordStore(path: string = DEFAULT_APP_RECORD_PATH): AppR
       else delete all.apps[key];
       await mkdir(dirname(path), { recursive: true });
       const temp = `${path}.${process.pid}.tmp`;
-      await writeFile(temp, JSON.stringify(all, null, 2) + '\n');
+      await writeFile(temp, `${JSON.stringify(all, null, 2)}\n`);
       await rename(temp, path);
     },
   };
@@ -212,7 +224,15 @@ export async function connectSlack(options: ConnectSlackOptions): Promise<Connec
       say(`~ updated Slack app ${appId}`);
     }
     const before = await records.get(key);
-    await records.set(key, { ...before, appId: appId!, teamId: plan.team.id, projectID: plan.project.id, environment: plan.environment, requestUrl, updatedAt: now });
+    await records.set(key, {
+      ...before,
+      appId: appId!,
+      teamId: plan.team.id,
+      projectID: plan.project.id,
+      environment: plan.environment,
+      requestUrl,
+      updatedAt: now,
+    });
   }
 
   const notes: string[] = [];
@@ -240,7 +260,12 @@ export async function connectSlack(options: ConnectSlackOptions): Promise<Connec
   const userScopes = manifest.oauth_config.scopes.user ?? [];
   const installed = await slack<{ api_access_tokens?: { bot?: string; user?: string } }>(
     'apps.developerInstall',
-    { app_id: appId, bot_scopes: manifest.oauth_config.scopes.bot.join(','), ...(userScopes.length ? { user_scopes: userScopes.join(',') } : {}), outgoing_domains: '[]' },
+    {
+      app_id: appId,
+      bot_scopes: manifest.oauth_config.scopes.bot.join(','),
+      ...(userScopes.length ? { user_scopes: userScopes.join(',') } : {}),
+      outgoing_domains: '[]',
+    },
     { form: true },
   );
   const botToken = installed.api_access_tokens?.bot;
@@ -349,7 +374,12 @@ export async function planConnect(slack: SlackApi, options: ConnectSlackOptions)
   const team = { id: auth.team_id, name: auth.team };
   const { icon, ...appOptions } = options.app ?? {};
   // A new app takes the agent's name, in the characters Slack allows; a name you give is yours to get right.
-  const wanted = slackManifest({ ...appOptions, name: appOptions.name ?? appNameOf(project.name), requestUrl: options.requestUrl, ...(options.tools === false ? {} : { tools: options.tools ?? {} }) });
+  const wanted = slackManifest({
+    ...appOptions,
+    name: appOptions.name ?? appNameOf(project.name),
+    requestUrl: options.requestUrl,
+    ...(options.tools === false ? {} : { tools: options.tools ?? {} }),
+  });
   if (typeof icon === 'string' && !iconUrl(icon)) throw new TypeError(`connectSlack: the icon must be an image's http(s) URL, not "${icon}"`);
 
   const records = options.appRecords ?? fileAppRecordStore();
@@ -436,11 +466,16 @@ function planLines(plan: ConnectPlan, options: ConnectSlackOptions): string[] {
   } else {
     lines.push(`  = app ${app.id} "${app.name}" has everything this package uses`);
   }
-  if (app.icon?.from === 'agent') lines.push(`  + set its icon to the agent's avatar in Voiceflow (${DEFAULT_ICON_NAME} if Slack won't take it): ${app.icon.url}`);
+  if (app.icon?.from === 'agent')
+    lines.push(`  + set its icon to the agent's avatar in Voiceflow (${DEFAULT_ICON_NAME} if Slack won't take it): ${app.icon.url}`);
   else if (app.icon?.from === 'option') lines.push(`  + set its icon to the image: ${app.icon.url}`);
   else if (app.icon) lines.push(`  + set its icon to ${DEFAULT_ICON_NAME} (the agent has no avatar in Voiceflow)`);
-  lines.push(`  + install it in ${plan.team.name} (its bot token stays in memory${plan.voiceflow ? ` and goes to Voiceflow as the ${BOT_TOKEN_SECRET} secret` : ''})`);
-  lines.push(`Voiceflow: project "${plan.project.name}" (${plan.project.id}) in workspace ${plan.project.workspaceID}, environment ${plan.environment} (nothing is published)`);
+  lines.push(
+    `  + install it in ${plan.team.name} (its bot token stays in memory${plan.voiceflow ? ` and goes to Voiceflow as the ${BOT_TOKEN_SECRET} secret` : ''})`,
+  );
+  lines.push(
+    `Voiceflow: project "${plan.project.name}" (${plan.project.id}) in workspace ${plan.project.workspaceID}, environment ${plan.environment} (nothing is published)`,
+  );
   if (plan.voiceflow) lines.push(...plan.voiceflow.steps.map((s) => `  ${connectStepLine(s)}`));
   else lines.push('  = no tools installed (tools: false)');
   return lines;
@@ -449,7 +484,7 @@ function planLines(plan: ConnectPlan, options: ConnectSlackOptions): string[] {
 /** A plan step as a line; the bot token's value is described, never shown. */
 export function connectStepLine(step: Step): string {
   if (step.kind === 'secret' && step.name === BOT_TOKEN_SECRET && step.value === 'set') {
-    return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${step.action === 'create' ? 'new, restricted' : 'exists'}; value: the app's bot token)`;
+    return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${secretState(step)}; value: the app's bot token)`;
   }
   return formatStep(step);
 }
@@ -479,11 +514,17 @@ export async function disconnectSlack(options: DisconnectSlackOptions): Promise<
   const records = options.appRecords ?? fileAppRecordStore();
   const key = appRecordKey(auth.team_id, project.id, options.voiceflow.environment);
   const appId = options.appId ?? (await records.get(key))?.appId;
-  const lines = [`Slack: workspace ${auth.team} (${auth.team_id})`, appId ? `  - delete app ${appId} (its tokens stop working)` : '  = no app recorded for this agent'];
+  const lines = [
+    `Slack: workspace ${auth.team} (${auth.team_id})`,
+    appId ? `  - delete app ${appId} (its tokens stop working)` : '  = no app recorded for this agent',
+  ];
   let removal: InstallResult | undefined;
   if (options.removeTools) {
     removal = await uninstallTools(slackTools(), { ...options.voiceflow, dryRun: true });
-    lines.push(`Voiceflow: project "${project.name}" (${project.id}), environment ${options.voiceflow.environment} (nothing is published)`, ...removal.steps.map((s) => `  ${formatStep(s)}`));
+    lines.push(
+      `Voiceflow: project "${project.name}" (${project.id}), environment ${options.voiceflow.environment} (nothing is published)`,
+      ...removal.steps.map((s) => `  ${formatStep(s)}`),
+    );
   } else {
     lines.push("Voiceflow: the tools stay on the agent (they're yours now); --remove-tools takes them off");
   }

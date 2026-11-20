@@ -2,14 +2,7 @@
 // catalog (`@chat-adapter/catalog`): which package holds the adapter, which
 // factory builds it, what it can render and which credentials it reads.
 // Nothing here names a platform.
-import {
-  getAdapter,
-  getFeatureSupport,
-  getSecretEnvVars,
-  listEnvVars,
-  listPlatformAdapters,
-  type CatalogAdapter,
-} from '@chat-adapter/catalog';
+import { type CatalogAdapter, getAdapter, getFeatureSupport, getSecretEnvVars, listEnvVars, listPlatformAdapters } from '@chat-adapter/catalog';
 import { ChannelsError } from './errors.js';
 
 export type { CatalogAdapter };

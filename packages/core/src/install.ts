@@ -59,7 +59,7 @@ export function fileRecordStore(path: string = DEFAULT_RECORD_PATH): RecordStore
     async write(record) {
       await mkdir(dirname(path), { recursive: true });
       const temp = `${path}.${process.pid}.tmp`;
-      await writeFile(temp, JSON.stringify(record, null, 2) + '\n');
+      await writeFile(temp, `${JSON.stringify(record, null, 2)}\n`);
       await rename(temp, path);
     },
   };
@@ -160,7 +160,8 @@ export type ToolAction =
 
 export type Step =
   | { kind: 'variable'; name: string; action: 'create' | 'exists' }
-  | { kind: 'secret'; name: string; action: 'create' | 'exists'; value: 'set' | 'unchanged' | 'missing' }
+  /** `restricted`: its value can never be read back. A new secret always is; an existing one only gets a value when it is. */
+  | { kind: 'secret'; name: string; action: 'create' | 'exists'; restricted: boolean; value: 'set' | 'unchanged' | 'missing' }
   | { kind: 'tool'; name: string; action: ToolAction; reason?: string; from?: number; to?: number }
   | { kind: 'compile'; action: 'compile' | 'skip' };
 
@@ -177,7 +178,7 @@ export interface InstallResult {
 interface Remote {
   functions: { id: string; name: string; code: string }[];
   variables: { id: string; name: string }[];
-  secrets: { id: string; name: string; hasValue: boolean }[];
+  secrets: { id: string; name: string; visibility: string; hasValue: boolean }[];
   tools: { id: string; type: string; functionID?: string }[];
 }
 
@@ -195,7 +196,10 @@ export async function checkProject(options: ApiOptions & Pick<InstallOptions, 'p
 }
 
 async function readProject(api: VoiceflowApi, options: Pick<InstallOptions, 'projectID' | 'expectWorkspace'>) {
-  const { project } = await api<{ project: { id: string; name: string; workspaceID: string; image?: string | null } }>('GET', `/v1/stable/project/${encodeURIComponent(options.projectID)}`);
+  const { project } = await api<{ project: { id: string; name: string; workspaceID: string; image?: string | null } }>(
+    'GET',
+    `/v1/stable/project/${encodeURIComponent(options.projectID)}`,
+  );
   if (options.expectWorkspace && project.workspaceID !== options.expectWorkspace) {
     throw new ChannelsError(
       'wrong_workspace',
@@ -203,7 +207,12 @@ async function readProject(api: VoiceflowApi, options: Pick<InstallOptions, 'pro
     );
   }
   // The agent's avatar in Voiceflow, when it has one.
-  return { id: project.id, name: project.name, workspaceID: project.workspaceID, ...(typeof project.image === 'string' && project.image ? { image: project.image } : {}) };
+  return {
+    id: project.id,
+    name: project.name,
+    workspaceID: project.workspaceID,
+    ...(typeof project.image === 'string' && project.image ? { image: project.image } : {}),
+  };
 }
 
 async function readRemote(api: VoiceflowApi, projectID: string, environmentAlias: string): Promise<Remote> {
@@ -218,9 +227,18 @@ async function readRemote(api: VoiceflowApi, projectID: string, environmentAlias
 }
 
 function planTool(def: ToolDefinition, installed: InstalledTool | undefined, remote: Remote, restore: boolean): Step & { kind: 'tool' } {
-  const step = (action: ToolAction, reason?: string, extra: object = {}) => ({ kind: 'tool' as const, name: def.name, action, ...(reason ? { reason } : {}), ...extra });
+  const step = (action: ToolAction, reason?: string, extra: object = {}) => ({
+    kind: 'tool' as const,
+    name: def.name,
+    action,
+    ...(reason ? { reason } : {}),
+    ...extra,
+  });
   if (installed?.removed && !restore) {
-    return step('skip', installed.removed.by === 'uninstall' ? 'uninstalled; restore it by name to add it again' : 'removed from the agent; restore it by name to add it again');
+    return step(
+      'skip',
+      installed.removed.by === 'uninstall' ? 'uninstalled; restore it by name to add it again' : 'removed from the agent; restore it by name to add it again',
+    );
   }
   const fn = installed && (!installed.removed || restore) ? remote.functions.find((f) => f.id === installed.functionID) : undefined;
   if (installed && !installed.removed && !fn && !restore) return step('skip', 'removed from the agent; restore it by name to add it again');
@@ -264,7 +282,22 @@ export async function installTools(set: ToolSet, options: InstallOptions): Promi
   for (const name of Object.keys(set.secrets ?? {})) {
     const existing = remote.secrets.find((s) => s.name === name);
     const given = Boolean(options.secretValues?.[name]);
-    steps.push({ kind: 'secret', name, action: existing ? 'exists' : 'create', value: given ? 'set' : existing?.hasValue ? 'unchanged' : 'missing' });
+    const restricted = !existing || existing.visibility === 'restricted';
+    // A value goes only into a secret nobody can read back: a masked one can be revealed in Voiceflow.
+    if (given && !restricted) {
+      throw new ChannelsError(
+        'secret_not_restricted',
+        `The ${name} secret on ${project.name} isn't restricted (it's ${existing!.visibility}), so people who can reveal secrets in Voiceflow could read its value. ` +
+          `Delete it in Voiceflow (More → Secrets) and run this again: it's then created restricted. Nothing was changed.`,
+      );
+    }
+    steps.push({
+      kind: 'secret',
+      name,
+      action: existing ? 'exists' : 'create',
+      restricted,
+      value: given ? 'set' : existing?.hasValue ? 'unchanged' : 'missing',
+    });
   }
   const toolSteps = tools.map((def) => planTool(def, installs[def.name], remote, restore.has(def.name)));
   steps.push(...toolSteps);
@@ -322,7 +355,7 @@ export async function installTools(set: ToolSet, options: InstallOptions): Promi
     } else if (s.action === 'attach') {
       const installed = installs[def.name]!;
       // The function may have been edited: its variables are left as they are.
-      const variables = await readVariables(api, q, def, installed.functionID);
+      const variables = await readVariables(api, q, installed.functionID);
       const attached = await attach(api, q, def, installed.functionID, variables);
       installed.toolID = attached.id;
       delete installed.removed;
@@ -336,7 +369,11 @@ export async function installTools(set: ToolSet, options: InstallOptions): Promi
       await syncPaths(api, q, def, installed.functionID);
       let toolID = remote.tools.find((t) => t.functionID === installed.functionID)?.id;
       if (toolID) {
-        const res = await api('PATCH', `/v2/stable/tool/${encodeURIComponent(toolID)}`, q, { type: 'function', description: def.description, inputVariables: wiring(def, variables) });
+        const res = await api('PATCH', `/v2/stable/tool/${encodeURIComponent(toolID)}`, q, {
+          type: 'function',
+          description: def.description,
+          inputVariables: wiring(def, variables),
+        });
         result.problems.push(...unresolved(def, res));
       } else {
         const attached = await attach(api, q, def, installed.functionID, variables);
@@ -391,9 +428,7 @@ async function syncVariables(api: VoiceflowApi, q: Q, def: ToolDefinition, funct
   const out: FunctionVariables = {};
   for (const [name, type, description] of want) {
     const found = existing.find((v: any) => v.name === name && v.type === type);
-    const id = found
-      ? found.id
-      : (await api('POST', '/v1/stable/function-variable', q, { name, type, functionID, description })).variable.id;
+    const id = found ? found.id : (await api('POST', '/v1/stable/function-variable', q, { name, type, functionID, description })).variable.id;
     if (found && found.description !== description) await api('PATCH', `/v1/stable/function-variable/${encodeURIComponent(found.id)}`, q, { description });
     out[name] = { id, type };
   }
@@ -404,7 +439,7 @@ async function syncVariables(api: VoiceflowApi, q: Q, def: ToolDefinition, funct
 }
 
 /** The function's variables as they are, for attaching a function that may have been edited. Inputs it lacks are left out of the wiring. */
-async function readVariables(api: VoiceflowApi, q: Q, def: ToolDefinition, functionID: string): Promise<FunctionVariables> {
+async function readVariables(api: VoiceflowApi, q: Q, functionID: string): Promise<FunctionVariables> {
   const { variables: existing = [] } = await api('GET', '/v1/stable/function-variable', { ...q, functionID });
   const out: FunctionVariables = {};
   for (const v of existing) out[v.name] = { id: v.id, type: v.type };
@@ -421,18 +456,26 @@ async function syncPaths(api: VoiceflowApi, q: Q, def: ToolDefinition, functionI
 /** The agent tool's inputs: those with `from` are filled by the runtime and never asked of the model. */
 function wiring(def: ToolDefinition, variables: FunctionVariables) {
   return Object.fromEntries(
-    Object.entries(def.inputs).filter(([name]) => variables[name]?.type === 'input').map(([name, input]) => [
-      name,
-      {
-        functionInputVariableID: variables[name]!.id,
-        description: input.description,
-        ...(input.from ? { defaultValue: `{${input.from}}`, required: false } : { required: true }),
-      },
-    ]),
+    Object.entries(def.inputs)
+      .filter(([name]) => variables[name]?.type === 'input')
+      .map(([name, input]) => [
+        name,
+        {
+          functionInputVariableID: variables[name]!.id,
+          description: input.description,
+          ...(input.from ? { defaultValue: `{${input.from}}`, required: false } : { required: true }),
+        },
+      ]),
   );
 }
 
-async function attach(api: VoiceflowApi, q: Q, def: ToolDefinition, functionID: string, variables: FunctionVariables): Promise<{ id: string; problems: string[] }> {
+async function attach(
+  api: VoiceflowApi,
+  q: Q,
+  def: ToolDefinition,
+  functionID: string,
+  variables: FunctionVariables,
+): Promise<{ id: string; problems: string[] }> {
   const res = await api('POST', '/v2/stable/tool', q, {
     type: 'function',
     functionID,
@@ -445,7 +488,9 @@ async function attach(api: VoiceflowApi, q: Q, def: ToolDefinition, functionID: 
 }
 
 function unresolved(def: ToolDefinition, res: { unresolvedReferences?: { token: string; path?: string }[] }): string[] {
-  return (res.unresolvedReferences ?? []).map((r) => `${def.name}: Voiceflow couldn't resolve {${r.token}}${r.path ? ` at ${r.path}` : ''}; the input gets that text literally`);
+  return (res.unresolvedReferences ?? []).map(
+    (r) => `${def.name}: Voiceflow couldn't resolve {${r.token}}${r.path ? ` at ${r.path}` : ''}; the input gets that text literally`,
+  );
 }
 
 // ── Uninstalling ────────────────────────────────────────────────────────────
@@ -476,7 +521,8 @@ export async function uninstallTools(set: ToolSet, options: UninstallOptions): P
     if (!installed) steps.push({ kind: 'tool', name, action: 'skip', reason: 'not installed by this package' });
     else if (installed.removed) steps.push({ kind: 'tool', name, action: 'skip', reason: 'already removed' });
     else if (!fn) steps.push({ kind: 'tool', name, action: 'skip', reason: 'already removed from the agent' });
-    else if (codeHash(fn.code) !== installed.codeHash) steps.push({ kind: 'tool', name, action: 'detach', reason: 'edited in Voiceflow, so the function is kept' });
+    else if (codeHash(fn.code) !== installed.codeHash)
+      steps.push({ kind: 'tool', name, action: 'detach', reason: 'edited in Voiceflow, so the function is kept' });
     else steps.push({ kind: 'tool', name, action: 'remove' });
   }
   const changes = steps.some((s) => s.action === 'remove' || s.action === 'detach');
@@ -512,14 +558,22 @@ export async function uninstallTools(set: ToolSet, options: UninstallOptions): P
 
 // ── Showing a plan ──────────────────────────────────────────────────────────
 
+/** A secret step's state, for a plan line: new, or existing and whether it's restricted. */
+export function secretState(step: Step & { kind: 'secret' }): string {
+  if (step.action === 'create') return 'new, restricted';
+  return step.restricted ? 'exists, restricted' : 'exists, NOT restricted: its value can be revealed in Voiceflow';
+}
+
 /** One line per step, for a person to read before applying. */
 export function formatStep(step: Step): string {
   switch (step.kind) {
     case 'variable':
       return step.action === 'create' ? `+ variable ${step.name}` : `= variable ${step.name} (exists)`;
     case 'secret': {
-      const value = { set: 'value set from what you gave', unchanged: 'value unchanged', missing: 'NO VALUE: the tools that read it fail until one is set' }[step.value];
-      return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${step.action === 'create' ? 'new, restricted' : 'exists'}; ${value})`;
+      const value = { set: 'value set from what you gave', unchanged: 'value unchanged', missing: 'NO VALUE: the tools that read it fail until one is set' }[
+        step.value
+      ];
+      return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${secretState(step)}; ${value})`;
     }
     case 'tool': {
       const mark = { create: '+', attach: '+', update: '~', current: '=', skip: '·', remove: '-', detach: '-' }[step.action];
