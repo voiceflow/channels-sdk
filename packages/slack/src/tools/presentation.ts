@@ -285,7 +285,9 @@ export const presentationTools: ToolDefinition[] = [
     version: 1,
     description:
       "Add an emoji reaction to the person's latest Slack message, as a teammate would: to acknowledge a request, celebrate, or agree, without a message. Use it sparingly, and still answer in words when they asked something.",
-    code: functionSource(slackReact),
+    get code() {
+      return functionSource(slackReact);
+    },
     inputs: { emoji: { description: 'A Slack emoji name without colons: thumbsup, tada, white_check_mark, eyes, pray, heart, rocket.' } },
     outputs: { result: 'What happened.' },
     requires: ['reactions:write'],
@@ -296,7 +298,9 @@ export const presentationTools: ToolDefinition[] = [
     version: 1,
     description:
       'Show data as a native Slack table, below your reply. Use it for rows of records (orders, tickets, prices, schedules) rather than writing a table in text. Up to 100 rows and 20 columns.',
-    code: functionSource(slackShowTable, [parseDelimited, cellText, tableOf]),
+    get code() {
+      return functionSource(slackShowTable, [parseDelimited, cellText, tableOf]);
+    },
     inputs: {
       title: { description: 'A short caption for the table, or empty for none.' },
       data: {
@@ -312,7 +316,9 @@ export const presentationTools: ToolDefinition[] = [
     version: 1,
     description:
       'Show numbers as a native Slack chart (bar, line, area or pie), below your reply. Use it when a trend or comparison is easier to see than read. Up to 20 categories and 12 series.',
-    code: functionSource(slackShowChart, [cellText, shortLabel, chartOf]),
+    get code() {
+      return functionSource(slackShowChart, [cellText, shortLabel, chartOf]);
+    },
     inputs: {
       title: { description: 'The chart title, up to 50 characters.' },
       chart_type: { description: 'bar, line, area or pie.' },
@@ -331,7 +337,9 @@ export const presentationTools: ToolDefinition[] = [
     version: 1,
     description:
       "Send the person a message only they can see (Slack's ephemeral message), in a channel others are reading. Use it for anything personal or sensitive: their account details, a private link, a correction others needn't see. In a direct message every reply is already private.",
-    code: functionSource(slackReplyPrivately),
+    get code() {
+      return functionSource(slackReplyPrivately);
+    },
     inputs: { text: { description: 'The private message, in Slack markdown.' } },
     outputs: { result: 'What happened.' },
   },
@@ -341,7 +349,9 @@ export const presentationTools: ToolDefinition[] = [
     version: 1,
     description:
       'Ask the person for several details at once with a native Slack form: a button that opens a dialog with text, number, date and choice fields. Use it when you need three or more answers, or dates and choices that are easy to get wrong in text. Their answers arrive as their next message.',
-    code: functionSource(slackAskForm, [formFields]),
+    get code() {
+      return functionSource(slackAskForm, [formFields]);
+    },
     inputs: {
       title: { description: "The form's title, up to 24 characters." },
       intro: { description: 'One line above the button saying what the form is for, or empty.' },

@@ -13,19 +13,27 @@ const defaultImporter: Importer = (specifier) => import(specifier);
 export interface LoadAdapterOptions {
   /** The adapter's own config, passed to its factory unchanged. Omit it to let the adapter read its env vars. */
   options?: Record<string, unknown>;
-  /** Overrides module loading (tests, bundlers). */
+  /**
+   * The adapter's package, already imported (`import * as slackAdapter from '@chat-adapter/slack'`).
+   * A bundled server (Next.js, say) needs it: a bundler can't follow an import
+   * of a name it only learns at run time. Without it, the package is imported by
+   * the name the catalog gives.
+   */
+  module?: Record<string, unknown>;
+  /** Overrides module loading (tests). */
   importer?: Importer;
 }
 
-export async function loadAdapter(slug: string, { options, importer = defaultImporter }: LoadAdapterOptions = {}): Promise<Adapter> {
+export async function loadAdapter(slug: string, { options, module, importer = defaultImporter }: LoadAdapterOptions = {}): Promise<Adapter> {
   const entry = platformEntry(slug);
   let mod: Record<string, unknown>;
   try {
-    mod = await importer(entry.packageName);
+    mod = module ?? (await importer(entry.packageName));
   } catch (cause) {
     throw new ChannelsError(
       'adapter_not_installed',
-      `The ${entry.name} adapter isn't installed. Run: npm install ${entry.packageName}`,
+      `The ${entry.name} adapter couldn't be loaded. If it isn't installed, run: npm install ${entry.packageName}. ` +
+        `If your server is bundled (Next.js, say), pass its module: { slug: '${slug}', module: await import('${entry.packageName}') }.`,
       { cause },
     );
   }
