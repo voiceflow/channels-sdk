@@ -9,7 +9,7 @@ import * as slackAdapter from '@chat-adapter/slack';
 import { createMemoryState } from '@chat-adapter/state-memory';
 import { createChannels } from '@voiceflow/channels-sdk';
 import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
-import { DEFAULT_HOME_TEXT, slack as slackChannel } from '../dist/index.js';
+import { CONTEXT_VARIABLES, DEFAULT_HOME_TEXT, slack as slackChannel } from '../dist/index.js';
 import { BOT_TOKEN, SIGNING_SECRET, slackAction, slackCommand, slackEvent, startFakeSlack } from './helpers/fake-slack.mjs';
 
 async function setup(answer, { extension = {}, fake = {}, ...options } = {}) {
@@ -81,6 +81,15 @@ test('who and where reach the agent as slack_* variables on every turn', async (
     slack_message_ts: ROOT,
     slack_viewing_channel_id: '',
   });
+});
+
+test("every slack_* variable goes on every turn, empty when unknown, so none keeps an earlier turn's value", async () => {
+  const { extension } = slackChannel({ adapter: { botToken: BOT_TOKEN, signingSecret: SIGNING_SECRET, botUserId: 'UBOT' } });
+  // A thread whose place can't be read: the hook still answers, with every variable.
+  const variables = await extension.variables({ thread: { id: 'slack:?' }, userId: 'U3' });
+  assert.deepEqual(Object.keys(variables).sort(), Object.keys(CONTEXT_VARIABLES).sort());
+  assert.equal(variables.slack_user_id, 'U3', 'who is asking comes from the event, before any lookup');
+  for (const [name, value] of Object.entries(variables)) if (name !== 'slack_user_id') assert.equal(value, '', name);
 });
 
 test("the agent's own variables win over the context, and context: false sets none", async (t) => {

@@ -160,7 +160,8 @@ export type ToolAction =
 
 export type Step =
   | { kind: 'variable'; name: string; action: 'create' | 'exists' }
-  | { kind: 'secret'; name: string; action: 'create' | 'exists'; value: 'set' | 'unchanged' | 'missing' }
+  /** `restricted`: its value can never be read back. A new secret always is; an existing one only gets a value when it is. */
+  | { kind: 'secret'; name: string; action: 'create' | 'exists'; restricted: boolean; value: 'set' | 'unchanged' | 'missing' }
   | { kind: 'tool'; name: string; action: ToolAction; reason?: string; from?: number; to?: number }
   | { kind: 'compile'; action: 'compile' | 'skip' };
 
@@ -177,7 +178,7 @@ export interface InstallResult {
 interface Remote {
   functions: { id: string; name: string; code: string }[];
   variables: { id: string; name: string }[];
-  secrets: { id: string; name: string; hasValue: boolean }[];
+  secrets: { id: string; name: string; visibility: string; hasValue: boolean }[];
   tools: { id: string; type: string; functionID?: string }[];
 }
 
@@ -281,7 +282,22 @@ export async function installTools(set: ToolSet, options: InstallOptions): Promi
   for (const name of Object.keys(set.secrets ?? {})) {
     const existing = remote.secrets.find((s) => s.name === name);
     const given = Boolean(options.secretValues?.[name]);
-    steps.push({ kind: 'secret', name, action: existing ? 'exists' : 'create', value: given ? 'set' : existing?.hasValue ? 'unchanged' : 'missing' });
+    const restricted = !existing || existing.visibility === 'restricted';
+    // A value goes only into a secret nobody can read back: a masked one can be revealed in Voiceflow.
+    if (given && !restricted) {
+      throw new ChannelsError(
+        'secret_not_restricted',
+        `The ${name} secret on ${project.name} isn't restricted (it's ${existing!.visibility}), so people who can reveal secrets in Voiceflow could read its value. ` +
+          `Delete it in Voiceflow (More → Secrets) and run this again: it's then created restricted. Nothing was changed.`,
+      );
+    }
+    steps.push({
+      kind: 'secret',
+      name,
+      action: existing ? 'exists' : 'create',
+      restricted,
+      value: given ? 'set' : existing?.hasValue ? 'unchanged' : 'missing',
+    });
   }
   const toolSteps = tools.map((def) => planTool(def, installs[def.name], remote, restore.has(def.name)));
   steps.push(...toolSteps);
@@ -542,6 +558,12 @@ export async function uninstallTools(set: ToolSet, options: UninstallOptions): P
 
 // ── Showing a plan ──────────────────────────────────────────────────────────
 
+/** A secret step's state, for a plan line: new, or existing and whether it's restricted. */
+export function secretState(step: Step & { kind: 'secret' }): string {
+  if (step.action === 'create') return 'new, restricted';
+  return step.restricted ? 'exists, restricted' : 'exists, NOT restricted: its value can be revealed in Voiceflow';
+}
+
 /** One line per step, for a person to read before applying. */
 export function formatStep(step: Step): string {
   switch (step.kind) {
@@ -551,7 +573,7 @@ export function formatStep(step: Step): string {
       const value = { set: 'value set from what you gave', unchanged: 'value unchanged', missing: 'NO VALUE: the tools that read it fail until one is set' }[
         step.value
       ];
-      return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${step.action === 'create' ? 'new, restricted' : 'exists'}; ${value})`;
+      return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${secretState(step)}; ${value})`;
     }
     case 'tool': {
       const mark = { create: '+', attach: '+', update: '~', current: '=', skip: '·', remove: '-', detach: '-' }[step.action];

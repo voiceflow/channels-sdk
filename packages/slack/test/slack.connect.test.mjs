@@ -4,13 +4,14 @@
 // a log line).
 
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough, Writable } from 'node:stream';
 import test from 'node:test';
 import { memoryRecordStore } from '@voiceflow/channels-sdk/install';
 import { fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
-import { urlChecker, writeEnvFile } from '../dist/connect/cli.js';
+import { hidden, urlChecker, writeEnvFile } from '../dist/connect/cli.js';
 import {
   appNameOf,
   BOT_EVENTS,
@@ -590,6 +591,63 @@ test('the env file gets the keys, keeps its other lines, and is readable only by
   await writeEnvFile(file, { SLACK_SIGNING_SECRET: SIGNING });
   assert.equal(await readFile(file, 'utf8'), `OTHER=1\nSLACK_BOT_TOKEN=${BOT_TOKEN}\nSLACK_SIGNING_SECRET=${SIGNING}\n`);
   assert.equal((await stat(file)).mode & 0o777, 0o600);
+});
+
+test('the secrets never go into a file someone else can read: the env file is replaced, not rewritten', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vf-connect-'));
+  const file = join(dir, '.env.local');
+  await writeFile(file, 'OTHER=1\n', { mode: 0o644 });
+  const before = await stat(file);
+  await writeEnvFile(file, { SLACK_BOT_TOKEN: BOT_TOKEN });
+  const after = await stat(file);
+  assert.notEqual(after.ino, before.ino, 'a new file, readable only by you from the start');
+  assert.equal(after.mode & 0o777, 0o600);
+  assert.equal(await readFile(file, 'utf8'), `OTHER=1\nSLACK_BOT_TOKEN=${BOT_TOKEN}\n`);
+  assert.deepEqual(await readdir(dir), ['.env.local'], 'no temporary file is left behind');
+});
+
+/** A terminal: keystrokes in, what it would show out. */
+function terminal(columns = 20) {
+  const input = new PassThrough();
+  input.isTTY = true;
+  input.isRaw = false;
+  input.modes = [];
+  input.setRawMode = (mode) => {
+    input.modes.push(mode);
+    input.isRaw = mode;
+    return input;
+  };
+  const screen = { text: '' };
+  const output = new Writable({
+    write(chunk, _encoding, done) {
+      screen.text += chunk;
+      done();
+    },
+  });
+  output.isTTY = true;
+  output.columns = columns;
+  return { input, output, screen };
+}
+
+test('the hidden prompt shows nothing typed, even when a backspace or a wrap would redraw the line', async () => {
+  const { input, output, screen } = terminal(20);
+  const key = 'VF.DM.0123456789abcdefghijklmnopqrstuvwxyz';
+  const answer = hidden('API key: ', input, output);
+  for (const ch of key) input.write(ch);
+  input.write('\x7f'); // a backspace
+  input.write('\x1b[D'); // the left arrow
+  input.write('Z\r');
+  assert.equal(await answer, `${key.slice(0, -1)}Z`);
+  assert.equal(screen.text, 'API key: \n', 'the prompt, then the line ending: nothing typed');
+  assert.deepEqual(input.modes, [true, false], 'the terminal is back as it was');
+});
+
+test('Ctrl-C at the hidden prompt cancels', async () => {
+  const { input, output } = terminal();
+  const answer = hidden('API key: ', input, output);
+  input.write('abc\x03');
+  await assert.rejects(answer, /Cancelled/);
+  assert.deepEqual(input.modes, [true, false]);
 });
 
 test("the URL checker answers Slack's challenge and nothing else", async () => {

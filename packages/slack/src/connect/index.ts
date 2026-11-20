@@ -19,6 +19,7 @@ import {
   installTools,
   type RecordStore,
   type Step,
+  secretState,
   uninstallTools,
 } from '@voiceflow/channels-sdk/install';
 import { type SlackToolsOptions, slackTools } from '../tools/index.js';
@@ -483,7 +484,7 @@ function planLines(plan: ConnectPlan, options: ConnectSlackOptions): string[] {
 /** A plan step as a line; the bot token's value is described, never shown. */
 export function connectStepLine(step: Step): string {
   if (step.kind === 'secret' && step.name === BOT_TOKEN_SECRET && step.value === 'set') {
-    return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${step.action === 'create' ? 'new, restricted' : 'exists'}; value: the app's bot token)`;
+    return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${secretState(step)}; value: the app's bot token)`;
   }
   return formatStep(step);
 }

@@ -101,7 +101,18 @@ export function createSlackExtension(options: SlackOptions = {}): ChannelExtensi
     adapterDefaults: { feedbackButtons: feedbackButtons(options.feedbackButtons) },
     feedbackActionId: FEEDBACK_ACTION,
 
-    variables: options.context === false ? undefined : async (ctx) => context(ctx, (await stateOf(ctx.thread)).viewing),
+    // Never throws: a failed hook would send no variables, and the session would keep the last turn's.
+    variables:
+      options.context === false
+        ? undefined
+        : async (ctx) =>
+            context(
+              ctx,
+              await stateOf(ctx.thread).then(
+                (state) => state.viewing,
+                () => undefined,
+              ),
+            ),
 
     async input(text, ctx) {
       if (!ctx.isNew || !ctx.message || catchUp === false || catchUp <= 0) return text;

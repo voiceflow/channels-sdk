@@ -49,6 +49,42 @@ function setup(fail) {
 
 const actions = (result) => Object.fromEntries(result.steps.filter((s) => s.kind === 'tool').map((s) => [s.name, s.action]));
 
+test("a value never goes into an existing secret that isn't restricted: the install stops before any write", async () => {
+  const { api, record, opts } = setup();
+  api.state.secrets.push({ id: 'sec_masked', name: 'demo_token', visibility: 'masked', hasValue: true });
+  for (const dryRun of [true, false]) {
+    await assert.rejects(
+      installTools(SET(), opts({ dryRun, secretValues: { demo_token: SECRET } })),
+      (e) => e.code === 'secret_not_restricted' && /demo_token/.test(e.message) && /Nothing was changed/.test(e.message) && !e.message.includes(SECRET),
+    );
+  }
+  assert.deepEqual(api.writes(), []);
+  assert.deepEqual(api.state.secretValues, []);
+  assert.equal(record.record, null);
+});
+
+test('an existing restricted secret gets the value, and the plan says it is restricted', async () => {
+  const { api, opts } = setup();
+  api.state.secrets.push({ id: 'sec_kept', name: 'demo_token', visibility: 'restricted', hasValue: false });
+  const result = await installTools(SET(), opts({ secretValues: { demo_token: SECRET } }));
+  assert.ok(result.steps.map(formatStep).includes('= secret demo_token (exists, restricted; value set from what you gave)'));
+  assert.deepEqual(
+    api.state.secretValues.map((v) => [v.secretID, v.environmentAlias, v.versionVariant]),
+    [
+      ['sec_kept', 'sdk-test', 'draft'],
+      ['sec_kept', 'sdk-test', 'published'],
+    ],
+  );
+  assert.equal(api.state.secrets.length, 1);
+});
+
+test('a plan shows an existing secret that is not restricted, when no value is given', async () => {
+  const { api, opts } = setup();
+  api.state.secrets.push({ id: 'sec_masked', name: 'demo_token', visibility: 'masked', hasValue: true });
+  const result = await installTools(SET(), opts({ dryRun: true }));
+  assert.ok(result.steps.map(formatStep).includes('= secret demo_token (exists, NOT restricted: its value can be revealed in Voiceflow; value unchanged)'));
+});
+
 test('a project in another workspace stops the install before any write', async () => {
   const { api, opts } = setup();
   await assert.rejects(

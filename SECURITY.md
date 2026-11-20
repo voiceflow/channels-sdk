@@ -31,7 +31,8 @@ Each of these failing is a vulnerability worth reporting:
   plain variable.
 - **A Slack tool acts only for the person talking to the agent.** It takes their
   identity from the verified Slack event, never from the model, and reads or
-  posts only where that person can.
+  posts only where that person can. What it reads, it shows only where
+  everyone could read it.
 
 ## Supported versions
 

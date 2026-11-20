@@ -80,30 +80,40 @@ export function createContext() {
 
   const team = (client: SlackWebClient, botUserId: string) => teams(botUserId, async () => (await client.apiCall('auth.test')).team_id ?? '');
 
-  /** The turn's context variables. A lookup Slack refuses (a missing scope) leaves its variables empty. */
+  /**
+   * The turn's context variables: every one, every turn, empty when unknown. A
+   * variable left out would keep its value from an earlier turn on the
+   * session, perhaps someone else's. A lookup Slack refuses (a missing scope)
+   * leaves its variables empty.
+   */
   return async function variables(ctx: TurnContext, viewing?: string): Promise<Record<ContextVariable, string>> {
-    const adapter = slackAdapter(ctx.thread);
-    const client = adapter.webClient;
-    const { channel: channelId, threadTs } = where(ctx.thread);
-    const userId = ctx.userId ?? '';
-    const [u, c, teamId] = await Promise.all([
-      userId ? user(client, userId).catch(() => null) : null,
-      channel(client, channelId).catch(() => null),
-      team(client, adapter.botUserId ?? '').catch(() => ''),
-    ]);
-    return {
-      slack_user_id: userId,
-      slack_user_name: u?.name ?? '',
-      slack_user_title: u?.title ?? '',
-      slack_user_timezone: u?.timezone ?? '',
-      slack_user_email: u?.email ?? '',
-      slack_team_id: teamId,
-      slack_channel_id: channelId,
-      slack_channel_name: c?.name ?? '',
-      slack_channel_type: c?.type ?? (channelId.startsWith('D') ? 'dm' : 'channel'),
-      slack_thread_ts: threadTs,
-      slack_message_ts: ctx.message?.id ?? '',
-      slack_viewing_channel_id: viewing ?? '',
-    };
+    const out = Object.fromEntries(Object.keys(CONTEXT_VARIABLES).map((k) => [k, ''])) as Record<ContextVariable, string>;
+    out.slack_user_id = ctx.userId ?? '';
+    out.slack_message_ts = ctx.message?.id ?? '';
+    out.slack_viewing_channel_id = viewing ?? '';
+    try {
+      const adapter = slackAdapter(ctx.thread);
+      const client = adapter.webClient;
+      const { channel: channelId, threadTs } = where(ctx.thread);
+      const [u, c, teamId] = await Promise.all([
+        out.slack_user_id ? user(client, out.slack_user_id).catch(() => null) : null,
+        channel(client, channelId).catch(() => null),
+        team(client, adapter.botUserId ?? '').catch(() => ''),
+      ]);
+      Object.assign(out, {
+        slack_user_name: u?.name ?? '',
+        slack_user_title: u?.title ?? '',
+        slack_user_timezone: u?.timezone ?? '',
+        slack_user_email: u?.email ?? '',
+        slack_team_id: teamId,
+        slack_channel_id: channelId,
+        slack_channel_name: c?.name ?? '',
+        slack_channel_type: c?.type ?? (channelId.startsWith('D') ? 'dm' : 'channel'),
+        slack_thread_ts: threadTs,
+      });
+    } catch {
+      // Where the turn is couldn't be read: the rest stay empty.
+    }
+    return out;
   };
 }

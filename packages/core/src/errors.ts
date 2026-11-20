@@ -10,7 +10,9 @@ export type ChannelsErrorCode =
   /** Buttons from an earlier turn couldn't be taken off their message. */
   | 'edit_failed'
   /** The project to install tools on is in another workspace than the one expected; nothing was changed. */
-  | 'wrong_workspace';
+  | 'wrong_workspace'
+  /** A secret to write a value into exists and isn't restricted, so its value could be revealed; nothing was changed. */
+  | 'secret_not_restricted';
 
 /** Every error this package throws on purpose carries a stable `code`. */
 export class ChannelsError extends Error {
