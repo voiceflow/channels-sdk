@@ -18,6 +18,14 @@ behaviours, its tools, and the `connect` command that makes its app.
 | `@voiceflow/channels-sdk/testing` | Fakes of Voiceflow's API and runtime, and `runFunction`, which runs a tool as Voiceflow's sandbox does. |
 | `voiceflow-channels` (bin) | `voiceflow-channels connect <channel>`: hands off to `@voiceflow/channels-<channel>/connect`. |
 
+## Bundled servers
+
+A bundler (Next.js, say) can't follow an import of a name it only learns at
+run time, so the core can't load an adapter by the name the catalog gives.
+Pass the adapter's module with its slug: `{ slug: 'whatsapp', module: await
+import('@chat-adapter/whatsapp') }`. A channel package (`slack()`) passes it
+for you. See [How it works](../../docs/how-it-works.md#any-chat-sdk-adapter).
+
 ## Channel extensions
 
 A channel package gives `createChannels` an extension (`ChannelExtension`):
@@ -56,3 +64,7 @@ A tool is a `ToolDefinition`: its Voiceflow function's code (written as a plain
 named function, made into one with `functionSource`), inputs, outputs, paths, a
 version, the OAuth scopes it needs, and whether it's a presentation tool (returns
 a trace the channel shows) or a workspace tool (calls the platform itself).
+Build the code in a getter (`get code() { return functionSource(main, helpers); }`):
+`functionSource` reads the functions' source text, which a bundler's minifier
+rewrites, and a getter means only an install reads it. Install from Node, not
+from a bundled server.

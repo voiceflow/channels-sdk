@@ -523,7 +523,9 @@ export const workspaceTools: ToolDefinition[] = [
     version: 2,
     description:
       'Post a message in a Slack channel for the person, when they ask you to share or announce something there. Only in channels they are a member of and you have been added to; the post says who it was for.',
-    code: functionSource(slackPostToChannel, [...BASE, ...CHANNELS, messageBlocks, alreadySent]),
+    get code() {
+      return functionSource(slackPostToChannel, [...BASE, ...CHANNELS, messageBlocks, alreadySent]);
+    },
     inputs: {
       channel: { description: 'The channel: #name or its ID.' },
       text: { description: 'The message, in Slack markdown.' },
@@ -540,7 +542,9 @@ export const workspaceTools: ToolDefinition[] = [
     version: 2,
     description:
       'Send someone in the workspace a direct message from you, for the person, when they ask you to tell or remind someone something. The message says who it was for.',
-    code: functionSource(slackMessagePerson, [...BASE, resolvePerson, messageBlocks, alreadySent]),
+    get code() {
+      return functionSource(slackMessagePerson, [...BASE, resolvePerson, messageBlocks, alreadySent]);
+    },
     inputs: {
       person: { description: 'Who: their @mention, user ID, email, or full name.' },
       text: { description: 'The message, in Slack markdown.' },
@@ -556,7 +560,9 @@ export const workspaceTools: ToolDefinition[] = [
     version: 2,
     description:
       "Read a Slack channel's recent messages, to summarize or answer questions about what was said. With no channel named it reads this conversation, or in the assistant panel the channel the person has open. Only channels they are a member of.",
-    code: functionSource(slackReadChannel, [...BASE, ...CHANNELS]),
+    get code() {
+      return functionSource(slackReadChannel, [...BASE, ...CHANNELS]);
+    },
     inputs: {
       channel: { description: 'The channel: #name or its ID. Empty for the one the person is in or looking at.' },
       limit: { description: 'How many recent messages, up to 100. Empty for 20.' },
@@ -574,7 +580,9 @@ export const workspaceTools: ToolDefinition[] = [
     version: 1,
     description:
       'Look people up in the Slack workspace by name, title or email: who someone is, their title, time zone and @mention. Use it before messaging or mentioning someone you only know by name.',
-    code: functionSource(slackFindPerson, BASE),
+    get code() {
+      return functionSource(slackFindPerson, BASE);
+    },
     inputs: {
       query: { description: 'A name, part of a name, a title (designer), or an email.' },
       token: TOKEN,
@@ -589,7 +597,9 @@ export const workspaceTools: ToolDefinition[] = [
     version: 2,
     description:
       "Schedule a Slack message for later: a reminder in this thread, or a post in a channel at a set time. Pass a relative time as the person said it (in 10 minutes, in 2 hours): you don't need to know the current time. Dates without an offset are in the person's time zone. Only in channels they are a member of.",
-    code: functionSource(slackScheduleMessage, [...BASE, ...CHANNELS, messageBlocks, unixTime]),
+    get code() {
+      return functionSource(slackScheduleMessage, [...BASE, ...CHANNELS, messageBlocks, unixTime]);
+    },
     inputs: {
       text: { description: 'The message, in Slack markdown.' },
       post_at: { description: 'When: a relative time (in 10 minutes, in 2 hours, in 3 days), or a date and time, 2026-12-01T09:00 (their time zone) or with an offset.' },
@@ -609,7 +619,9 @@ export const workspaceTools: ToolDefinition[] = [
     version: 1,
     description:
       "Pin a message so the channel keeps it at hand: by default this thread's first message, or a message the person links to. Only in channels they are a member of.",
-    code: functionSource(slackPinMessage, [...BASE, mayUse, messageOf]),
+    get code() {
+      return functionSource(slackPinMessage, [...BASE, mayUse, messageOf]);
+    },
     inputs: {
       message: { description: "The message's Slack link, or empty for this thread's first message." },
       token: TOKEN,
@@ -625,7 +637,9 @@ export const workspaceTools: ToolDefinition[] = [
     kind: 'workspace',
     version: 2,
     description: "Add a link to a channel's bookmarks bar, by default this one's. Only in channels the person is a member of.",
-    code: functionSource(slackAddBookmark, [...BASE, ...CHANNELS]),
+    get code() {
+      return functionSource(slackAddBookmark, [...BASE, ...CHANNELS]);
+    },
     inputs: {
       title: { description: "The bookmark's title." },
       link: { description: 'The URL, starting with https://.' },
@@ -644,7 +658,9 @@ export const workspaceTools: ToolDefinition[] = [
     version: 2,
     description:
       'Write a Slack canvas: a document for anything longer than a message (a summary, plan, meeting notes, a how-to). The person can edit it and this conversation can read it; share its link in your reply.',
-    code: functionSource(slackCreateCanvas, [...BASE]),
+    get code() {
+      return functionSource(slackCreateCanvas, [...BASE]);
+    },
     inputs: {
       title: { description: "The canvas's title." },
       content: { description: 'The canvas, in markdown: headings, lists, tables and links.' },
@@ -661,7 +677,9 @@ export const workspaceTools: ToolDefinition[] = [
     version: 1,
     description:
       'Send a text file in this conversation: a CSV export, a markdown or code file, a log. Use it for content people will download or open elsewhere, rather than pasting it.',
-    code: functionSource(slackSendFile, [...BASE, utf8Length]),
+    get code() {
+      return functionSource(slackSendFile, [...BASE, utf8Length]);
+    },
     inputs: {
       filename: { description: 'The file name with its extension: report.csv, notes.md.' },
       content: { description: "The file's text." },

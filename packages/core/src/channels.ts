@@ -16,6 +16,12 @@ export type ChannelSpec =
       options?: Record<string, unknown>;
       /** An adapter you built yourself; used as-is instead of loading from the catalog. */
       adapter?: Adapter;
+      /**
+       * The adapter's package, already imported (`await import('@chat-adapter/slack')`).
+       * A bundled server (Next.js, say) needs it, since a bundler can't load a
+       * package by a name it only learns at run time. Channel packages pass it for you.
+       */
+      module?: Record<string, unknown>;
       /** What only this platform has, from its channel package. */
       extension?: ChannelExtension;
     };
@@ -44,10 +50,10 @@ export async function createChannels(options: ChannelsOptions): Promise<Channels
   const adapters: Record<string, Adapter> = {};
   const extensions: ChannelExtension[] = [];
   for (const spec of options.channels) {
-    const { slug, options: adapterOptions, adapter, extension } = typeof spec === 'string' ? { slug: spec } : (spec as Extract<ChannelSpec, object>);
+    const { slug, options: adapterOptions, adapter, module, extension } = typeof spec === 'string' ? { slug: spec } : (spec as Extract<ChannelSpec, object>);
     // The channel's defaults sit under the caller's own options; with neither, the adapter reads its env vars.
     const merged = extension?.adapterDefaults ? { ...extension.adapterDefaults, ...adapterOptions } : adapterOptions;
-    adapters[slug] = adapter ?? (await loadAdapter(slug, { options: merged, importer: options.importer }));
+    adapters[slug] = adapter ?? (await loadAdapter(slug, { options: merged, module, importer: options.importer }));
     if (extension) extensions.push(extension);
   }
 

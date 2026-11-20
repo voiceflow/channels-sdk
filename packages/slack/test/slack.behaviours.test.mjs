@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { createMemoryState } from '@chat-adapter/state-memory';
 import { createChannels } from '@voiceflow/channels-sdk';
 import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
+import * as slackAdapter from '@chat-adapter/slack';
 import { slack as slackChannel, DEFAULT_HOME_TEXT } from '../dist/index.js';
 import { BOT_TOKEN, SIGNING_SECRET, slackAction, slackCommand, slackEvent, startFakeSlack } from './helpers/fake-slack.mjs';
 
@@ -35,6 +36,10 @@ const mention = (text, ts = ROOT, extra = {}) => ({ type: 'app_mention', user: '
 const threadReply = (text, ts) => ({ type: 'message', user: 'U2', team: 'T1', text, ts, thread_ts: ROOT, channel: 'C1', event_ts: ts, channel_type: 'channel' });
 const say = (message) => ({ type: 'text', payload: { message, slate: { id: 's', content: [] }, messageID: 'm' } });
 const said = (post) => post.body.markdown_text ?? post.body.text;
+
+test("slack() carries the Slack adapter's module, so a bundled server loads no adapter by name", () => {
+  assert.equal(slackChannel().module, slackAdapter);
+});
 
 test('who and where reach the agent as slack_* variables on every turn', async (t) => {
   const { slack, vf, send } = await setup(() => [say('Hi')]);

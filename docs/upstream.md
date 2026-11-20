@@ -78,11 +78,13 @@ tests (section 4). The catalog says what exists; our tests say what works.
 
 ## 3. Tracking upstream
 
+Built: Dependabot opens one grouped pull request a month for `chat` and
+`@chat-adapter/*` (`.github/dependabot.yml`).
+
 Not built yet: the plan for before the public release.
 
 | Mechanism | What it catches | Cadence |
 |---|---|---|
-| Renovate, one grouped PR for `chat` + `@chat-adapter/*` | New releases | On release |
 | CI matrix: the oldest supported `chat` version + `latest` | Breaking the floor or the ceiling | Every PR |
 | Nightly against `chat@latest` + every adapter's latest | Upstream breakage before customers see it | Daily; opens an issue on failure |
 | Catalog drift check: `ADAPTERS` diffed against `catalog.snapshot.json` | New adapters, changed features, renamed credentials | Daily; opens a PR updating the snapshot and the docs table |
@@ -97,7 +99,7 @@ Not built yet: the plan for before the public release.
 
 Slack's is `test/slack.contract.test.mjs`: the real Chat SDK and the real Slack adapter,
 loaded from the catalog, against a fake Slack Web API and a fake Voiceflow runtime
-(`test/helpers/fakes.mjs`). Each new adapter gets one of the same shape.
+(`packages/slack/test/helpers/fake-slack.mjs`, and `@voiceflow/channels-sdk/testing`). Each new adapter gets one of the same shape.
 
 Per tier-1 adapter, with fixtures picked by shape, never by content:
 
@@ -127,7 +129,8 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 
 - Anything missing goes to `vercel/chat` as an issue or a PR, never a local patch.
   Current candidates:
-  - a stable, documented deferred-verification hook (`webhookVerifier`) for the hosted lease;
+  - a stable, documented deferred-verification hook (`webhookVerifier`), for a relay that reads a
+    webhook's conversation before it verifies the signature;
   - Slack's adapter ignores `PostableCard.fallbackText`. It builds the `text` fallback from
     the card, and a card of buttons alone has none, so Slack logs a warning and a
     notification shows nothing. We already pass the labels as `fallbackText`.
@@ -158,19 +161,40 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
   Internal traces are dropped silently. Unknown ones are reported in `skipped`, never thrown.
 - **The runtime client is ours** (`packages/core/src/voiceflow.ts`): `POST /v4/project/{projectID}/environment/{environmentID}/session`,
   then `POST /v4/interact`, or `POST /v4/interact/stream` with `config.completionEvents`
-  (server-sent `trace` events, then `end`), written from the v4 runtime spec
-  (`content/docs/specs/general-runtime/openapi.public.json` in `voiceflow-website`).
-  Planned: types generated from that spec, plus a spec diff in CI.
-- **Live check:** a nightly conversation against a TypeGlish test agent.
-- **Transcripts:** tag every conversation with `vf-sdk` = `@voiceflow/channels-sdk@<version>`
-  (`platform#4521`).
+  (server-sent `trace` events, then `end`), written from Voiceflow's public v4 runtime API.
+  Planned: types generated from its published spec, plus a spec diff in CI.
+- **Live check:** a nightly conversation against a Voiceflow test agent.
+- **Transcripts:** tag every conversation with `vf-sdk` = `@voiceflow/channels-sdk@<version>`.
 
 ## 7. Before the public release
 
 - [x] License: MIT (matches Chat SDK)
-- [ ] Reserve `@voiceflow/channels-sdk` on npm
+- [ ] Reserve `@voiceflow/channels-sdk` and `@voiceflow/channels-slack` on npm
 - [ ] Contract tests passing for Phase 1: Slack (done), WhatsApp, Messenger, Instagram, Teams, Resend, Gmail
 - [ ] Upstream tracking (section 3) running
 - [ ] Docs: the Channels page (native vs Channels SDK) and one page per channel
 - [ ] Security review of credential handling
 - [ ] Remove `"private": true`
+
+### The first publish
+
+The release workflow publishes through npm's trusted publishing, which needs a
+few things done by hand, once:
+
+- [ ] Make the repository public first: npm makes provenance only for a public
+      repository, and `release.yml` asks for it.
+- [ ] Publish each package once by hand, since a trusted publisher is set on a
+      package that already exists. Then, on npmjs.com, add this repository's
+      `release.yml` as each package's trusted publisher.
+- [ ] Check CI's `changeset` check goes red once: changesets skips private
+      packages, so the check passes every pull request until `"private": true`
+      comes off.
+- [ ] Turn on private vulnerability reporting (Settings, Security), which
+      SECURITY.md promises.
+- [ ] Protect `main`: require pull requests, the `ci` checks and code owners'
+      review.
+- [ ] Give the release workflow a GitHub App token (changesets/action's
+      `github-token`), so CI runs on the version pull request it opens. One
+      opened with the default `GITHUB_TOKEN` starts no workflows.
+- [ ] Decide the oldest Node version supported. Node 20's support ended on
+      2026-04-30; Vercel Chat SDK tests 22 and 24.

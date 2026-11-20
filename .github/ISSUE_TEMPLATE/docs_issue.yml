@@ -1,0 +1,34 @@
+name: Documentation issue
+description: Something in the READMEs or docs is wrong, missing or unclear.
+labels: ["documentation"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: The file, or its link, and the section.
+      placeholder: e.g. packages/slack/README.md, "Connect"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem
+      options:
+        - Wrong or out of date
+        - Missing
+        - Unclear
+        - A code example doesn't work
+        - Broken link
+        - Typo
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What's wrong, and what it should say
+    validations:
+      required: true

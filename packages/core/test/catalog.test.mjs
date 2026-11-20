@@ -53,6 +53,19 @@ test('the loader names the package to install when it is missing', async () => {
   await assert.rejects(loadAdapter('whatsapp', { importer }), (e) => e.code === 'adapter_not_installed' && /npm install @chat-adapter\/whatsapp/.test(e.message));
 });
 
+test("the loader uses the adapter module it's given, importing nothing by name", async () => {
+  // A bundler (Next.js, say) can't follow import(name); a bundled server passes the module instead.
+  const importer = async () => { throw new Error('Cannot find module as expression is too dynamic'); };
+  const module = { createSlackAdapter: (options) => ({ name: 'slack', options }) };
+  const adapter = await loadAdapter('slack', { module, importer, options: { botToken: 'xoxb-test' } });
+  assert.deepEqual(adapter, { name: 'slack', options: { botToken: 'xoxb-test' } });
+});
+
+test('the loader says how to pass the module when a bundler stops it', async () => {
+  const importer = async () => { throw new Error('Cannot find module as expression is too dynamic'); };
+  await assert.rejects(loadAdapter('slack', { importer }), (e) => e.code === 'adapter_not_installed' && e.message.includes("{ slug: 'slack', module: await import('@chat-adapter/slack') }"));
+});
+
 test('the loader says when a package lacks the catalog factory', async () => {
   const importer = async () => ({});
   await assert.rejects(loadAdapter('slack', { importer }), (e) => e.code === 'adapter_factory_missing');

@@ -22,3 +22,15 @@ test("a tool's code changes only with a higher version, so installs update it", 
     assert.equal(new Set(hashes).size, hashes.length, `${t.name}: each version's code differs from the last`);
   }
 });
+
+// A server that bundles and minifies this package (Next.js does, for a route)
+// renames its functions, and functionSource refuses a renamed function. The bot
+// never needs a tool's code, only an install does, so the code is built when
+// it's read: importing the package never calls functionSource.
+test("a tool's code is built when it's read, not when the package loads", () => {
+  for (const t of slackTools().tools) {
+    const code = Object.getOwnPropertyDescriptor(t, 'code');
+    assert.equal(typeof code?.get, 'function', `${t.name}'s code is a getter`);
+    assert.match(t.code, /export default async function main\(/, `${t.name}'s code reads as a Voiceflow function`);
+  }
+});

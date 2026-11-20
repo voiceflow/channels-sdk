@@ -75,6 +75,7 @@ The same steps are a function, for your own scripts:
 ## Run it
 
 ```ts
+import { createRedisState } from '@chat-adapter/state-redis';
 import { createChannels } from '@voiceflow/channels-sdk';
 import { slack } from '@voiceflow/channels-slack';
 
@@ -86,7 +87,11 @@ const channels = await createChannels({
 ```
 
 Route `POST /api/slack` to `channels.webhook('slack', request)`. Events, button
-clicks, dialogs and the slash command all arrive there.
+clicks, dialogs and the slash command all arrive there. In Next.js, make the
+bot on the first request rather than at build time, as
+[`examples/nextjs-slack`](../../examples/nextjs-slack/app/api/slack/route.ts) does:
+the build has no Slack signing secret. `slack()` carries the Slack adapter's
+module, so the bundle needs nothing more.
 
 ## What it does in Slack
 

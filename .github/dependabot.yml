@@ -1,0 +1,27 @@
+# Monthly update pull requests: one for the workflows' actions, one for npm.
+# Chat SDK (chat, @chat-adapter/*) is grouped on its own, since its packages
+# move together and this project tracks it closely (docs/upstream.md).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      chat-sdk:
+        patterns: ["chat", "@chat-adapter/*"]
+      dev-dependencies:
+        dependency-type: development
+        exclude-patterns: ["chat", "@chat-adapter/*"]
+      dependencies:
+        dependency-type: production
+        exclude-patterns: ["chat", "@chat-adapter/*"]

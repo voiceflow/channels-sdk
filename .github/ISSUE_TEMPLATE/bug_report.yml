@@ -1,0 +1,112 @@
+name: Bug report
+description: Something in the packages, connect, or the tools they install doesn't work as it should.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. The more of the form you fill in, the faster it gets fixed.
+
+        **Never paste a token, signing secret or API key**, in the text, the code or the logs. To report a vulnerability, don't open an issue: see [SECURITY.md](https://github.com/voiceflow/channels-sdk/blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Where is the bug?
+      multiple: true
+      options:
+        - "@voiceflow/channels-sdk (the core: createChannels, rendering, extensions)"
+        - "@voiceflow/channels-slack (Slack's features)"
+        - "connect (voiceflow-channels connect)"
+        - "A tool connect installed on the agent"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What you saw, including any error message.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce it
+      description: The smallest set of steps that shows it.
+      placeholder: |
+        1. Create the bot with '...'
+        2. In Slack, mention the bot and say '...'
+        3. See '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code
+      description: Your createChannels call or the smallest code that shows the bug, if there is one.
+      render: typescript
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output from your server or from connect. Remove tokens, secrets and keys first.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: The version of the package you use, or the commit if you build from source.
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: chat-version
+    attributes:
+      label: Chat SDK versions
+      description: The versions of `chat` and the `@chat-adapter/*` packages you use.
+      placeholder: e.g. chat 4.45.0, @chat-adapter/slack 4.45.0
+
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Channel
+      multiple: true
+      options:
+        - Slack
+        - Another Chat SDK adapter (say which in "What happened")
+        - None (it happens before any channel)
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: e.g. 22.11.0
+
+  - type: input
+    id: host
+    attributes:
+      label: Where it runs
+      description: Your framework and host.
+      placeholder: e.g. Next.js 16 on Vercel, a Node server, a local tunnel
+
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Before you submit
+      options:
+        - label: I removed every token, signing secret and API key from this issue.
+          required: true

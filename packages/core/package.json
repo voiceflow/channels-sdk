@@ -5,11 +5,16 @@
   "description": "The core of Voiceflow Channels: a Voiceflow agent inside any Vercel Chat SDK bot, on any adapter in the catalog.",
   "keywords": [
     "voiceflow",
+    "chat",
     "chat-sdk",
     "vercel-chat",
-    "channels",
+    "chatbot",
+    "bot",
+    "ai-agent",
+    "ai-agents",
+    "conversational-ai",
     "messaging",
-    "ai-agent"
+    "channels"
   ],
   "author": "Braden Ream",
   "license": "MIT",
@@ -21,6 +26,9 @@
   "homepage": "https://github.com/voiceflow/channels-sdk/tree/main/packages/core#readme",
   "bugs": {
     "url": "https://github.com/voiceflow/channels-sdk/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "engines": {
@@ -42,6 +50,7 @@
   },
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],

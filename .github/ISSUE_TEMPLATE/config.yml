@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/voiceflow/channels-sdk/blob/main/SECURITY.md
+    about: Don't open an issue for a vulnerability. Report it privately, as SECURITY.md says.
+  - name: Building your Voiceflow agent
+    url: https://www.voiceflow.com/docs
+    about: Questions about agents, prompts and tools in Voiceflow itself.
+  - name: Voiceflow community
+    url: https://community.voiceflow.com
+    about: Ask other builders and share what you've made.
+  - name: Vercel Chat SDK and its adapters
+    url: https://github.com/vercel/chat/issues/new/choose
+    about: Webhooks, signatures and posting belong to the adapters. Report those upstream.
