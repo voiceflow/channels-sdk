@@ -88,7 +88,15 @@ The same `options` turn on an adapter's own features, such as Slack's
   pinned as suggested prompts. Clicking one sends the button's own request.
 - **Feedback buttons** (Slack: the adapter's `feedbackButtons: true`) reach
   `onFeedback`. A rating is not a turn: the agent doesn't answer it.
-- **A button from an earlier turn is refused as stale**, never replayed.
+- **Only the latest turn's buttons are live**, as in Voiceflow's web chat. When the
+  next turn starts, the last turn's buttons come off their messages: a card keeps
+  its title, image and text; buttons alone keep their labels as plain text; a
+  clicked (or typed) choice shows as "✓ label". On channels that can't edit a sent
+  message (WhatsApp), old buttons stay. A click on one, or one that beats the edit,
+  is refused as stale (`staleChoiceMessage`), never replayed.
+- **A post the channel refuses goes as text instead**: a card whose image Slack
+  can't download, say. The text keeps its choices, numbered as they were, and the
+  rest of the turn still arrives. `onError` reports it as `post_refused`.
 - **When the agent ends the conversation**, the next message starts a new one.
 - **A failed turn posts an error message** (`errorMessage`, or `null` for none) and
   calls `onError`.

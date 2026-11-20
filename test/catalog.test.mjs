@@ -23,6 +23,10 @@ test('capabilities come from the catalog: only a full "yes" counts', () => {
   const slack = capabilities('slack');
   assert.equal(slack.buttons, true);
   assert.equal(slack.cards, true);
+  assert.equal(slack.editMessages, true);
+  // WhatsApp has buttons but can't edit a sent message, so its old buttons stay (and go stale).
+  assert.equal(capabilities('whatsapp').buttons, true);
+  assert.equal(capabilities('whatsapp').editMessages, false);
   // Every capability is a boolean for every listed platform.
   for (const { slug } of listChannels()) {
     for (const v of Object.values(capabilities(slug))) assert.equal(typeof v, 'boolean', slug);

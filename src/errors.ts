@@ -4,7 +4,11 @@ export type ChannelsErrorCode =
   | 'adapter_not_installed'
   | 'adapter_factory_missing'
   | 'voiceflow_http'
-  | 'voiceflow_response';
+  | 'voiceflow_response'
+  /** The channel refused a post (a card whose image it couldn't download, say); its text form went instead. */
+  | 'post_refused'
+  /** Buttons from an earlier turn couldn't be taken off their message. */
+  | 'edit_failed';
 
 /** Every error this package throws on purpose carries a stable `code`. */
 export class ChannelsError extends Error {

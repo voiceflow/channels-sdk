@@ -2,12 +2,16 @@
 // by reply. A streamed turn writes text into one live message as the runtime
 // sends it, with a progress card per tool call, and closes that message
 // whenever something that can't stream (buttons, a card, an image) comes next.
+// A rich post the channel refuses is sent again as text, and the turn goes on.
 import type { StreamChunk, Thread } from 'chat';
-import { withSources, type Post, type RenderOptions, type Renderer } from './render.js';
+import { withSources, type ButtonsShown, type Post, type RenderOptions, type Renderer } from './render.js';
 import { sourcesOf, translate, type Choice, type Reply, type Source } from './translate.js';
 import type { Trace } from './voiceflow.js';
 
 type AnyThread = Thread<any, any>;
+
+/** A posted message with buttons, and its ID on the channel. */
+export type ShownMessage = ButtonsShown & { messageId: string };
 
 export interface DeliveryOptions extends RenderOptions {
   /** The title on a tool call's progress card. `null` shows no progress cards. */
@@ -17,9 +21,30 @@ export interface DeliveryOptions extends RenderOptions {
    * posting them. Returns `true` when it did.
    */
   offerChoices?: (choices: readonly Choice[]) => Promise<boolean>;
+  /** Called for each message with buttons once it's posted, so they can be taken off later. */
+  onButtons?: (message: ShownMessage) => void;
+  /** Called when the channel refused a post and its text form was sent instead. */
+  onRefused?: (error: unknown) => void;
 }
 
 export const DEFAULT_PROGRESS_TITLE = 'Working on it';
+
+/** Posts one rendered post, or its text form if the channel refuses it. */
+async function send(thread: AnyThread, renderer: Renderer, post: Post, options: DeliveryOptions): Promise<void> {
+  let sent: { id?: string };
+  try {
+    sent = await thread.post(post);
+  } catch (error) {
+    // An image the channel can't fetch, say. Text keeps the reply, and its choices stay answerable by number.
+    const text = renderer.textOf(post);
+    if (!text) throw error;
+    options.onRefused?.(error);
+    await thread.post(text);
+    return;
+  }
+  const buttons = renderer.buttonsOf(post);
+  if (buttons && sent?.id) options.onButtons?.({ ...buttons, messageId: sent.id });
+}
 
 /** Posts one reply, unless `offerChoices` took its buttons. */
 async function postReply(thread: AnyThread, renderer: Renderer, reply: Reply, options: DeliveryOptions): Promise<void> {
@@ -27,7 +52,7 @@ async function postReply(thread: AnyThread, renderer: Renderer, reply: Reply, op
     renderer.offer(reply.choices);
     return;
   }
-  for (const post of renderer.render(reply)) await thread.post(post as Post);
+  for (const post of renderer.render(reply)) await send(thread, renderer, post, options);
 }
 
 export async function deliverWhole(thread: AnyThread, replies: readonly Reply[], renderer: Renderer, options: DeliveryOptions): Promise<void> {

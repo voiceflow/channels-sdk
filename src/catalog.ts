@@ -28,6 +28,8 @@ export interface ChannelCapabilities {
   typingIndicator: boolean;
   /** Replies that appear as they're written, with live progress where the channel has it. */
   streaming: boolean;
+  /** Editing a sent message, which takes an earlier turn's buttons off it. */
+  editMessages: boolean;
 }
 
 /** The catalog entry for a platform adapter, or a `ChannelsError`. */
@@ -61,6 +63,7 @@ export function capabilities(slug: string): ChannelCapabilities {
     imagesInCards: supported(slug, 'imagesInCards'),
     typingIndicator: supported(slug, 'typingIndicator'),
     streaming: supported(slug, 'streaming'),
+    editMessages: supported(slug, 'editMessage'),
   };
 }
 

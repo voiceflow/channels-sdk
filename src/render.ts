@@ -32,56 +32,84 @@ export function parseActionId(id: string): { nonce: string; index: number } | nu
   return m ? { nonce: m[1]!, index: Number(m[2]) } : null;
 }
 
+/**
+ * A posted message with buttons, as it was shown: enough to show it again
+ * without them once its turn is over. `first` is the number its first choice
+ * had in the turn (from 0).
+ */
+export type ButtonsShown =
+  | { kind: 'card'; card: CardData; first: number }
+  | { kind: 'choices'; choices: Choice[]; first: number };
+
 export interface Renderer {
   /** The Chat SDK posts for one reply. Choices are numbered across everything this renderer has shown. */
   render(reply: Reply): Post[];
   /** Records choices offered some other way (as suggested prompts, say), so a typed label still picks one. */
   offer(choices: readonly Choice[]): void;
+  /** A post's text form, numbered as shown, for when the channel refuses it. `null` for a post that is already text. */
+  textOf(post: Post): Post | null;
+  /** What a post with buttons showed. `null` for a post without buttons. */
+  buttonsOf(post: Post): ButtonsShown | null;
   readonly choices: Choice[];
   readonly nonce: string;
 }
+
+type Offered = { choice: Choice; index: number }[];
 
 /** One renderer per turn: its replies share one numbering and one nonce. */
 export function createRenderer(caps: ChannelCapabilities, options: RenderOptions = {}): Renderer {
   const nonce = Math.random().toString(36).slice(2, 10);
   const choices: Choice[] = [];
+  const texts = new WeakMap<object, Post>();
+  const shown = new WeakMap<object, ButtonsShown>();
 
-  const offer = (list: readonly Choice[]) =>
+  const offer = (list: readonly Choice[]): Offered =>
     list.map((choice) => {
       choices.push(choice);
       return { choice, index: choices.length - 1 };
     });
+  const firstOf = (offered: Offered) => offered[0]?.index ?? choices.length;
 
   // A link the channel can't attach to a button would be lost, so a group with one goes as text.
   const canButton = (list: readonly Choice[]) => caps.buttons && (caps.linkButtons || list.every((c) => !c.url));
 
-  const buttons = (list: readonly Choice[]) =>
+  const buttons = (offered: Offered) =>
     Actions(
-      offer(list).map(({ choice, index }) =>
+      offered.map(({ choice, index }) =>
         choice.url
           ? LinkButton({ id: actionId(nonce, index), label: choice.label, url: choice.url })
           : Button({ id: actionId(nonce, index), label: choice.label, value: String(index) }),
       ),
     );
 
-  const numbered = (list: readonly Choice[]) =>
-    offer(list)
-      .map(({ choice, index }) => `${index + 1}. ${choice.url ? `[${choice.label}](${choice.url})` : choice.label}`)
-      .join('\n');
+  const numbered = (offered: Offered) =>
+    offered.map(({ choice, index }) => `${index + 1}. ${choice.url ? `[${choice.label}](${choice.url})` : choice.label}`).join('\n');
 
-  // A card whose buttons the channel can't show goes as text, so its choices stay answerable.
-  const card = (data: CardData): Post => {
-    if (caps.cards && (!data.choices.length || canButton(data.choices))) {
-      const children = [];
-      if (data.description) children.push(CardText(data.description));
-      if (data.choices.length) children.push(buttons(data.choices));
-      return Card({ title: data.title, imageUrl: caps.imagesInCards ? data.imageUrl : undefined, children });
-    }
+  const cardText = (data: CardData, offered: Offered): Post => {
     const lines = [`**${data.title}**`];
     if (data.description) lines.push(data.description);
     if (data.imageUrl) lines.push(data.imageUrl);
-    if (data.choices.length) lines.push(numbered(data.choices));
+    if (offered.length) lines.push(numbered(offered));
     return { markdown: lines.join('\n') };
+  };
+
+  // Every rich post keeps its text form, and every post with buttons what it showed.
+  const keep = <P extends Post>(post: P, text: Post, buttonsShown?: ButtonsShown): P => {
+    texts.set(post as object, text);
+    if (buttonsShown) shown.set(post as object, buttonsShown);
+    return post;
+  };
+
+  // A card whose buttons the channel can't show goes as text, so its choices stay answerable.
+  const card = (data: CardData): Post => {
+    const offered = offer(data.choices);
+    const text = cardText(data, offered);
+    if (!caps.cards || (offered.length && !canButton(data.choices))) return text;
+    const children = [];
+    if (data.description) children.push(CardText(data.description));
+    if (offered.length) children.push(buttons(offered));
+    const post = Card({ title: data.title, imageUrl: caps.imagesInCards ? data.imageUrl : undefined, children });
+    return keep(post, text, offered.length ? { kind: 'card', card: data, first: firstOf(offered) } : undefined);
   };
 
   return {
@@ -90,28 +118,53 @@ export function createRenderer(caps: ChannelCapabilities, options: RenderOptions
     offer(list) {
       offer(list);
     },
+    textOf: (post) => texts.get(post as object) ?? null,
+    buttonsOf: (post) => shown.get(post as object) ?? null,
     render(reply) {
       switch (reply.type) {
         case 'text':
           return [{ markdown: withSources(reply.markdown, reply.sources, options.sources ?? 'off') }];
-        case 'choices':
+        case 'choices': {
+          const offered = offer(reply.choices);
+          const text = { markdown: numbered(offered) };
+          if (!canButton(reply.choices)) return [text];
           // A card of buttons alone has no text, so its labels are the fallback where a channel shows one
           // (a notification, a screen reader). Slack's adapter ignores it today: see docs/upstream.md.
-          return [
-            canButton(reply.choices)
-              ? { card: Card({ children: [buttons(reply.choices)] }), fallbackText: reply.choices.map((c) => c.label).join(' · ') }
-              : { markdown: numbered(reply.choices) },
-          ];
+          const post = { card: Card({ children: [buttons(offered)] }), fallbackText: reply.choices.map((c) => c.label).join(' · ') };
+          return [keep(post, text, { kind: 'choices', choices: reply.choices, first: firstOf(offered) })];
+        }
         case 'card':
           return [card(reply.card)];
         case 'carousel':
           // No carousel in Chat SDK yet (vercel/chat#1126): one message per card.
           return reply.cards.map(card);
-        case 'image':
-          return [caps.cards && caps.imagesInCards ? Card({ children: [Image({ url: reply.url })] }) : { markdown: reply.url }];
+        case 'image': {
+          const text = { markdown: reply.url };
+          return [caps.cards && caps.imagesInCards ? keep(Card({ children: [Image({ url: reply.url })] }), text) : text];
+        }
       }
     },
   };
+}
+
+/**
+ * A message with buttons, shown again without them once its turn is over. The
+ * choice that was picked, if it was one of this message's, shows as "✓ label";
+ * a message of buttons alone otherwise keeps its labels as plain text.
+ */
+export function retired(buttonsShown: ButtonsShown, picked: number | null, caps: ChannelCapabilities): Post {
+  const list = buttonsShown.kind === 'card' ? buttonsShown.card.choices : buttonsShown.choices;
+  const at = picked === null ? -1 : picked - buttonsShown.first;
+  const mark = at >= 0 && at < list.length ? `✓ ${list[at]!.label}` : null;
+  if (buttonsShown.kind === 'card') {
+    const { title, description, imageUrl } = buttonsShown.card;
+    const children = [];
+    if (description) children.push(CardText(description));
+    if (mark) children.push(CardText(mark));
+    return Card({ title, imageUrl: caps.imagesInCards ? imageUrl : undefined, children });
+  }
+  // Still a card, so the edit replaces the buttons rather than adding text beside them.
+  return Card({ children: [CardText(mark ?? list.map((c) => c.label).join(' · '))] });
 }
 
 /** Renders a whole turn at once. */

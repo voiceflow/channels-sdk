@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { render, matchTypedChoice } from '../dist/index.js';
+import { createRenderer, render, retired, matchTypedChoice } from '../dist/index.js';
 
 const none = { buttons: false, cards: false, imagesInCards: false, typingIndicator: false };
 const rich = { buttons: true, cards: true, imagesInCards: true, typingIndicator: true };
@@ -52,4 +52,31 @@ test('a URL choice is a link button where the channel has them, and a markdown l
   // Buttons but no link buttons: the link would be lost on a plain button, so the group goes as text.
   const withoutLinks = render([{ type: 'choices', choices: link }], { ...rich, linkButtons: false });
   assert.deepEqual(withoutLinks.posts, [{ markdown: '1. [Book](https://example.com/b)\n2. Later' }]);
+});
+
+test('a rich post keeps its text form, numbered as shown, and what its buttons showed', () => {
+  const r = createRenderer(rich);
+  const [card] = r.render({ type: 'card', card: { title: 'Plan', description: 'Details', choices: [{ label: 'Pick', action: { type: 'pick' } }] } });
+  const [list] = r.render({ type: 'choices', choices });
+  const [text] = r.render({ type: 'text', markdown: 'Hi', sources: [] });
+  assert.deepEqual(r.textOf(card), { markdown: '**Plan**\nDetails\n1. Pick' });
+  assert.deepEqual(r.textOf(list), { markdown: '2. Yes\n3. No' });
+  assert.deepEqual(r.buttonsOf(card), { kind: 'card', card: { title: 'Plan', description: 'Details', choices: [{ label: 'Pick', action: { type: 'pick' } }] }, first: 0 });
+  assert.deepEqual(r.buttonsOf(list), { kind: 'choices', choices, first: 1 });
+  assert.equal(r.textOf(text), null);
+  assert.equal(r.buttonsOf(text), null);
+  assert.equal(r.choices.length, 3, 'nothing numbered twice');
+});
+
+test('a retired message has no buttons, and a pick from it shows as a check mark', () => {
+  const shown = { kind: 'choices', choices, first: 2 };
+  const json = (post) => JSON.stringify(post);
+  assert.match(json(retired(shown, 3, rich)), /✓ No/);
+  assert.doesNotMatch(json(retired(shown, 3, rich)), /"type":"actions"/);
+  assert.match(json(retired(shown, 0, rich)), /Yes · No/, 'a pick from another message marks nothing here');
+  const card = retired({ kind: 'card', card: { title: 'Plan', description: 'Details', imageUrl: 'https://example.com/p.png', choices }, first: 0 }, null, rich);
+  assert.match(json(card), /Plan/);
+  assert.match(json(card), /Details/);
+  assert.match(json(card), /p\.png/);
+  assert.doesNotMatch(json(card), /"type":"actions"|✓/);
 });

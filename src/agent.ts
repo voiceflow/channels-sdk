@@ -1,12 +1,15 @@
 // A Voiceflow agent inside any Chat SDK bot: one Chat SDK thread is one
-// Voiceflow conversation. The session key and the choices offered last turn
-// live in the thread's own state, so they persist wherever the bot's state
-// adapter keeps it (memory in development, Redis in production).
+// Voiceflow conversation. The session key, the choices offered last turn and
+// the messages that show them live in the thread's own state, so they persist
+// wherever the bot's state adapter keeps it (memory in development, Redis in
+// production). Only the latest turn's buttons are live: when the next turn
+// starts, the last turn's come off their messages, as in Voiceflow's web chat.
 import { createHash } from 'node:crypto';
-import type { ActionEvent, Adapter, Author, Chat, Message, Thread } from 'chat';
+import type { ActionEvent, Adapter, AdapterPostableMessage, Author, Chat, Message, Thread } from 'chat';
 import { capabilities, type ChannelCapabilities } from './catalog.js';
-import { deliverStream, deliverWhole, type DeliveryOptions } from './deliver.js';
-import { createRenderer, matchTypedChoice, parseActionId, type RenderOptions } from './render.js';
+import { deliverStream, deliverWhole, type DeliveryOptions, type ShownMessage } from './deliver.js';
+import { ChannelsError } from './errors.js';
+import { createRenderer, matchTypedChoice, parseActionId, retired, type RenderOptions } from './render.js';
 import { translate, type Choice, type Translation } from './translate.js';
 import { createVoiceflowClient, type SessionStore, type VoiceflowAction, type VoiceflowConfig } from './voiceflow.js';
 
@@ -16,6 +19,8 @@ interface ConversationState {
   sessionKey?: string;
   nonce?: string;
   choices?: Choice[];
+  /** The last turn's messages with buttons, taken off when the next turn starts. */
+  shown?: ShownMessage[];
 }
 
 type AnyThread = Thread<any, any>;
@@ -39,6 +44,12 @@ export interface VoiceflowAgentOptions extends RenderOptions {
   errorMessage?: string | null;
   /** Posted when someone clicks a button from an earlier turn. `null` posts nothing. */
   staleChoiceMessage?: string | null;
+  /**
+   * Called when a turn fails (and `errorMessage` is posted), or when part of
+   * one does and the turn carries on: a post the channel refused and that went
+   * as text instead (`post_refused`), or buttons that couldn't be taken off an
+   * earlier message (`edit_failed`).
+   */
   onError?: (error: unknown, ctx: TurnContext) => void;
   /** Called after every turn: what was translated, for logging or metrics. */
   onTurn?: (translation: Translation, ctx: TurnContext) => void;
@@ -100,6 +111,7 @@ const NO_CAPABILITIES: ChannelCapabilities = {
   imagesInCards: false,
   typingIndicator: false,
   streaming: false,
+  editMessages: false,
 };
 /** Slack shows at most four suggested prompts. */
 const MAX_PROMPTS = 4;
@@ -127,15 +139,49 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
     };
   }
 
-  async function runTurn(ctx: TurnContext, action: VoiceflowAction, pin?: PinPrompts): Promise<void> {
+  /** Shows a turn's messages again without their buttons. Never throws: a failed edit is reported. */
+  async function retire(ctx: TurnContext, messages: readonly ShownMessage[], picked: number | null): Promise<void> {
     const { thread } = ctx;
     const caps = capabilitiesOf(thread);
+    for (const message of messages) {
+      try {
+        await thread.adapter.editMessage(thread.id, message.messageId, retired(message, picked, caps) as AdapterPostableMessage);
+      } catch (error) {
+        options.onError?.(new ChannelsError('edit_failed', `Couldn't take the buttons off message ${message.messageId}.`, { cause: error }), ctx);
+      }
+    }
+  }
+
+  /**
+   * One turn. `picked` is the index of the choice that started it (a click, or
+   * a typed number or label), shown as picked on the message it came from.
+   */
+  async function runTurn(ctx: TurnContext, action: VoiceflowAction, { pin, picked }: { pin?: PinPrompts; picked?: number } = {}): Promise<void> {
+    const { thread } = ctx;
+    const caps = capabilitiesOf(thread);
+    let retiring: Promise<void> = Promise.resolve();
     try {
+      // The last turn's buttons come off while this turn runs.
+      const before = await readState(thread);
+      if (before.shown?.length) {
+        await writeState(thread, { ...before, shown: [] });
+        retiring = retire(ctx, before.shown, picked ?? null);
+      }
+
       if (caps.typingIndicator) await thread.startTyping().catch(() => {});
       const variables = (await options.variables?.(ctx)) ?? {};
       const input = { userID: voiceflowUserID(thread.id), action, variables, sessions: sessionStore(thread) };
       const renderer = createRenderer(caps, options);
-      const delivery: DeliveryOptions = { sources: options.sources, progressTitle: options.progressTitle, offerChoices: pin };
+      const shown: ShownMessage[] = [];
+      const delivery: DeliveryOptions = {
+        sources: options.sources,
+        progressTitle: options.progressTitle,
+        offerChoices: pin,
+        // Where messages can't be edited (WhatsApp), old buttons stay, and a click on one is refused as stale.
+        onButtons: caps.editMessages ? (message) => shown.push(message) : undefined,
+        onRefused: (error) =>
+          options.onError?.(new ChannelsError('post_refused', 'The channel refused a post; its text form was sent instead.', { cause: error }), ctx),
+      };
 
       let translation: Translation;
       if (caps.streaming && options.streaming !== false) {
@@ -147,15 +193,17 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
         await deliverWhole(thread, translation.replies, renderer, delivery);
       }
 
-      const state = await readState(thread);
-      await writeState(
-        thread,
-        translation.ended
-          ? {} // The agent ended the conversation: the next message starts a new one.
-          : { ...state, nonce: renderer.nonce, choices: renderer.choices },
-      );
+      await retiring;
+      if (translation.ended) {
+        // The agent ended the conversation: the next message starts a new one, so no button stays live.
+        await retire(ctx, shown, null);
+        await writeState(thread, {});
+      } else {
+        await writeState(thread, { ...(await readState(thread)), nonce: renderer.nonce, choices: renderer.choices, shown });
+      }
       options.onTurn?.(translation, ctx);
     } catch (error) {
+      await retiring;
       options.onError?.(error, ctx);
       const text = options.errorMessage === undefined ? DEFAULT_ERROR : options.errorMessage;
       if (text !== null) await thread.post(text).catch(() => {});
@@ -167,7 +215,11 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       const text = withoutBotMention(message.text ?? '', thread.adapter, options.userName);
       const state = await readState(thread);
       const picked = state.choices?.length ? matchTypedChoice(text, state.choices) : null;
-      await runTurn({ thread, message }, picked ? picked.action : { type: 'text', payload: text });
+      await runTurn(
+        { thread, message },
+        picked ? picked.action : { type: 'text', payload: text },
+        picked ? { picked: state.choices!.indexOf(picked) } : {},
+      );
     },
 
     async choose(event) {
@@ -187,11 +239,11 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
         if (text !== null) await thread.post(text).catch(() => {});
         return;
       }
-      await runTurn({ thread }, choice.action);
+      await runTurn({ thread }, choice.action, { picked: parsed.index });
     },
 
     async open(thread, pin) {
-      await runTurn({ thread }, { type: 'launch' }, pin);
+      await runTurn({ thread }, { type: 'launch' }, { pin });
     },
 
     attach(bot) {

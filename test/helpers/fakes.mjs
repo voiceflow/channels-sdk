@@ -6,8 +6,11 @@ import { createHmac } from 'node:crypto';
 export const SIGNING_SECRET = 'test-signing-secret';
 export const BOT_TOKEN = 'xoxb-test-token';
 
-/** A local Slack Web API that records every call. */
-export async function startFakeSlack() {
+/**
+ * A local Slack Web API that records every call, with its answer. `refuse(method, body)`
+ * can return an error answer (`{ ok: false, error }`) to refuse a call, as Slack does.
+ */
+export async function startFakeSlack({ refuse } = {}) {
   const calls = [];
   let n = 0;
   const server = http.createServer(async (req, res) => {
@@ -17,18 +20,21 @@ export async function startFakeSlack() {
     const body = type.includes('json') ? JSON.parse(raw || '{}') : Object.fromEntries(new URLSearchParams(raw));
     for (const k of ['blocks', 'attachments', 'chunks', 'prompts']) if (typeof body[k] === 'string') body[k] = JSON.parse(body[k]);
     const method = req.url.replace(/^\/+/, '').replace(/^api\//, '').split('?')[0];
-    calls.push({ method, body });
+    const call = { method, body };
+    calls.push(call);
     const ts = `1700000${String(++n).padStart(3, '0')}.000100`;
     const answer =
-      method === 'auth.test' ? { ok: true, user_id: 'UBOT', bot_id: 'BBOT', team_id: 'T1' }
+      refuse?.(method, body) ??
+      (method === 'auth.test' ? { ok: true, user_id: 'UBOT', bot_id: 'BBOT', team_id: 'T1' }
       // The bot resolves to its Slack username, as a real workspace answers for a bot user.
       : method === 'users.info' && body.user === 'UBOT' ? { ok: true, user: { id: 'UBOT', name: 'voiceflow', real_name: 'voiceflow', is_bot: true, profile: { display_name: 'voiceflow' } } }
       : method === 'users.info' ? { ok: true, user: { id: body.user, name: 'person', real_name: 'A Person', profile: {} } }
       : method === 'conversations.info' ? { ok: true, channel: { id: body.channel, name: 'general', is_im: false } }
       : method === 'chat.postMessage' ? { ok: true, ts, channel: body.channel, message: { ts, text: body.text } }
       : method === 'chat.startStream' ? { ok: true, ts, channel: body.channel }
-      : method === 'chat.appendStream' || method === 'chat.stopStream' ? { ok: true, ts: body.ts, channel: body.channel }
-      : { ok: true };
+      : method === 'chat.appendStream' || method === 'chat.stopStream' || method === 'chat.update' ? { ok: true, ts: body.ts, channel: body.channel }
+      : { ok: true });
+    call.answer = answer;
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(answer));
   });
@@ -37,7 +43,9 @@ export async function startFakeSlack() {
   return {
     apiUrl: `http://127.0.0.1:${port}/api/`,
     calls,
-    posts: () => calls.filter((c) => c.method === 'chat.postMessage'),
+    /** Every message Slack accepted (a refused post is in `calls`, not here). */
+    posts: () => calls.filter((c) => c.method === 'chat.postMessage' && c.answer?.ok),
+    updates: () => calls.filter((c) => c.method === 'chat.update'),
     /** Every native stream, read back the way Slack assembles it: its text, its task updates and its closing blocks. */
     streams: () => {
       const byTs = new Map();
