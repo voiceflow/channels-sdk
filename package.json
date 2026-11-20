@@ -35,8 +35,8 @@
     "@chat-adapter/catalog": "4.45.0",
     "@chat-adapter/slack": "4.45.0",
     "@chat-adapter/state-memory": "4.45.0",
-    "@types/node": "20.19.25",
+    "@types/node": "26.6.6",
     "chat": "4.45.0",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }
