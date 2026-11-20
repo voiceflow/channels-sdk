@@ -15,7 +15,7 @@ export async function startFakeSlack() {
     for await (const c of req) raw += c;
     const type = req.headers['content-type'] || '';
     const body = type.includes('json') ? JSON.parse(raw || '{}') : Object.fromEntries(new URLSearchParams(raw));
-    for (const k of ['blocks', 'attachments']) if (typeof body[k] === 'string') body[k] = JSON.parse(body[k]);
+    for (const k of ['blocks', 'attachments', 'chunks', 'prompts']) if (typeof body[k] === 'string') body[k] = JSON.parse(body[k]);
     const method = req.url.replace(/^\/+/, '').replace(/^api\//, '').split('?')[0];
     calls.push({ method, body });
     const ts = `1700000${String(++n).padStart(3, '0')}.000100`;
@@ -26,6 +26,8 @@ export async function startFakeSlack() {
       : method === 'users.info' ? { ok: true, user: { id: body.user, name: 'person', real_name: 'A Person', profile: {} } }
       : method === 'conversations.info' ? { ok: true, channel: { id: body.channel, name: 'general', is_im: false } }
       : method === 'chat.postMessage' ? { ok: true, ts, channel: body.channel, message: { ts, text: body.text } }
+      : method === 'chat.startStream' ? { ok: true, ts, channel: body.channel }
+      : method === 'chat.appendStream' || method === 'chat.stopStream' ? { ok: true, ts: body.ts, channel: body.channel }
       : { ok: true };
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(answer));
@@ -36,6 +38,26 @@ export async function startFakeSlack() {
     apiUrl: `http://127.0.0.1:${port}/api/`,
     calls,
     posts: () => calls.filter((c) => c.method === 'chat.postMessage'),
+    /** Every native stream, read back the way Slack assembles it: its text, its task updates and its closing blocks. */
+    streams: () => {
+      const byTs = new Map();
+      for (const c of calls) {
+        if (!['chat.startStream', 'chat.appendStream', 'chat.stopStream'].includes(c.method)) continue;
+        const key = c.method === 'chat.startStream' ? `start-${calls.indexOf(c)}` : null;
+        const stream = key ? { text: '', tasks: [], blocks: [], stopped: false, start: c.body } : [...byTs.values()].at(-1);
+        if (key) byTs.set(key, stream);
+        if (typeof c.body.markdown_text === 'string') stream.text += c.body.markdown_text;
+        for (const chunk of c.body.chunks ?? []) {
+          if (chunk.type === 'markdown_text') stream.text += chunk.text;
+          else if (chunk.type === 'task_update') stream.tasks.push({ id: chunk.id, title: chunk.title, status: chunk.status });
+        }
+        if (c.method === 'chat.stopStream') {
+          stream.stopped = true;
+          stream.blocks = c.body.blocks ?? [];
+        }
+      }
+      return [...byTs.values()];
+    },
     close: () => new Promise((r) => server.close(r)),
   };
 }
@@ -84,10 +106,15 @@ export function fakeVoiceflow(answer) {
       sessions.push({ url, userID: body.userID, authorization: init.headers.authorization, sessionKey });
       return new Response(JSON.stringify({ sessionKey }), { status: 200 });
     }
-    if (url.endsWith('/v4/interact')) {
-      const call = { sessionKey: init.headers.authorization, action: body.action, variables: body.variables, config: body.config };
+    if (url.endsWith('/v4/interact') || url.endsWith('/v4/interact/stream')) {
+      const stream = url.endsWith('/stream');
+      const call = { sessionKey: init.headers.authorization, action: body.action, variables: body.variables, config: body.config, stream };
       interacts.push(call);
-      return new Response(JSON.stringify({ traces: answer(body.action, call) }), { status: 200 });
+      const traces = answer(body.action, call);
+      if (!stream) return new Response(JSON.stringify({ traces }), { status: 200 });
+      // Server-sent events, the runtime's shape: one `trace` event per trace, then `end`.
+      const sse = traces.map((t, i) => `event: trace\nid: ${i}\ndata: ${JSON.stringify(t)}\n\n`).join('') + 'event: end\ndata: {}\n\n';
+      return new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } });
     }
     return new Response('not found', { status: 404 });
   };

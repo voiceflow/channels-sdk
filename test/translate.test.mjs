@@ -61,3 +61,9 @@ test('internal traces are silent; unknown ones are reported, never thrown', () =
   assert.deepEqual(t.replies, []);
   assert.deepEqual(t.skipped, ['brand-new-trace', 'channel-action', 'unknown', 'unknown']);
 });
+
+test('a URL button keeps its link from its open_url action, and its request', () => {
+  const request = { type: 'path-1', payload: { label: 'Book', actions: [{ type: 'open_url', payload: { url: 'https://example.com/b' } }] } };
+  const { replies } = translate([{ type: 'choice', payload: { buttons: [{ name: 'Book', request }, { name: 'Bad', request: { type: 'p', payload: { actions: [{ type: 'open_url', payload: { url: 'javascript:alert(1)' } }] } } }] } }]);
+  assert.deepEqual(replies[0].choices.map((c) => [c.label, c.url, c.action.type]), [['Book', 'https://example.com/b', 'path-1'], ['Bad', undefined, 'p']]);
+});

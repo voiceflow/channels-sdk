@@ -17,6 +17,8 @@ async function setup(answer) {
     channels: [{ slug: 'slack', options: { botToken: BOT_TOKEN, signingSecret: SIGNING_SECRET, botUserId: 'UBOT', apiUrl: slack.apiUrl } }],
     state: createMemoryState(),
     errorMessage: 'ERROR',
+    // Replies posted whole. Streaming, and Slack's other native features, are in slack.native.contract.test.mjs.
+    streaming: false,
   });
   const send = async (request) => {
     const w = waiter();

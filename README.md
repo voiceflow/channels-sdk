@@ -3,8 +3,8 @@
 Connect Voiceflow agents to Slack, WhatsApp, Teams, email and more, through
 [Vercel Chat SDK](https://chat-sdk.dev) adapters.
 
-> **Status:** pre-release, local only. Not published. Slack passes its contract tests;
-> the rest of Phase 1 is next. See [docs/upstream.md](docs/upstream.md).
+> **Status:** pre-release, local only. Not published. Slack passes its contract tests,
+> its native features included; the rest of Phase 1 is next. See [docs/upstream.md](docs/upstream.md).
 
 ## What it is, and what it isn't
 
@@ -63,6 +63,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cha
 
 To pass credentials yourself, or to bring an adapter you built, use the object form:
 `{ slug: 'slack', options: { botToken, signingSecret } }` or `{ slug: 'slack', adapter }`.
+The same `options` turn on an adapter's own features, such as Slack's
+`feedbackButtons: true`.
 
 ## How a conversation works
 
@@ -74,6 +76,18 @@ To pass credentials yourself, or to bring an adapter you built, use the object f
 - **Replies render to what the channel can show**, read from the catalog: native
   buttons and cards where it has them, a numbered list where it doesn't. A typed
   number or label picks a choice either way.
+- **URL buttons open their link and still send their request**, as Voiceflow's web
+  chat does, on channels that report link clicks. Without link buttons they become
+  numbered markdown links.
+- **Answers stream** where the catalog says streaming is fully supported (Slack):
+  the agent's text is written into one live message as it's generated, with a
+  progress card for each tool call. Buttons, cards and images close that message
+  and post below it. Elsewhere, or with `streaming: false`, replies post whole.
+- **Opening the assistant thread runs the agent's launch turn** (`launchOnOpen`,
+  on by default). Its messages are posted, and up to four of its buttons are
+  pinned as suggested prompts. Clicking one sends the button's own request.
+- **Feedback buttons** (Slack: the adapter's `feedbackButtons: true`) reach
+  `onFeedback`. A rating is not a turn: the agent doesn't answer it.
 - **A button from an earlier turn is refused as stale**, never replayed.
 - **When the agent ends the conversation**, the next message starts a new one.
 - **A failed turn posts an error message** (`errorMessage`, or `null` for none) and

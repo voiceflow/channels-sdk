@@ -18,12 +18,16 @@ export type { CatalogAdapter };
 export interface ChannelCapabilities {
   /** Clickable reply buttons. */
   buttons: boolean;
+  /** Buttons that open a link. */
+  linkButtons: boolean;
   /** Rich cards: a title, text, an image and buttons in one message. */
   cards: boolean;
   /** Images inside cards. */
   imagesInCards: boolean;
   /** A "typing…" indicator while the agent works. */
   typingIndicator: boolean;
+  /** Replies that appear as they're written, with live progress where the channel has it. */
+  streaming: boolean;
 }
 
 /** The catalog entry for a platform adapter, or a `ChannelsError`. */
@@ -52,9 +56,11 @@ export function capabilities(slug: string): ChannelCapabilities {
   platformEntry(slug);
   return {
     buttons: supported(slug, 'buttons'),
+    linkButtons: supported(slug, 'linkButtons'),
     cards: supported(slug, 'cardFormat'),
     imagesInCards: supported(slug, 'imagesInCards'),
     typingIndicator: supported(slug, 'typingIndicator'),
+    streaming: supported(slug, 'streaming'),
   };
 }
 

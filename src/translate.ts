@@ -14,6 +14,12 @@ export interface Choice {
   label: string;
   /** The request sent to Voiceflow when it's chosen. */
   action: VoiceflowAction;
+  /**
+   * A link the button opens, from its `open_url` action. Voiceflow's web chat
+   * opens the link and still sends the request, so the flow moves on; channels
+   * that report link clicks do the same here.
+   */
+  url?: string;
 }
 
 export interface CardData {
@@ -126,7 +132,8 @@ function pushText(replies: Reply[], message: unknown, sources: Source[]) {
   if (typeof message === 'string' && message.trim()) replies.push({ type: 'text', markdown: message.trim(), sources });
 }
 
-function sourcesOf(value: unknown): Source[] {
+/** Knowledge-base sources on a trace (`sourceUrls`). */
+export function sourcesOf(value: unknown): Source[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((s) => s && typeof s.url === 'string')
@@ -137,10 +144,23 @@ function choicesOf(buttons: unknown): Choice[] {
   if (!Array.isArray(buttons)) return [];
   return buttons
     .filter((b) => b && typeof b.name === 'string' && b.name.trim())
-    .map((b) => ({
-      label: b.name.trim(),
-      action: b.request && typeof b.request.type === 'string' ? b.request : { type: 'text', payload: b.name.trim() },
-    }));
+    .map((b) => {
+      const choice: Choice = {
+        label: b.name.trim(),
+        action: b.request && typeof b.request.type === 'string' ? b.request : { type: 'text', payload: b.name.trim() },
+      };
+      const url = urlOf(b.request);
+      if (url) choice.url = url;
+      return choice;
+    });
+}
+
+/** A button's link lives in an `open_url` action on its request (`@voiceflow/base-types` `ActionType.OPEN_URL`). */
+function urlOf(request: any): string | undefined {
+  const actions = request?.payload?.actions;
+  if (!Array.isArray(actions)) return undefined;
+  const url = actions.find((a) => a?.type === 'open_url')?.payload?.url;
+  return typeof url === 'string' && /^https?:\/\//i.test(url.trim()) ? url.trim() : undefined;
 }
 
 function cardOf(card: any): CardData | null {

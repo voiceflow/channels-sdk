@@ -45,11 +45,15 @@ stays compatible as upstream ships.
 4. Rendering reads `features` (`src/render.ts`). Only a full `yes` counts; `partial`
    gets the fallback:
    - no `buttons`: a numbered list, and a typed number or label picks the choice;
+   - no `linkButtons`: a group with a URL button goes as numbered markdown links;
    - no `cardFormat`: a card goes as markdown, its choices numbered;
    - no `imagesInCards`: the image goes as its URL;
    - `typingIndicator`: shown while the turn runs.
-5. Version 1 posts whole replies. Streaming (`streaming`) comes later: the Voiceflow
-   side already folds `completion` traces into one reply.
+5. `streaming` (`src/deliver.ts`): a full `yes` streams the turn from
+   `/v4/interact/stream` into one live message, `markdown_text` chunks for text and a
+   `task_update` chunk per tool call. Anything else posts whole replies from
+   `/v4/interact`. `partial` doesn't count because Chat SDK's fallback for an adapter
+   without native streaming edits the message, and most of those channels can't edit.
 6. Credentials pass through to the adapter as given. Where an adapter accepts a
    function (Slack's `botToken` does), the hosted version can lend a secret for one turn.
 
@@ -108,7 +112,13 @@ Per tier-1 adapter, with fixtures picked by shape, never by content:
    - buttons render natively, and a click sends the button's Voiceflow request;
    - a click from an earlier turn is answered as stale, never replayed;
    - a typed number picks an offered choice;
-   - a Voiceflow failure posts the error message instead of going silent.
+   - a Voiceflow failure posts the error message instead of going silent;
+   - where the catalog says the feature is a full `yes`: streaming into one live message,
+     progress cards, link buttons, and the adapter's own extras (Slack: feedback
+     buttons, suggested prompts from the launch turn).
+
+Slack's native features are in `test/slack.native.contract.test.mjs`. Each one was
+fault-injected (the feature removed from the build) to prove its test goes red.
 
 Read what was posted the way the platform writes it: Slack's adapter sends markdown
 as `markdown_text` and a card as `blocks` with a `text` fallback.
@@ -121,15 +131,29 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
   - Slack's adapter ignores `PostableCard.fallbackText`. It builds the `text` fallback from
     the card, and a card of buttons alone has none, so Slack logs a warning and a
     notification shows nothing. We already pass the labels as `fallbackText`.
+  - **Slack's native Card and Carousel blocks** (Block Kit, April 2026). Chat SDK 4.45
+    renders a card as the older section, image and actions blocks, and has no carousel,
+    so we post one message per card. [vercel/chat#1126](https://github.com/vercel/chat/pull/1126)
+    (open) adds `Section(children, { layout: 'carousel' })` with native Slack carousels.
+    Test it against our Slack contract test and report on the PR. A single native card
+    is not in its scope: that needs an issue of its own.
+  - A tool call's name. Voiceflow's `tool-call` trace carries only `callID` and
+    `state`, so every progress card has the same title (`progressTitle`). The name is
+    only in `debug` traces, which this package never reads. That one is a Voiceflow
+    runtime ask, not Chat SDK's.
 - **Goal:** a Voiceflow guide or template on chat-sdk.dev / vercel.com/kb/chat-sdk.
 
 ## 6. Keeping the Voiceflow side current
 
+- **URL buttons** keep their link in an `open_url` action on the button's request
+  (`@voiceflow/base-types` `ActionType.OPEN_URL`). Voiceflow's web chat opens the link
+  and still sends the request, and so do we where the channel reports link clicks.
 - **Trace translation is ours** (`src/translate.ts`). It depends on no other Voiceflow
   package: traces become platform-neutral replies (text, choices, card, carousel, image).
   Internal traces are dropped silently. Unknown ones are reported in `skipped`, never thrown.
 - **The runtime client is ours** (`src/voiceflow.ts`): `POST /v4/project/{projectID}/environment/{environmentID}/session`,
-  then `POST /v4/interact`, written from the v4 runtime spec
+  then `POST /v4/interact`, or `POST /v4/interact/stream` with `config.completionEvents`
+  (server-sent `trace` events, then `end`), written from the v4 runtime spec
   (`content/docs/specs/general-runtime/openapi.public.json` in `voiceflow-website`).
   Planned: types generated from that spec, plus a spec diff in CI.
 - **Live check:** a nightly conversation against a TypeGlish test agent.

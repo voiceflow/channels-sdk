@@ -42,3 +42,14 @@ test('a typed number or label picks a choice', () => {
   assert.equal(matchTypedChoice('3', choices), null);
   assert.equal(matchTypedChoice('maybe later', choices), null);
 });
+
+test('a URL choice is a link button where the channel has them, and a markdown link where it has not', () => {
+  const link = [{ label: 'Book', action: { type: 'b' }, url: 'https://example.com/b' }, { label: 'Later', action: { type: 'l' } }];
+  const withLinks = render([{ type: 'choices', choices: link }], { ...rich, linkButtons: true });
+  const actions = withLinks.posts[0].card.children.find((c) => c.type === 'actions');
+  assert.deepEqual(actions.children.map((b) => [b.type, b.id, b.url]), [['link-button', `vf:${withLinks.nonce}:0`, 'https://example.com/b'], ['button', `vf:${withLinks.nonce}:1`, undefined]]);
+
+  // Buttons but no link buttons: the link would be lost on a plain button, so the group goes as text.
+  const withoutLinks = render([{ type: 'choices', choices: link }], { ...rich, linkButtons: false });
+  assert.deepEqual(withoutLinks.posts, [{ markdown: '1. [Book](https://example.com/b)\n2. Later' }]);
+});
