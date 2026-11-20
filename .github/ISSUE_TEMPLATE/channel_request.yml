@@ -1,0 +1,56 @@
+name: Channel request
+description: Ask for a platform to get full support, as Slack has.
+labels: ["channel", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Any platform with a [Vercel Chat SDK adapter](https://chat-sdk.dev) already loads through `@voiceflow/channels-sdk`. A channel package adds what only that platform has: its native features, tools for the agent, and a `connect` command. This form asks for one.
+
+        A platform with no Chat SDK adapter needs one first, and adapters live upstream: [request it on vercel/chat](https://github.com/vercel/chat/issues/new/choose).
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: e.g. Microsoft Teams, WhatsApp, Discord
+    validations:
+      required: true
+
+  - type: dropdown
+    id: adapter
+    attributes:
+      label: Is there a Chat SDK adapter for it?
+      options:
+        - Yes, in @chat-adapter/catalog
+        - Yes, a community adapter (link it below)
+        - No
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What happens today
+      description: If you've tried the bare adapter with `createChannels`, what works and what doesn't.
+
+  - type: textarea
+    id: features
+    attributes:
+      label: The platform's features your agent needs
+      description: Native features, such as buttons, cards, forms, streaming, reactions or a home screen.
+
+  - type: textarea
+    id: tools
+    attributes:
+      label: Tools for the agent
+      description: Things the agent should be able to do on the platform, such as look someone up or post somewhere.
+
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can test it on the platform.
+        - label: I'd like to build it, with guidance.

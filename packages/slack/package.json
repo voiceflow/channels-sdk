@@ -6,10 +6,16 @@
   "keywords": [
     "voiceflow",
     "slack",
+    "slack-bot",
+    "slack-app",
+    "slack-assistant",
+    "block-kit",
     "chat-sdk",
     "vercel-chat",
+    "chatbot",
+    "bot",
     "ai-agent",
-    "slack-bot"
+    "conversational-ai"
   ],
   "author": "Braden Ream",
   "license": "MIT",
@@ -21,6 +27,9 @@
   "homepage": "https://github.com/voiceflow/channels-sdk/tree/main/packages/slack#readme",
   "bugs": {
     "url": "https://github.com/voiceflow/channels-sdk/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "engines": {
@@ -38,6 +47,7 @@
   },
   "files": [
     "dist",
+    "src",
     "assets",
     "README.md",
     "LICENSE"

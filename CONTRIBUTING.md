@@ -6,9 +6,7 @@ Node 20 or later.
 
 ```bash
 npm ci
-npm run build
-npm test
-npm run typecheck
+npm run validate   # build, typecheck and test, as CI does
 ```
 
 The tests run against fakes of Slack's and Voiceflow's APIs: they need no
@@ -21,7 +19,9 @@ every pull request.
 |---|---|
 | `packages/core` | `@voiceflow/channels-sdk`: the agent on any Chat SDK adapter, the extension API, the tool installer |
 | `packages/slack` | `@voiceflow/channels-slack`: Slack's native features, its tools, and `connect slack` |
-| `docs/upstream.md` | How this project tracks Vercel Chat SDK |
+| `examples/` | Apps that use the packages, such as a Next.js Slack bot |
+| `docs/` | How a conversation works, and how this project tracks Vercel Chat SDK |
+| `.changeset/` | Pending changesets and the release configuration |
 
 ## Rules
 
@@ -39,6 +39,31 @@ every pull request.
   records for token values. Keep it that way in anything new.
 - **A change comes with a test**, and a test that can't fail isn't one: break
   the code once and watch the test go red before you rely on it.
+
+## Changesets
+
+A pull request that changes what a package does, or what it ships, adds a
+changeset: a small Markdown file naming the packages, the kind of bump, and a
+line for the changelog.
+
+```bash
+npx changeset
+```
+
+- **When:** a change to a package's `src`, `assets` or `package.json`: a fix, a
+  feature, a changed default, a new tool version. Tests, CI, docs and the
+  examples need none. CI's `changeset` check says when one is missing.
+- **Which bump:** `patch` for a fix, `minor` for something new, `major` for a
+  change that breaks existing code. Before 1.0, a breaking change is `minor`.
+- **One version:** `@voiceflow/channels-sdk` and `@voiceflow/channels-slack`
+  share a version number, so a changeset for either moves both.
+- **Releasing:** when changesets reach `main`, the `release` workflow opens a
+  "chore(release): version packages" pull request with the new versions and
+  changelogs. Merging it publishes to npm with provenance, through npm's trusted
+  publishing: no npm token is stored in this repository.
+
+The changesets CLI needs Node 22.11 or later; `.nvmrc` names the version the
+tooling uses (`nvm use`). The packages themselves run on Node 20 and later.
 
 ## Trying it against real Slack
 

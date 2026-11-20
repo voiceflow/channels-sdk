@@ -5,3 +5,4 @@ dist/
 *.log
 .run/
 coverage/
+!.env.example

@@ -1,0 +1,107 @@
+# AGENTS.md
+
+Guidance for coding agents working in this repository. People: start with
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Commands
+
+```bash
+npm ci                 # install (npm workspaces; commit package-lock.json changes)
+npm run build          # tsc, every package
+npm run typecheck      # tsc --noEmit, every package
+npm test               # builds, then node --test, every package
+npm run validate       # build + typecheck + test: run it before you're done
+npx changeset          # describe a change to a published package
+```
+
+Per package: `npm test -w @voiceflow/channels-slack` (or `-w @voiceflow/channels-sdk`).
+One file: `npm run build -w @voiceflow/channels-slack && node --test packages/slack/test/slack.contract.test.mjs`.
+
+Node 20 or later runs the packages and tests; the changesets CLI needs 22.11 or
+later (`.nvmrc` says 24). CI runs build, typecheck and test on Node 20, 22 and 24.
+
+## Layout
+
+| Path | What it is |
+|---|---|
+| `packages/core` | `@voiceflow/channels-sdk`: `createChannels`, the agent loop, rendering, the extension API, the tool installer, test fakes, the `voiceflow-channels` bin |
+| `packages/core/src/agent.ts` | One Chat SDK thread is one Voiceflow conversation: the turn loop |
+| `packages/core/src/catalog.ts`, `loader.ts` | Adapters loaded from `@chat-adapter/catalog`: slug, package, factory, features, env vars |
+| `packages/core/src/render.ts`, `deliver.ts`, `translate.ts` | Voiceflow traces become Chat SDK posts, fitted to what the channel can show; streaming |
+| `packages/core/src/extension.ts` | `ChannelExtension`: what a channel package can add |
+| `packages/core/src/install.ts`, `tools.ts` | Puts a channel's tools (Voiceflow functions) on an agent, versioned |
+| `packages/core/src/testing.ts` | `fakeVoiceflow`, `fakeVoiceflowApi`, `runFunction` (runs a tool as Voiceflow's sandbox does) |
+| `packages/slack` | `@voiceflow/channels-slack`: `slack()`, Slack's extension, its tools, `connect slack` |
+| `packages/slack/src/tools/` | The tools: `presentation.ts` (show native Slack UI), `workspace.ts` (act in Slack with the bot token) |
+| `packages/slack/src/connect/` | `connect slack`: manifest, Slack CLI login, app creation, the Voiceflow install |
+| `packages/slack/test/helpers/fake-slack.mjs` | A fake of Slack's Web API and events |
+| `packages/slack/scripts/live/` | The live harness: real Slack, real Voiceflow (see below) |
+| `examples/` | Apps that use the packages; workspaces named `example-*`, never published |
+| `docs/` | How a conversation works; how this project tracks Vercel Chat SDK |
+
+## Architecture
+
+- **Chat SDK owns platforms; this project owns Voiceflow.** Webhooks, signature
+  checks, posting and editing belong to `@chat-adapter/*`. Nothing here talks to
+  a platform's API to deliver a reply.
+- **The catalog drives the core.** Which adapters exist, what each can render
+  (`features`), and which env vars it reads come from `@chat-adapter/catalog`.
+  A new upstream adapter needs no change here.
+- **The core knows no platform.** Anything only one platform has lives in that
+  channel's package, as a `ChannelExtension`: context variables, input rewrites,
+  `turnStarted`/`turnEnded`, custom trace handlers, the bot's own events,
+  adapter defaults. Never add a platform check to `packages/core`.
+- **A conversation's state is the thread's state.** The Voiceflow session key and
+  the last turn's choices live in the Chat SDK state adapter, not in memory.
+- **Tools are Voiceflow functions, sent as source text.** `functionSource(main,
+  helpers)` serialises a TypeScript function and its helpers into one
+  self-contained function. They run in Voiceflow's sandbox, not Node: no
+  imports, no `Buffer`, no `URL`; `fetch` answers `.json` as a property.
+  `runFunction` in tests enforces the same limits.
+
+## Rules
+
+- **Upstream first.** No forks, patches, monkey-patching or private fields of
+  `chat` or `@chat-adapter/*`. A missing capability is an issue or pull request
+  on [vercel/chat](https://github.com/vercel/chat); see `docs/upstream.md`.
+- **Never print a secret.** No token, signing secret or API key in output,
+  progress lines, plans, errors, logs, saved files or test snapshots. Tests
+  assert this; extend them when you add output.
+- **The person comes from the verified event, never from the model.** A tool
+  that acts for someone reads them from a variable the channel sets
+  (`slack_user_id`), wired so the model can't fill it, and acts only where that
+  person could.
+- **A tool's code changes only with a higher version.** `slack.versions.test.mjs`
+  fails when a tool's code changes and its `version` doesn't: raise the
+  `version` and record the hash the failure prints in
+  `packages/slack/test/tool-versions.json`.
+- **Installs never take away.** Re-running connect or `installTools` only adds
+  what's missing or upgrades a tool whose version rose; a person's edits on the
+  agent stay. `connect` never publishes a Voiceflow environment.
+- **A test that can't fail isn't one.** Break the code once and watch the new
+  test go red before relying on it.
+- **Add a changeset** for any change a package's users would notice
+  (`npx changeset`). Both packages share one version.
+
+## Testing
+
+- `node --test` over `test/*.test.mjs`, against the built `dist/`. No network,
+  no accounts: Voiceflow and Slack are fakes (`@voiceflow/channels-sdk/testing`,
+  `packages/slack/test/helpers/fake-slack.mjs`).
+- Contract tests (`*.contract.test.mjs`) pin behaviour a channel promises;
+  behaviour tests cover the turn loop end to end through the fakes.
+- **Live checks** (`packages/slack/scripts/live/slack.mjs`, `drive.mjs`) run
+  against a real Slack workspace and Voiceflow agent. They need the Slack CLI,
+  a Voiceflow API key file and a public URL. Only a person runs them; don't
+  start them unasked. Their headers explain the flags.
+
+## Code style
+
+- TypeScript, strict, ESM (`NodeNext`): relative imports end in `.js`;
+  `import type` for types (`verbatimModuleSyntax`).
+- A module opens with a comment saying what it is for and the decisions behind
+  it (index and type-only files excepted). Keep it true when you change the file.
+- Errors a caller can act on are `ChannelsError` with a code
+  (`packages/core/src/errors.ts`).
+- Prose (docs, comments, messages) is plain and short: say what happens, in
+  the active voice.
