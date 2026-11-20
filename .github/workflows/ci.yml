@@ -1,6 +1,8 @@
-# Build, typecheck and test every package on each supported Node version, and
-# check that a pull request changing a package says how in a changeset.
-# The tests run against fakes of Slack and Voiceflow: no secrets, no network.
+# Build, typecheck and test every package on each supported Node version and
+# against the oldest Chat SDK the packages support; lint; and check that a pull
+# request changing a package says how in a changeset. The tests run against
+# fakes of Slack and Voiceflow: no secrets, no network. "all checks" passes only
+# when every job does: it's the one check branch protection requires.
 name: ci
 
 on:
@@ -27,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22, 24]
+        node: [22, 24]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -56,3 +58,50 @@ jobs:
       - run: npm ci
       - name: A changed package has a changeset
         run: npx changeset status --since="origin/${{ github.base_ref }}"
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  oldest-chat:
+    name: oldest chat
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The floor is read from the peer range, so this follows the claim.
+      - name: Install the oldest Chat SDK the packages support
+        run: |
+          floor=$(node -p "require('./packages/core/package.json').peerDependencies.chat.match(/>=\s*([\d.]+)/)[1]")
+          echo "Chat SDK $floor"
+          npm install --no-save --no-audit --no-fund "chat@$floor" "@chat-adapter/catalog@$floor" "@chat-adapter/slack@$floor" "@chat-adapter/state-memory@$floor"
+      - run: npm run build -w @voiceflow/channels-sdk -w @voiceflow/channels-slack
+      - run: npm run typecheck -w @voiceflow/channels-sdk -w @voiceflow/channels-slack
+      - run: npm test -w @voiceflow/channels-sdk -w @voiceflow/channels-slack
+
+  all-checks:
+    name: all checks
+    if: ${{ always() }}
+    needs: [test, changeset, lint, oldest-chat]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A skipped job passes: the changeset check runs only on pull requests.
+      - name: Every job passed
+        run: |
+          echo '${{ toJSON(needs) }}'
+          if ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}; then exit 1; fi

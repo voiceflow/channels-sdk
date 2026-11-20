@@ -6,7 +6,7 @@ the assistant panel, buttons, forms and `/ask` all arrive there.
 
 ## What you need
 
-- Node.js 20.9 or later
+- Node.js 22 or later
 - A Voiceflow agent, its project ID and an API key
 - A Slack workspace where you can create apps, and the
   [Slack CLI](https://tools.slack.dev/slack-cli) logged in to it (`slack login`)

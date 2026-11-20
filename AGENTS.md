@@ -10,15 +10,19 @@ npm ci                 # install (npm workspaces; commit package-lock.json chang
 npm run build          # tsc, every package
 npm run typecheck      # tsc --noEmit, every package
 npm test               # builds, then node --test, every package
-npm run validate       # build + typecheck + test: run it before you're done
+npm run lint           # Biome: lint, formatting, import order
+npm run fix            # apply Biome's safe fixes and formatting
+npm run validate       # lint + build + typecheck + test: run it before you're done
 npx changeset          # describe a change to a published package
 ```
 
 Per package: `npm test -w @voiceflow/channels-slack` (or `-w @voiceflow/channels-sdk`).
 One file: `npm run build -w @voiceflow/channels-slack && node --test packages/slack/test/slack.contract.test.mjs`.
 
-Node 20 or later runs the packages and tests; the changesets CLI needs 22.11 or
-later (`.nvmrc` says 24). CI runs build, typecheck and test on Node 20, 22 and 24.
+Node 22.11 or later (`.nvmrc` says 24). CI runs build, typecheck and test on
+Node 22 and 24, and again against the oldest Chat SDK the packages support,
+and lints. Biome (`biome.jsonc`) leaves `packages/slack/src/tools/` unformatted:
+a tool's code is its functions' text, so restyling it would change the tool.
 
 ## Layout
 
