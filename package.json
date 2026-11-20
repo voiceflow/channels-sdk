@@ -1,0 +1,19 @@
+{
+  "name": "@voiceflow/channels-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Connect Voiceflow agents to Slack, WhatsApp, Teams, email and more, through Vercel Chat SDK adapters.",
+  "keywords": ["voiceflow", "chat-sdk", "vercel-chat", "channels", "messaging", "slack", "whatsapp", "teams", "email", "ai-agent"],
+  "author": "Braden Ream",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "exports": { ".": "./src/index.mjs" },
+  "files": ["src", "README.md", "LICENSE"],
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "peerDependencies": {
+    "chat": ">=4.44.0 <5"
+  }
+}
