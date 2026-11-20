@@ -57,3 +57,4 @@ export {
 export { capabilities, credentialVars, listChannels, platformEntry, secretName, secretVars, type ChannelCapabilities } from './catalog.js';
 export { loadAdapter, type Importer, type LoadAdapterOptions } from './loader.js';
 export { ChannelsError, type ChannelsErrorCode } from './errors.js';
+export { DEFAULT_PATHS, functionSource, requirementsOf, type ToolDefinition, type ToolInput, type ToolSet } from './tools.js';

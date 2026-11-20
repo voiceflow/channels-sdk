@@ -8,7 +8,9 @@ export type ChannelsErrorCode =
   /** The channel refused a post (a card whose image it couldn't download, say); its text form went instead. */
   | 'post_refused'
   /** Buttons from an earlier turn couldn't be taken off their message. */
-  | 'edit_failed';
+  | 'edit_failed'
+  /** The project to install tools on is in another workspace than the one expected; nothing was changed. */
+  | 'wrong_workspace';
 
 /** Every error this package throws on purpose carries a stable `code`. */
 export class ChannelsError extends Error {
