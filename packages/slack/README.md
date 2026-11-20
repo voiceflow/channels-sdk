@@ -199,3 +199,10 @@ await installTools(slackTools(), {
 
 `scripts/live/slack.mjs` runs this package against a real Slack app and agent,
 through the same connect code. See its header.
+
+## License
+
+MIT, in [LICENSE](LICENSE). `assets/voiceflow-icon.png` is Voiceflow's logo,
+which connect sets as the icon of an agent's Slack app when the agent has no
+avatar. The Voiceflow name and logo are trademarks of Voiceflow, Inc. and are
+not licensed under MIT.

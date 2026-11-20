@@ -5,7 +5,7 @@ The core of Voiceflow Channels: a Voiceflow agent inside any
 
 > **Status:** pre-release, local only. Not published. The package name is not final.
 
-It works on every channel the catalog lists. A channel package
+It loads any adapter the catalog lists; Slack is the one tested live so far. A channel package
 (`@voiceflow/channels-slack`) adds what only that channel has: its native
 behaviours, its tools, and the `connect` command that makes its app.
 

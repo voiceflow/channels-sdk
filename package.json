@@ -2,8 +2,16 @@
   "name": "voiceflow-channels",
   "version": "0.0.0",
   "private": true,
-  "description": "Connect Voiceflow agents to Slack, WhatsApp, Teams, email and more, through Vercel Chat SDK adapters.",
+  "description": "Connect Voiceflow agents to Slack and other platforms through Vercel Chat SDK adapters.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voiceflow/channels-sdk.git"
+  },
+  "homepage": "https://github.com/voiceflow/channels-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/voiceflow/channels-sdk/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"

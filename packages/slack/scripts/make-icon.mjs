@@ -3,6 +3,9 @@
 //
 //   node packages/slack/scripts/make-icon.mjs --website <a voiceflow-website checkout>
 //
+// For Voiceflow's maintainers: the website repository is private. Contributors
+// never need to run it; the PNG it makes is committed.
+//
 // It is the agent avatar of Voiceflow's live design system (V3), not a new
 // drawing: the brand's own butterfly file (design/assets/logomark-white.svg,
 // placed, never redrawn) at half the tile's width, centred on the colour the

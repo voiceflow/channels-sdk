@@ -73,7 +73,7 @@ tests (section 4). The catalog says what exists; our tests say what works.
   - deep imports (`chat/dist/...`, `@chat-adapter/*/dist/...`);
   - underscore-prefixed fields.
 
-  The relay spike set `slack._botUserId`. This package uses Slack's public `botUserId`
+  An earlier prototype set `slack._botUserId`. This package uses Slack's public `botUserId`
   option instead.
 
 ## 3. Tracking upstream

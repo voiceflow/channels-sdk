@@ -1,7 +1,11 @@
 # Voiceflow Channels
 
-Connect Voiceflow agents to Slack, WhatsApp, Teams, email and more, through
-[Vercel Chat SDK](https://chat-sdk.dev) adapters.
+Connect Voiceflow agents to the platforms [Vercel Chat SDK](https://chat-sdk.dev)
+has adapters for.
+
+**Slack is supported and tested end to end**, in Slack itself as well as in the
+tests. Other adapters (WhatsApp, Teams, email and more) load through the same
+catalog, but none has been tried live yet.
 
 > **Status:** pre-release, local only. Not published; package names are not final.
 > Slack passes its contract tests, its native features and tools included. See
@@ -30,8 +34,7 @@ and are not part of this package.
 
 | Do we own the screen? | Use |
 |---|---|
-| Yes: web widget, mobile app | `@voiceflow/interface-core` / `@voiceflow/interface-react` |
-| Yes: SMS, phone | Voiceflow's native channels |
+| Yes: web widget, SMS, phone | Voiceflow's native channels |
 | No: Slack, WhatsApp, Teams, email, … | **`@voiceflow/channels-sdk`** |
 
 ## Design rules
@@ -121,7 +124,13 @@ The same `options` turn on an adapter's own features, such as Slack's
 - **A failed turn posts an error message** (`errorMessage`, or `null` for none) and
   calls `onError`.
 
-## Hosted version
+## Contributing and security
 
-The hosted version is **Voiceflow Channels**: the same SDK, run by Voiceflow,
-with channel secrets kept in Voiceflow's secrets manager.
+See [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, see
+[SECURITY.md](SECURITY.md): please don't open a public issue for one.
+
+## License
+
+MIT, in [LICENSE](LICENSE). The license covers the code. The Voiceflow name and
+logo, including the default Slack app icon in `packages/slack/assets/`, are
+trademarks of Voiceflow, Inc. and are not licensed under MIT.

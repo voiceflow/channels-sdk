@@ -13,6 +13,15 @@
   ],
   "author": "Braden Ream",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voiceflow/channels-sdk.git",
+    "directory": "packages/slack"
+  },
+  "homepage": "https://github.com/voiceflow/channels-sdk/tree/main/packages/slack#readme",
+  "bugs": {
+    "url": "https://github.com/voiceflow/channels-sdk/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"
