@@ -74,6 +74,8 @@ export function createSlackExtension(options: SlackOptions = {}): ChannelExtensi
   let host: ExtensionHost | undefined;
   const context = createContext();
   const reacted = new WeakMap<TurnContext, string>();
+  /** Reactions the agent added with slack_react (`<message>:<emoji>`), which the working reaction must not take off. */
+  const kept = new Set<string>();
   const catchUp = options.catchUp === undefined ? 20 : options.catchUp;
   const working = options.workingReaction === undefined ? 'eyes' : options.workingReaction;
 
@@ -133,11 +135,18 @@ export function createSlackExtension(options: SlackOptions = {}): ChannelExtensi
     async turnEnded(ctx) {
       const adapter = slackAdapter(ctx.thread);
       const messageId = reacted.get(ctx);
-      if (messageId && working) await adapter.removeReaction(ctx.thread.id, messageId, working);
+      const mine = messageId && working ? kept.delete(`${messageId}:${working}`) : false;
+      if (messageId && working && !mine) await adapter.removeReaction(ctx.thread.id, messageId, working);
       if (messageId && options.doneReaction) await adapter.addReaction(ctx.thread.id, messageId, options.doneReaction);
     },
 
-    traces: presentation(() => host),
+    traces: presentation(() => host, {
+      keep: (messageId, emoji) => {
+        kept.add(`${messageId}:${emoji}`);
+        // The set only outlives a turn when the turn fails before ending; keep it small.
+        if (kept.size > 1000) kept.delete(kept.values().next().value!);
+      },
+    }),
 
     attach(bot, lent) {
       host = lent;
