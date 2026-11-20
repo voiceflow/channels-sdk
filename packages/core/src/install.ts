@@ -189,7 +189,12 @@ function recordKey(projectID: string, environment: string, channel: string): str
   return `${projectID}/${environment}/${channel}`;
 }
 
-async function readProject(api: VoiceflowApi, options: InstallOptions) {
+/** Reads the project, and stops (writing nothing) when it isn't in `expectWorkspace`. */
+export async function checkProject(options: ApiOptions & Pick<InstallOptions, 'projectID' | 'expectWorkspace'>) {
+  return readProject(createVoiceflowApi(options), options);
+}
+
+async function readProject(api: VoiceflowApi, options: Pick<InstallOptions, 'projectID' | 'expectWorkspace'>) {
   const { project } = await api<{ project: { id: string; name: string; workspaceID: string } }>('GET', `/v1/stable/project/${encodeURIComponent(options.projectID)}`);
   if (options.expectWorkspace && project.workspaceID !== options.expectWorkspace) {
     throw new ChannelsError(

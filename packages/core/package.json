@@ -3,17 +3,39 @@
   "version": "0.0.0",
   "private": true,
   "description": "The core of Voiceflow Channels: a Voiceflow agent inside any Vercel Chat SDK bot, on any adapter in the catalog.",
-  "keywords": ["voiceflow", "chat-sdk", "vercel-chat", "channels", "messaging", "ai-agent"],
+  "keywords": [
+    "voiceflow",
+    "chat-sdk",
+    "vercel-chat",
+    "channels",
+    "messaging",
+    "ai-agent"
+  ],
   "author": "Braden Ream",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./install": { "types": "./dist/install.d.ts", "import": "./dist/install.js" },
-    "./testing": { "types": "./dist/testing.d.ts", "import": "./dist/testing.js" }
+  "engines": {
+    "node": ">=20"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./install": {
+      "types": "./dist/install.d.ts",
+      "import": "./dist/install.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test test/*.test.mjs",
@@ -22,5 +44,8 @@
   "peerDependencies": {
     "chat": ">=4.44.0 <5",
     "@chat-adapter/catalog": ">=4.44.0 <5"
+  },
+  "bin": {
+    "voiceflow-channels": "./dist/cli.js"
   }
 }

@@ -1,10 +1,26 @@
-# @voiceflow/channels-sdk
+# Voiceflow Channels
 
 Connect Voiceflow agents to Slack, WhatsApp, Teams, email and more, through
 [Vercel Chat SDK](https://chat-sdk.dev) adapters.
 
-> **Status:** pre-release, local only. Not published. Slack passes its contract tests,
-> its native features included; the rest of Phase 1 is next. See [docs/upstream.md](docs/upstream.md).
+> **Status:** pre-release, local only. Not published; package names are not final.
+> Slack passes its contract tests, its native features and tools included. See
+> [docs/upstream.md](docs/upstream.md).
+
+## Packages
+
+| Package | What it is |
+|---|---|
+| [`@voiceflow/channels-sdk`](packages/core) | The core: a Voiceflow agent on any adapter in the catalog, the extension API, and the tool installer. |
+| [`@voiceflow/channels-slack`](packages/slack) | Slack at full fidelity: its native behaviours, its tools, and `connect slack`. |
+
+Each channel package carries that channel's default tool install. Connecting a
+channel puts its tools on the agent; after that they're yours to edit, detach or
+delete in Voiceflow, and later installs leave your changes alone.
+
+```bash
+npx voiceflow-channels connect slack --project <id> --environment development --public-url https://<your server>
+```
 
 ## What it is, and what it isn't
 
@@ -60,6 +76,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cha
   return (await channels).webhook(channel, request, { waitUntil: (task) => after(() => task) });
 }
 ```
+
+`'slack'` is the bare adapter. For Slack at full fidelity, use `slack()` from
+[`@voiceflow/channels-slack`](packages/slack) instead.
 
 To pass credentials yourself, or to bring an adapter you built, use the object form:
 `{ slug: 'slack', options: { botToken, signingSecret } }` or `{ slug: 'slack', adapter }`.

@@ -1,0 +1,82 @@
+// Slack's app-management API, called with the Slack CLI's login. Node only.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+export class SlackApiError extends Error {
+  constructor(
+    readonly method: string,
+    readonly error: string,
+    readonly details: unknown[] = [],
+  ) {
+    super(`${method}: ${error}${details.length ? ` ${JSON.stringify(details).slice(0, 600)}` : ''}${hint(error)}`);
+    this.name = 'SlackApiError';
+  }
+}
+
+function hint(error: string): string {
+  if (error === 'token_expired' || error === 'invalid_auth' || error === 'not_authed') {
+    return '. Your Slack CLI login has expired: run `slack auth list` to refresh it, or `slack login`.';
+  }
+  return '';
+}
+
+export interface SlackApiOptions {
+  /** A token that can manage apps: the Slack CLI's login (see `slackCliToken`). Never printed. */
+  token: string;
+  apiURL?: string;
+  fetch?: typeof fetch;
+}
+
+export type SlackApi = <T = any>(method: string, params?: Record<string, unknown>, options?: { form?: boolean; token?: string }) => Promise<T>;
+
+export function createSlackApi(options: SlackApiOptions): SlackApi {
+  const base = (options.apiURL ?? 'https://slack.com/api').replace(/\/$/, '');
+  const doFetch = options.fetch ?? fetch;
+  return async (method, params = {}, { form = false, token = options.token } = {}) => {
+    const body = form
+      ? Object.entries(params)
+          .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+          .join('&')
+      : JSON.stringify(params);
+    const res = await doFetch(`${base}/${method}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': form ? 'application/x-www-form-urlencoded' : 'application/json; charset=utf-8' },
+      body,
+    });
+    const json = (await res.json().catch(() => ({ ok: false, error: `http_${res.status}` }))) as any;
+    if (!json.ok) throw new SlackApiError(method, json.error ?? 'unknown_error', json.errors ?? []);
+    return json;
+  };
+}
+
+export interface SlackCliLogin {
+  teamId: string;
+  teamDomain?: string;
+  token: string;
+}
+
+/**
+ * The Slack CLI's login for a workspace (`slack login`), read from
+ * ~/.slack/credentials.json. Its token can create and install apps there.
+ */
+export function slackCliLogin(teamId?: string, file = path.join(os.homedir(), '.slack', 'credentials.json')): SlackCliLogin {
+  let all: Record<string, { token?: string; team_domain?: string; team_id?: string }>;
+  try {
+    all = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    throw new Error('No Slack CLI login found. Install the Slack CLI (https://tools.slack.dev/slack-cli) and run `slack login`.');
+  }
+  const teams = Object.keys(all).filter((id) => all[id]?.token);
+  if (teamId) {
+    const login = all[teamId];
+    if (!login?.token) throw new Error(`The Slack CLI isn't logged in to workspace ${teamId}${teams.length ? ` (it is to ${teams.join(', ')})` : ''}. Run \`slack login\`.`);
+    return { teamId, token: login.token, ...(login.team_domain ? { teamDomain: login.team_domain } : {}) };
+  }
+  if (teams.length === 1) {
+    const only = all[teams[0]!]!;
+    return { teamId: teams[0]!, token: only.token!, ...(only.team_domain ? { teamDomain: only.team_domain } : {}) };
+  }
+  if (!teams.length) throw new Error('The Slack CLI has no login. Run `slack login`.');
+  throw new Error(`The Slack CLI is logged in to several workspaces: name one with --team (${teams.map((id) => `${id}${all[id]!.team_domain ? ` ${all[id]!.team_domain}` : ''}`).join(', ')}).`);
+}
