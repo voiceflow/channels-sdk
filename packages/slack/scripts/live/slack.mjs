@@ -5,9 +5,9 @@
 //   into a hidden prompt (or SLACK_SIGNING_SECRET) for an app that already exists;
 // - the Voiceflow key is read from a file you name.
 //
-//   node scripts/live/slack.mjs --create --team <id> --project <id> --environment <alias> \
+//   node packages/slack/scripts/live/slack.mjs --create --team <id> --project <id> --environment <alias> \
 //     --key-file <path> --public-url https://<tunnel> [--port 8788]
-//   node scripts/live/slack.mjs --delete --team <id>
+//   node packages/slack/scripts/live/slack.mjs --delete --team <id>
 //
 // --create makes a new app for the test, with the assistant panel and every scope and
 // event this package uses, and installs it. Slack returns an app's signing secret only
@@ -23,7 +23,7 @@ import http from 'node:http';
 import readline from 'node:readline';
 import { parseArgs } from 'node:util';
 import { createMemoryState } from '@chat-adapter/state-memory';
-import { createChannels } from '../../dist/index.js';
+import { createChannels } from '@voiceflow/channels-sdk';
 
 const { values: args } = parseArgs({
   options: {

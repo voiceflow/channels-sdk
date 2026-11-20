@@ -1,5 +1,6 @@
-// Test doubles, picked by shape: a fake Slack Web API, signed Slack requests,
-// and a fake Voiceflow runtime. Secrets here are test-only values.
+// Slack test doubles, picked by shape: a fake Slack Web API and signed Slack
+// requests. The fake Voiceflow runtime comes from @voiceflow/channels-sdk/testing.
+// Secrets here are test-only values.
 import http from 'node:http';
 import { createHmac } from 'node:crypto';
 
@@ -97,45 +98,4 @@ export function slackAction(payload, { secret = SIGNING_SECRET } = {}) {
     headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-slack-request-timestamp': ts, 'x-slack-signature': sign(raw, secret, ts) },
     body: raw,
   });
-}
-
-/**
- * A fake Voiceflow runtime as a `fetch`. `answer(action, call)` returns the
- * traces for each interact call. Records sessions and interact calls.
- */
-export function fakeVoiceflow(answer) {
-  const sessions = [];
-  const interacts = [];
-  let n = 0;
-  const fetch = async (url, init) => {
-    const body = JSON.parse(init.body);
-    if (/\/v4\/project\/[^/]+\/environment\/[^/]+\/session$/.test(url)) {
-      const sessionKey = `sk-${++n}`;
-      sessions.push({ url, userID: body.userID, authorization: init.headers.authorization, sessionKey });
-      return new Response(JSON.stringify({ sessionKey }), { status: 200 });
-    }
-    if (url.endsWith('/v4/interact') || url.endsWith('/v4/interact/stream')) {
-      const stream = url.endsWith('/stream');
-      const call = { sessionKey: init.headers.authorization, action: body.action, variables: body.variables, config: body.config, stream };
-      interacts.push(call);
-      const traces = answer(body.action, call);
-      if (!stream) return new Response(JSON.stringify({ traces }), { status: 200 });
-      // Server-sent events, the runtime's shape: one `trace` event per trace, then `end`.
-      const sse = traces.map((t, i) => `event: trace\nid: ${i}\ndata: ${JSON.stringify(t)}\n\n`).join('') + 'event: end\ndata: {}\n\n';
-      return new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } });
-    }
-    return new Response('not found', { status: 404 });
-  };
-  return { fetch, sessions, interacts };
-}
-
-/** Collects waitUntil promises so a test can wait for the bot to finish. */
-export function waiter() {
-  const pending = [];
-  return {
-    options: { waitUntil: (p) => pending.push(p) },
-    async settle() {
-      while (pending.length) await Promise.allSettled(pending.splice(0));
-    },
-  };
 }

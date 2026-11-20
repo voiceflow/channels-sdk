@@ -6,8 +6,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMemoryState } from '@chat-adapter/state-memory';
-import { createChannels } from '../dist/index.js';
-import { BOT_TOKEN, SIGNING_SECRET, fakeVoiceflow, slackAction, slackEvent, startFakeSlack, waiter } from './helpers/fakes.mjs';
+import { createChannels } from '@voiceflow/channels-sdk';
+import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
+import { BOT_TOKEN, SIGNING_SECRET, slackAction, slackEvent, startFakeSlack } from './helpers/fake-slack.mjs';
 
 async function setup(answer, { slack: slackOptions = {}, refuse, ...options } = {}) {
   const slack = await startFakeSlack({ refuse });

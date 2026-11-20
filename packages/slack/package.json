@@ -1,0 +1,28 @@
+{
+  "name": "@voiceflow/channels-slack",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Voiceflow agent in Slack at full fidelity: Slack's native features, and Slack's tools installed on the agent.",
+  "keywords": ["voiceflow", "slack", "chat-sdk", "vercel-chat", "ai-agent", "slack-bot"],
+  "author": "Braden Ream",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@voiceflow/channels-sdk": "0.0.0"
+  },
+  "peerDependencies": {
+    "chat": ">=4.44.0 <5",
+    "@chat-adapter/catalog": ">=4.44.0 <5",
+    "@chat-adapter/slack": ">=4.44.0 <5"
+  }
+}

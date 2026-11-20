@@ -35,21 +35,21 @@ stays compatible as upstream ships.
 **How tier 1 works**
 
 1. `createChannels({ channels: ['slack'] })` looks each slug up with `getAdapter`
-   (`src/catalog.ts`). An unknown slug, or a state adapter, is refused with a code.
+   (`packages/core/src/catalog.ts`). An unknown slug, or a state adapter, is refused with a code.
 2. `loadAdapter` dynamically imports `packageName` and calls `factoryExport`
-   (`src/loader.ts`). With no options the adapter reads its own env vars. A missing
+   (`packages/core/src/loader.ts`). With no options the adapter reads its own env vars. A missing
    package is refused with the `npm install` line that fixes it.
 3. Credential names come from `listEnvVars`. Each catalog key maps to a Voiceflow
    secret by one rule (`secretName`: `SLACK_BOT_TOKEN` → `slack_bot_token`), so no list
    is kept by hand.
-4. Rendering reads `features` (`src/render.ts`). Only a full `yes` counts; `partial`
+4. Rendering reads `features` (`packages/core/src/render.ts`). Only a full `yes` counts; `partial`
    gets the fallback:
    - no `buttons`: a numbered list, and a typed number or label picks the choice;
    - no `linkButtons`: a group with a URL button goes as numbered markdown links;
    - no `cardFormat`: a card goes as markdown, its choices numbered;
    - no `imagesInCards`: the image goes as its URL;
    - `typingIndicator`: shown while the turn runs.
-5. `streaming` (`src/deliver.ts`): a full `yes` streams the turn from
+5. `streaming` (`packages/core/src/deliver.ts`): a full `yes` streams the turn from
    `/v4/interact/stream` into one live message, `markdown_text` chunks for text and a
    `task_update` chunk per tool call. Anything else posts whole replies from
    `/v4/interact`. `partial` doesn't count because Chat SDK's fallback for an adapter
@@ -148,10 +148,10 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 - **URL buttons** keep their link in an `open_url` action on the button's request
   (`@voiceflow/base-types` `ActionType.OPEN_URL`). Voiceflow's web chat opens the link
   and still sends the request, and so do we where the channel reports link clicks.
-- **Trace translation is ours** (`src/translate.ts`). It depends on no other Voiceflow
+- **Trace translation is ours** (`packages/core/src/translate.ts`). It depends on no other Voiceflow
   package: traces become platform-neutral replies (text, choices, card, carousel, image).
   Internal traces are dropped silently. Unknown ones are reported in `skipped`, never thrown.
-- **The runtime client is ours** (`src/voiceflow.ts`): `POST /v4/project/{projectID}/environment/{environmentID}/session`,
+- **The runtime client is ours** (`packages/core/src/voiceflow.ts`): `POST /v4/project/{projectID}/environment/{environmentID}/session`,
   then `POST /v4/interact`, or `POST /v4/interact/stream` with `config.completionEvents`
   (server-sent `trace` events, then `end`), written from the v4 runtime spec
   (`content/docs/specs/general-runtime/openapi.public.json` in `voiceflow-website`).
