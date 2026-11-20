@@ -1,7 +1,8 @@
 // The installer, against a fake of Voiceflow's API: what it writes, what it
 // never writes, and the install record that keeps a removed tool removed.
-import { test } from 'node:test';
+
 import assert from 'node:assert/strict';
+import { test } from 'node:test';
 import { functionSource } from '../dist/index.js';
 import { codeHash, formatStep, installTools, memoryRecordStore, uninstallTools } from '../dist/install.js';
 import { fakeVoiceflowApi, runFunction } from '../dist/testing.js';
@@ -50,7 +51,10 @@ const actions = (result) => Object.fromEntries(result.steps.filter((s) => s.kind
 
 test('a project in another workspace stops the install before any write', async () => {
   const { api, opts } = setup();
-  await assert.rejects(installTools(SET(), opts({ expectWorkspace: 'ws-other' })), (e) => e.code === 'wrong_workspace' && /Nothing was changed/.test(e.message));
+  await assert.rejects(
+    installTools(SET(), opts({ expectWorkspace: 'ws-other' })),
+    (e) => e.code === 'wrong_workspace' && /Nothing was changed/.test(e.message),
+  );
   assert.deepEqual(api.writes(), []);
   assert.equal(api.state.calls.length, 1, 'only the project was read');
 });
@@ -77,17 +81,40 @@ test('an install creates the variables, secret, function and its wiring, compile
 
   assert.equal(result.applied, true);
   assert.deepEqual(result.problems, []);
-  assert.deepEqual(state.variables.map((v) => [v.name, v.color, v.description]), [['demo_user', '#515A63', 'Who is talking.']]);
-  assert.deepEqual(state.secrets.map((s) => [s.name, s.visibility]), [['demo_token', 'restricted']]);
+  assert.deepEqual(
+    state.variables.map((v) => [v.name, v.color, v.description]),
+    [['demo_user', '#515A63', 'Who is talking.']],
+  );
+  assert.deepEqual(
+    state.secrets.map((s) => [s.name, s.visibility]),
+    [['demo_token', 'restricted']],
+  );
   // The value goes to the target environment's draft and published versions, never main's through creation.
-  assert.deepEqual(state.secretValues.map((v) => [v.environmentAlias, v.versionVariant]), [['sdk-test', 'draft'], ['sdk-test', 'published']]);
+  assert.deepEqual(
+    state.secretValues.map((v) => [v.environmentAlias, v.versionVariant]),
+    [
+      ['sdk-test', 'draft'],
+      ['sdk-test', 'published'],
+    ],
+  );
   assert.ok(!api.writes().some((c) => c.path === '/v2/stable/secret' && 'defaultValue' in c.body));
 
   const [fn] = state.functions;
   assert.equal(fn.name, 'demo_echo');
   assert.equal(fn.code, tool().code);
-  assert.deepEqual(state.functionVariables.map((v) => [v.name, v.type]), [['text', 'input'], ['who', 'input'], ['token', 'input'], ['said', 'output']]);
-  assert.deepEqual(state.functionPaths.map((p) => p.name), ['success', 'error']);
+  assert.deepEqual(
+    state.functionVariables.map((v) => [v.name, v.type]),
+    [
+      ['text', 'input'],
+      ['who', 'input'],
+      ['token', 'input'],
+      ['said', 'output'],
+    ],
+  );
+  assert.deepEqual(
+    state.functionPaths.map((p) => p.name),
+    ['success', 'error'],
+  );
 
   const [attached] = state.tools;
   assert.equal(attached.functionID, fn.id);
@@ -104,7 +131,10 @@ test('an install creates the variables, secret, function and its wiring, compile
   assert.equal(installed.functionID, fn.id);
   assert.equal(installed.toolID, attached.id);
   assert.equal(installed.codeHash, codeHash(fn.code));
-  assert.deepEqual(steps.map((s) => s.kind), ['variable', 'secret', 'tool', 'compile']);
+  assert.deepEqual(
+    steps.map((s) => s.kind),
+    ['variable', 'secret', 'tool', 'compile'],
+  );
 });
 
 test('installing again changes nothing and compiles nothing', async () => {
@@ -159,7 +189,10 @@ test('a newer version updates a tool you have not edited, and its wiring', async
   }
   const v2 = tool({ version: 2, code: functionSource(echo2), inputs: { ...tool().inputs, tone: { description: 'How to say it.' } } });
   const result = await installTools(SET([v2]), opts());
-  assert.deepEqual(result.steps.find((s) => s.kind === 'tool'), { kind: 'tool', name: 'demo_echo', action: 'update', from: 1, to: 2 });
+  assert.deepEqual(
+    result.steps.find((s) => s.kind === 'tool'),
+    { kind: 'tool', name: 'demo_echo', action: 'update', from: 1, to: 2 },
+  );
   assert.equal(api.state.functions.length, 1);
   assert.equal(api.state.functions[0].code, v2.code);
   assert.ok(api.state.functionVariables.some((v) => v.name === 'tone' && v.type === 'input'));
@@ -171,7 +204,7 @@ test('a function you edited is never overwritten by a newer version', async () =
   const { api, opts } = setup();
   await installTools(SET(), opts());
   api.state.functions[0].code += '\n// mine';
-  const result = await installTools(SET([tool({ version: 2, code: tool().code + '\n// v2' })]), opts());
+  const result = await installTools(SET([tool({ version: 2, code: `${tool().code}\n// v2` })]), opts());
   assert.deepEqual(actions(result), { demo_echo: 'skip' });
   assert.match(result.steps.find((s) => s.kind === 'tool').reason, /edited in Voiceflow/);
   assert.ok(api.state.functions[0].code.endsWith('// mine'));
@@ -212,7 +245,10 @@ test('only and unknown names', async () => {
   const two = SET([tool(), tool({ name: 'demo_other' })]);
   const result = await installTools(two, opts({ only: ['demo_other'] }));
   assert.deepEqual(actions(result), { demo_other: 'create' });
-  assert.deepEqual(api.state.functions.map((f) => f.name), ['demo_other']);
+  assert.deepEqual(
+    api.state.functions.map((f) => f.name),
+    ['demo_other'],
+  );
   await assert.rejects(installTools(two, opts({ only: ['demo_nope'] })), /no demo tool named demo_nope/);
 });
 
@@ -231,7 +267,10 @@ test('uninstall deletes what it installed, keeps what you edited, and a later in
   assert.equal(api.state.tools.length, 2);
 
   await uninstallTools(two, opts());
-  assert.deepEqual(api.state.functions.map((f) => f.name), ['demo_other']);
+  assert.deepEqual(
+    api.state.functions.map((f) => f.name),
+    ['demo_other'],
+  );
   assert.equal(api.state.tools.length, 0);
   assert.equal(api.state.variables.length, 1, 'variables stay');
   assert.equal(api.state.secrets.length, 1, 'secrets stay');

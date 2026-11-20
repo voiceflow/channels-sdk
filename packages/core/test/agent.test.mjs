@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { voiceflowUserID, withoutBotMention } from '../dist/index.js';
 
 test("the bot's own mention is removed, in every form the Chat SDK counts", () => {

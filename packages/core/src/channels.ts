@@ -2,11 +2,11 @@
 // Voiceflow agent. Every adapter comes from the catalog (tier 1); a channel
 // package (`slack()` from @voiceflow/channels-slack) adds its extension.
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { Chat, type Adapter, type ChatConfig, type StateAdapter, type WebhookOptions } from 'chat';
+import { type Adapter, Chat, type ChatConfig, type StateAdapter, type WebhookOptions } from 'chat';
 import { createVoiceflowAgent, type VoiceflowAgent, type VoiceflowAgentOptions } from './agent.js';
 import { ChannelsError } from './errors.js';
 import type { ChannelExtension } from './extension.js';
-import { loadAdapter, type Importer } from './loader.js';
+import { type Importer, loadAdapter } from './loader.js';
 
 export type ChannelSpec =
   | string

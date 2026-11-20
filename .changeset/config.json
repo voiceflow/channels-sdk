@@ -2,22 +2,11 @@
   "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
-  "fixed": [
-    [
-      "@voiceflow/channels-sdk",
-      "@voiceflow/channels-slack"
-    ]
-  ],
+  "fixed": [["@voiceflow/channels-sdk", "@voiceflow/channels-slack"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": [
-    "example-*"
-  ],
-  "changedFilePatterns": [
-    "src/**",
-    "assets/**",
-    "package.json"
-  ]
+  "ignore": ["example-*"],
+  "changedFilePatterns": ["src/**", "assets/**", "package.json"]
 }

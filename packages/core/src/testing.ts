@@ -45,7 +45,7 @@ export function fakeVoiceflow(answer: (action: VoiceflowAction, call: FakeIntera
       const traces = answer(body.action, call);
       if (!stream) return new Response(JSON.stringify({ traces }), { status: 200 });
       // Server-sent events, the runtime's shape: one `trace` event per trace, then `end`.
-      const sse = traces.map((t, i) => `event: trace\nid: ${i}\ndata: ${JSON.stringify(t)}\n\n`).join('') + 'event: end\ndata: {}\n\n';
+      const sse = `${traces.map((t, i) => `event: trace\nid: ${i}\ndata: ${JSON.stringify(t)}\n\n`).join('')}event: end\ndata: {}\n\n`;
       return new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } });
     }
     return new Response('not found', { status: 404 });
@@ -149,7 +149,8 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
         return json(200, { message: 'Deleted' });
       }
     }
-    if (p === '/v1/stable/function-variable' && method === 'GET') return json(200, { variables: state.functionVariables.filter((v) => v.functionID === query.functionID) });
+    if (p === '/v1/stable/function-variable' && method === 'GET')
+      return json(200, { variables: state.functionVariables.filter((v) => v.functionID === query.functionID) });
     if (p === '/v1/stable/function-variable' && method === 'POST') {
       if (!state.functions.some((f) => f.id === body.functionID)) return refused(404, 'Function not found');
       if (!['input', 'output'].includes(body.type)) return refused(400, 'type must be input or output');
@@ -177,9 +178,11 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
       const unresolvedReferences: { token: string; path: string; reason: string }[] = [];
       for (const [name, input] of Object.entries(inputs)) {
         const fv = state.functionVariables.find((v) => v.id === input.functionInputVariableID);
-        if (!fv || fv.functionID !== functionID || fv.type !== 'input') return { error: `inputVariables.${name}: functionInputVariableID is not an input of this function` };
+        if (!fv || fv.functionID !== functionID || fv.type !== 'input')
+          return { error: `inputVariables.${name}: functionInputVariableID is not an input of this function` };
         const tokens = refs(input.defaultValue);
-        if (input.required === true && tokens.some((t) => state.secrets.some((s) => s.name === t))) return { error: `inputVariables.${name}: required can't be true with a secret default` };
+        if (input.required === true && tokens.some((t) => state.secrets.some((s) => s.name === t)))
+          return { error: `inputVariables.${name}: required can't be true with a secret default` };
         for (const token of tokens) {
           if (!state.secrets.some((s) => s.name === token) && !state.variables.some((v) => v.name === token)) {
             unresolvedReferences.push({ token, path: `inputVariables.${name}.defaultValue`, reason: 'no variable, entity or secret has this name' });
@@ -193,7 +196,14 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
       if (!body.target?.global) return refused(400, 'target is required');
       const checked = checkInputs(body.inputVariables ?? {}, body.functionID);
       if ('error' in checked) return refused(400, checked.error!);
-      const tool = { id: id('tool'), type: 'function', functionID: body.functionID, description: body.description ?? null, inputVariables: body.inputVariables ?? {}, target: body.target };
+      const tool = {
+        id: id('tool'),
+        type: 'function',
+        functionID: body.functionID,
+        description: body.description ?? null,
+        inputVariables: body.inputVariables ?? {},
+        target: body.target,
+      };
       state.tools.push(tool);
       return json(201, { tool, unresolvedReferences: checked.unresolvedReferences });
     }

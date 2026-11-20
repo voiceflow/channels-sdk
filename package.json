@@ -25,12 +25,15 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "validate": "npm run build && npm run typecheck && npm test",
+    "lint": "biome ci --error-on-warnings .",
+    "fix": "biome check --write .",
+    "validate": "npm run lint && npm run build && npm run typecheck && npm test",
     "changeset": "changeset",
     "version-packages": "changeset version && npm install --package-lock-only --no-audit --no-fund",
     "release": "changeset publish"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.5",
     "@changesets/cli": "3.0.3",
     "@chat-adapter/catalog": "4.45.0",
     "@chat-adapter/slack": "4.45.0",

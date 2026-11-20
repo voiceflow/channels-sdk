@@ -18,10 +18,10 @@
 // Needs Google Chrome, which renders the page. Run it again when the brand's
 // mark or colour changes, and commit the PNG.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const SIZE = 512;
@@ -38,7 +38,11 @@ const mark = join(website, 'design/assets/logomark-white.svg');
 if (!existsSync(mark)) throw new Error(`No ${mark}: is ${website} a voiceflow-website checkout?`);
 const ground = tokenValue(join(website, 'design/tokens'), ROLE);
 
-const [, , vw, vh] = readFileSync(mark, 'utf8').match(/viewBox="([\d.\s]+)"/)[1].trim().split(/\s+/).map(Number);
+const [, , vw, vh] = readFileSync(mark, 'utf8')
+  .match(/viewBox="([\d.\s]+)"/)[1]
+  .trim()
+  .split(/\s+/)
+  .map(Number);
 const width = SIZE * MARK_SHARE;
 const height = (width * vh) / vw;
 
@@ -51,7 +55,19 @@ try {
       `img{position:absolute;left:${(SIZE - width) / 2}px;top:${(SIZE - height) / 2}px;width:${width}px;height:${height}px}</style>` +
       `<img src="${pathToFileURL(mark).href}" alt="">`,
   );
-  execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=1', `--window-size=${SIZE},${SIZE}`, `--screenshot=${out}`, pathToFileURL(page).href], { stdio: 'ignore' });
+  execFileSync(
+    CHROME,
+    [
+      '--headless=new',
+      '--disable-gpu',
+      '--hide-scrollbars',
+      '--force-device-scale-factor=1',
+      `--window-size=${SIZE},${SIZE}`,
+      `--screenshot=${out}`,
+      pathToFileURL(page).href,
+    ],
+    { stdio: 'ignore' },
+  );
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

@@ -8,12 +8,12 @@
 // (`ChannelExtension`), matched to a thread by its adapter's name.
 import { createHash } from 'node:crypto';
 import type { ActionEvent, AdapterPostableMessage, Author, Chat, Message, Thread } from 'chat';
-import { capabilities, type ChannelCapabilities } from './catalog.js';
-import { deliverStream, deliverWhole, type CustomTrace, type DeliveryOptions, type ShownMessage } from './deliver.js';
+import { type ChannelCapabilities, capabilities } from './catalog.js';
+import { type CustomTrace, type DeliveryOptions, deliverStream, deliverWhole, type ShownMessage } from './deliver.js';
 import { ChannelsError } from './errors.js';
 import type { ChannelExtension, ExtensionHost, PinPrompts, RunOptions, TurnContext } from './extension.js';
-import { createRenderer, matchTypedChoice, parseActionId, retired, type RenderOptions } from './render.js';
-import { translate, type Choice, type Translation } from './translate.js';
+import { createRenderer, matchTypedChoice, parseActionId, type RenderOptions, retired } from './render.js';
+import { type Choice, type Translation, translate } from './translate.js';
 import { createVoiceflowClient, type SessionStore, type VoiceflowAction, type VoiceflowConfig } from './voiceflow.js';
 
 export type { PinPrompts, TurnContext } from './extension.js';
@@ -139,7 +139,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
 
   async function readState(thread: AnyThread): Promise<ConversationState> {
     const state = (await thread.state) as Record<string, unknown> | null;
-    return ((state?.[STATE_KEY] as ConversationState | undefined) ?? {});
+    return (state?.[STATE_KEY] as ConversationState | undefined) ?? {};
   }
 
   async function writeState(thread: AnyThread, next: ConversationState): Promise<void> {
@@ -347,7 +347,10 @@ export function withoutBotMention(text: string, adapter: { userName?: string; bo
   }
   if (adapter.botUserId) forms.push(`(?<!\\w)@${esc(adapter.botUserId)}(?![\\w-])`, `<@!?${esc(adapter.botUserId)}>`);
   if (!forms.length) return text.trim();
-  const stripped = text.replace(new RegExp(forms.join('|'), 'gi'), ' ').replace(/[ \t]+/g, ' ').trim();
+  const stripped = text
+    .replace(new RegExp(forms.join('|'), 'gi'), ' ')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
   return stripped || text.trim();
 }
 

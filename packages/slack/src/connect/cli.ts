@@ -10,7 +10,7 @@ import { chmod, readFile, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import readline from 'node:readline';
 import { parseArgs } from 'node:util';
-import { connectSlack, disconnectSlack, slackCliLogin, slackManifest, type ConnectResult } from './index.js';
+import { type ConnectResult, connectSlack, disconnectSlack, slackCliLogin, slackManifest } from './index.js';
 
 const USAGE = `Usage:
   voiceflow-channels connect slack --project <id> --environment <alias> --public-url <https://host> [options]
@@ -118,7 +118,14 @@ export async function cli(argv: string[]): Promise<number> {
   };
 
   if (action === 'disconnect') {
-    const result = await disconnectSlack({ slack, voiceflow, ...(o.app ? { appId: o.app } : {}), removeTools: o['remove-tools'], confirm, onProgress: (l) => console.log(l) });
+    const result = await disconnectSlack({
+      slack,
+      voiceflow,
+      ...(o.app ? { appId: o.app } : {}),
+      removeTools: o['remove-tools'],
+      confirm,
+      onProgress: (l) => console.log(l),
+    });
     if (result.applied) console.log('\nDisconnected.');
     return 0;
   }
@@ -134,7 +141,14 @@ export async function cli(argv: string[]): Promise<number> {
       ...(o.app ? { appId: o.app } : {}),
       app: { ...app, ...(icon !== undefined ? { icon } : {}) },
       tools,
-      ...(o.restore ? { restore: o.restore.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
+      ...(o.restore
+        ? {
+            restore: o.restore
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean),
+          }
+        : {}),
       confirm: (plan) => confirm(plan.lines),
       onProgress: (line) => console.log(line),
       onCredentials: o['env-file'] ? (c) => writeEnvFile(o['env-file']!, { SLACK_BOT_TOKEN: c.botToken, SLACK_SIGNING_SECRET: c.signingSecret }) : undefined,
@@ -169,9 +183,13 @@ Your server needs:
     channels: [slack()],
   })
 
-Slack sends to ${s.requestUrl}.${r.install ? `
+Slack sends to ${s.requestUrl}.${
+    r.install
+      ? `
 The tools are on the ${s.environment} environment's draft: try them in Voiceflow's test chat.
-Your bot runs ${s.environment}'s published version, so the agent in Slack has them only once you publish ${s.environment} in Voiceflow.` : ''}`);
+Your bot runs ${s.environment}'s published version, so the agent in Slack has them only once you publish ${s.environment} in Voiceflow.`
+      : ''
+  }`);
 }
 
 /** Answers Slack's URL check (and nothing else) on a local port, unless something already listens there. */
@@ -218,7 +236,7 @@ export async function writeEnvFile(path: string, values: Record<string, string |
     if (i >= 0) lines[i] = `${key}=${value}`;
     else lines.push(`${key}=${value}`);
   }
-  await writeFile(path, lines.join('\n') + '\n', { mode: 0o600 });
+  await writeFile(path, `${lines.join('\n')}\n`, { mode: 0o600 });
   await chmod(path, 0o600);
 }
 

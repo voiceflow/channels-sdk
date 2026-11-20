@@ -1,12 +1,11 @@
 // Slack's workspace tools, each run as Voiceflow's sandbox runs it, against a
 // small Slack workspace: what they ask Slack, and above all where they refuse,
 // because the bot can reach more than the person it's acting for.
-import test from 'node:test';
+
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { runFunction } from '@voiceflow/channels-sdk/testing';
-import { codeHash } from '@voiceflow/channels-sdk/install';
-import { readFileSync } from 'node:fs';
-import { slackTools, slackToolScopes, workspaceTools } from '../dist/index.js';
+import { slackToolScopes, slackTools, workspaceTools } from '../dist/index.js';
 import { unixTime, utf8Length } from '../dist/tools/workspace.js';
 
 const TOKEN = 'xoxb-workspace-test';
@@ -49,7 +48,11 @@ function workspace({ fail = {} } = {}) {
         return { ok: true, url: 'https://acme.slack.com/', team_id: 'T1', user_id: 'UBOT' };
       case 'users.conversations': {
         // The bot's channels, one per page, so every lookup walks the cursor.
-        const { items, next } = page(channels.filter((c) => c.members.includes('UBOT')), b.cursor, 1);
+        const { items, next } = page(
+          channels.filter((c) => c.members.includes('UBOT')),
+          b.cursor,
+          1,
+        );
         return { ok: true, channels: items.map(({ members, ...c }) => c), response_metadata: { next_cursor: next } };
       }
       case 'conversations.members': {
@@ -121,7 +124,14 @@ function workspace({ fail = {} } = {}) {
 
 const tool = (name) => workspaceTools.find((t) => t.name === name);
 /** The inputs Voiceflow fills from variables and the secret, as this package sets them for Ada in #general. */
-const wired = { token: TOKEN, user_id: 'U2', current_channel: 'C1', current_thread: '1700000000.000100', viewing_channel: '', user_timezone: 'America/Toronto' };
+const wired = {
+  token: TOKEN,
+  user_id: 'U2',
+  current_channel: 'C1',
+  current_thread: '1700000000.000100',
+  viewing_channel: '',
+  user_timezone: 'America/Toronto',
+};
 async function run(name, inputs, ws = workspace()) {
   const t = tool(name);
   const given = Object.fromEntries(Object.entries({ ...wired, ...inputs }).filter(([k]) => k in t.inputs));
@@ -135,13 +145,20 @@ test('identity and the token come from Voiceflow, never from the model', () => {
     assert.equal(t.inputs.token?.from, 'slack_bot_token', `${t.name} reads the secret`);
     assert.equal(t.inputs.user_id?.from, 'slack_user_id', `${t.name} reads who is asking`);
     for (const [name, input] of Object.entries(t.inputs)) {
-      if (['token', 'user_id', 'current_channel', 'current_thread', 'viewing_channel', 'user_timezone'].includes(name)) assert.ok(input.from, `${t.name}.${name} is wired`);
+      if (['token', 'user_id', 'current_channel', 'current_thread', 'viewing_channel', 'user_timezone'].includes(name))
+        assert.ok(input.from, `${t.name}.${name} is wired`);
     }
     assert.ok(t.requires?.length, `${t.name} names its scopes`);
   }
   const set = slackTools();
   assert.deepEqual(Object.keys(set.secrets), ['slack_bot_token']);
-  const wiredFrom = new Set(set.tools.flatMap((t) => Object.values(t.inputs).map((i) => i.from).filter(Boolean)));
+  const wiredFrom = new Set(
+    set.tools.flatMap((t) =>
+      Object.values(t.inputs)
+        .map((i) => i.from)
+        .filter(Boolean),
+    ),
+  );
   for (const name of wiredFrom) assert.ok(name in set.variables || name in set.secrets, `${name} is created by the install`);
   assert.deepEqual(slackTools({ workspace: false }).secrets, undefined);
   assert.ok(slackToolScopes().includes('canvases:write'));
@@ -150,7 +167,18 @@ test('identity and the token come from Voiceflow, never from the model', () => {
 test('every workspace tool refuses, without calling Slack, when no Slack person is asking', async () => {
   for (const t of workspaceTools) {
     for (const user_id of ['', '0', 'not-a-user']) {
-      const { out, ws } = await run(t.name, { user_id, text: 'x', channel: '#general', person: 'grace', query: 'grace', post_at: '2030-01-01T09:00', title: 't', link: 'https://x.test', content: 'c', filename: 'a.txt' });
+      const { out, ws } = await run(t.name, {
+        user_id,
+        text: 'x',
+        channel: '#general',
+        person: 'grace',
+        query: 'grace',
+        post_at: '2030-01-01T09:00',
+        title: 't',
+        link: 'https://x.test',
+        content: 'c',
+        filename: 'a.txt',
+      });
       assert.equal(out.outputVars.ok, false, `${t.name} with user_id "${user_id}"`);
       assert.equal(out.next.path, 'error');
       assert.equal(ws.calls.length, 0, `${t.name} called Slack`);
@@ -160,7 +188,17 @@ test('every workspace tool refuses, without calling Slack, when no Slack person 
 
 test('every workspace tool returns only primitive outputs, and calls Slack with the bot token', async () => {
   for (const t of workspaceTools) {
-    const { out, ws } = await run(t.name, { text: 'x', channel: '#general', person: '<@U3>', query: 'grace', post_at: '2030-01-01T09:00', title: 't', link: 'https://x.test', content: 'c', filename: 'a.txt' });
+    const { out, ws } = await run(t.name, {
+      text: 'x',
+      channel: '#general',
+      person: '<@U3>',
+      query: 'grace',
+      post_at: '2030-01-01T09:00',
+      title: 't',
+      link: 'https://x.test',
+      content: 'c',
+      filename: 'a.txt',
+    });
     for (const [k, v] of Object.entries(out.outputVars)) assert.ok(['string', 'number', 'boolean'].includes(typeof v), `${t.name}.${k} is ${typeof v}`);
     assert.equal(out.outputVars.ok, true, `${t.name}: ${out.outputVars.result}`);
     for (const c of ws.calls.filter((c) => c.method !== 'upload')) assert.equal(c.authorization, `Bearer ${TOKEN}`);
@@ -266,7 +304,7 @@ test('slack_find_person searches names, titles and email, and leaves out bots an
   assert.match((await run('slack_find_person', { query: 'nobody' })).out.outputVars.result, /No one matches nobody/);
 });
 
-test('slack_schedule_message reads times in the person\'s zone and schedules into this thread by default', async () => {
+test("slack_schedule_message reads times in the person's zone and schedules into this thread by default", async () => {
   const { out, ws } = await run('slack_schedule_message', { text: 'Standup!', post_at: '2030-12-02T09:00' });
   assert.equal(out.outputVars.scheduled_message_id, 'Q1');
   const [call] = ws.of('chat.scheduleMessage');
@@ -279,7 +317,10 @@ test('slack_schedule_message reads times in the person\'s zone and schedules int
   assert.equal(top.body.post_at, Date.UTC(2030, 11, 2, 9, 0) / 1000);
   assert.equal(top.body.thread_ts, undefined, 'a channel named means a new post, not a reply');
 
-  assert.match((await run('slack_schedule_message', { text: 'x', post_at: 'tomorrow' })).out.outputVars.result, /relative time, like in 10 minutes, or as a date and time/);
+  assert.match(
+    (await run('slack_schedule_message', { text: 'x', post_at: 'tomorrow' })).out.outputVars.result,
+    /relative time, like in 10 minutes, or as a date and time/,
+  );
   const soon = await run('slack_schedule_message', { text: 'x', post_at: 'in 10 minutes' });
   const at = Number(soon.ws.of('chat.scheduleMessage')[0].body.post_at);
   assert.ok(Math.abs(at - (Math.floor(Date.now() / 1000) + 600)) <= 2, 'a relative time counts from now');
@@ -287,7 +328,7 @@ test('slack_schedule_message reads times in the person\'s zone and schedules int
   assert.match((await run('slack_schedule_message', { text: 'x', post_at: '2030-12-02T09:00', channel: '#secret' })).out.outputVars.result, /aren't a member/);
 });
 
-test('slack_pin_message pins this thread\'s first message, or a linked one where the person is a member', async () => {
+test("slack_pin_message pins this thread's first message, or a linked one where the person is a member", async () => {
   const { ws } = await run('slack_pin_message', {});
   assert.deepEqual(ws.of('pins.add')[0].body, { channel: 'C1', timestamp: '1700000000.000100' });
   const linked = await run('slack_pin_message', { message: 'https://acme.slack.com/archives/C2/p1700000123000456' });
@@ -304,17 +345,20 @@ test('slack_add_bookmark adds a link to this channel and refuses anything but a 
 test('slack_create_canvas writes markdown, lets the person edit it and this channel read it, and links to it', async () => {
   const { out, ws } = await run('slack_create_canvas', { title: 'Release plan', content: '# Plan\n- Friday' });
   assert.deepEqual(ws.of('canvases.create')[0].body, { title: 'Release plan', document_content: { type: 'markdown', markdown: '# Plan\n- Friday' } });
-  assert.deepEqual(ws.of('canvases.access.set').map((c) => c.body), [
-    { canvas_id: 'F0CANVAS', access_level: 'write', user_ids: ['U2'] },
-    { canvas_id: 'F0CANVAS', access_level: 'read', channel_ids: ['C1'] },
-  ]);
+  assert.deepEqual(
+    ws.of('canvases.access.set').map((c) => c.body),
+    [
+      { canvas_id: 'F0CANVAS', access_level: 'write', user_ids: ['U2'] },
+      { canvas_id: 'F0CANVAS', access_level: 'read', channel_ids: ['C1'] },
+    ],
+  );
   assert.equal(out.outputVars.link, 'https://acme.slack.com/docs/T1/F0CANVAS');
   assert.equal(out.outputVars.result, 'Created the canvas Release plan: https://acme.slack.com/docs/T1/F0CANVAS', 'the link is in what the agent relays');
   const dm = await run('slack_create_canvas', { title: 't', content: 'c', current_channel: 'D9' });
   assert.equal(dm.ws.of('canvases.access.set').length, 1, 'a DM is not shared to');
 });
 
-test('slack_send_file uploads the text in Slack\'s two steps, into this thread', async () => {
+test("slack_send_file uploads the text in Slack's two steps, into this thread", async () => {
   const { ws } = await run('slack_send_file', { filename: 'report.csv', content: 'name\nhéllo', comment: 'Here it is' });
   assert.deepEqual(ws.of('files.getUploadURLExternal')[0].body, { filename: 'report.csv', length: '11' });
   assert.equal(ws.of('upload')[0].body, 'name\nhéllo');
@@ -326,10 +370,18 @@ test('slack_send_file uploads the text in Slack\'s two steps, into this thread',
   });
 });
 
-test('Slack\'s refusals come back as something to tell the person', async () => {
-  const scope = await run('slack_find_person', { query: 'grace' }, workspace({ fail: { 'users.list': { ok: false, error: 'missing_scope', needed: 'users:read' } } }));
+test("Slack's refusals come back as something to tell the person", async () => {
+  const scope = await run(
+    'slack_find_person',
+    { query: 'grace' },
+    workspace({ fail: { 'users.list': { ok: false, error: 'missing_scope', needed: 'users:read' } } }),
+  );
   assert.match(scope.out.outputVars.result, /lacks the users:read permission/);
-  const auth = await run('slack_post_to_channel', { channel: 'C1', text: 'x' }, workspace({ fail: { 'chat.postMessage': { ok: false, error: 'invalid_auth' } } }));
+  const auth = await run(
+    'slack_post_to_channel',
+    { channel: 'C1', text: 'x' },
+    workspace({ fail: { 'chat.postMessage': { ok: false, error: 'invalid_auth' } } }),
+  );
   assert.match(auth.out.outputVars.result, /slack_bot_token secret/);
 });
 
@@ -339,7 +391,16 @@ test('times and sizes, computed without Node or browser globals', () => {
   assert.equal(unixTime('2030-07-01', ''), Date.UTC(2030, 6, 1, 9, 0) / 1000, 'a date alone means 09:00');
   assert.ok(Number.isNaN(unixTime('next week', 'UTC')));
   const now = Math.floor(Date.now() / 1000);
-  for (const [said, seconds] of [['in 10 minutes', 600], ['+15m', 900], ['in an hour', 3600], ['2 hours', 7200], ['in 1.5 hours', 5400], ['in 3 days', 259200], ['in a week', 604800], ['5 mins from now', 300]]) {
+  for (const [said, seconds] of [
+    ['in 10 minutes', 600],
+    ['+15m', 900],
+    ['in an hour', 3600],
+    ['2 hours', 7200],
+    ['in 1.5 hours', 5400],
+    ['in 3 days', 259200],
+    ['in a week', 604800],
+    ['5 mins from now', 300],
+  ]) {
     assert.ok(Math.abs(unixTime(said, 'America/Toronto') - (now + seconds)) <= 2, said);
   }
   assert.ok(Number.isNaN(unixTime('in 2 months', 'UTC')), 'months are not minutes');

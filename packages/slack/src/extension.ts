@@ -1,9 +1,10 @@
 // Slack at full fidelity: everything Slack has that the channel-neutral agent
 // doesn't, on by default. Each part can be turned off in `slack()`'s options;
 // what the agent does with it stays in Voiceflow.
-import type { Chat, ReactionEvent, Thread } from 'chat';
+
 import type { ChannelExtension, ExtensionHost, PinPrompts, TurnContext } from '@voiceflow/channels-sdk';
-import { SLUG, slackAdapter, where, type SlackAdapterLike } from './adapter.js';
+import type { Chat, ReactionEvent, Thread } from 'chat';
+import { SLUG, type SlackAdapterLike, slackAdapter, where } from './adapter.js';
 import { createContext } from './context.js';
 import { attachFormEvents, presentation } from './presentation.js';
 
@@ -227,7 +228,8 @@ export function createSlackExtension(options: SlackOptions = {}): ChannelExtensi
   }
 
   function attachHome(bot: Chat<any, any>, lent: ExtensionHost) {
-    const text = (options.home && options.home.text) || DEFAULT_HOME_TEXT;
+    const home = options.home === false ? undefined : options.home;
+    const text = home?.text || DEFAULT_HOME_TEXT;
     bot.onAppHomeOpened(async (event) => {
       if (event.adapter.name !== SLUG || (event.tab && event.tab !== 'home')) return;
       const adapter = event.adapter as unknown as SlackAdapterLike;
@@ -252,7 +254,11 @@ function promptPinner(adapter: SlackAdapterLike, channelId: string, threadTs: st
     // A link can't ride on a prompt, and more than Slack shows would hide some.
     if (!choices.length || choices.length > MAX_PROMPTS || choices.some((c) => c.url)) return false;
     try {
-      await adapter.setSuggestedPrompts(channelId, threadTs, choices.map((c) => ({ title: c.label, message: c.label })));
+      await adapter.setSuggestedPrompts(
+        channelId,
+        threadTs,
+        choices.map((c) => ({ title: c.label, message: c.label })),
+      );
       return true;
     } catch {
       return false;

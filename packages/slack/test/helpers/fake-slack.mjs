@@ -1,8 +1,9 @@
 // Slack test doubles, picked by shape: a fake Slack Web API and signed Slack
 // requests. The fake Voiceflow runtime comes from @voiceflow/channels-sdk/testing.
 // Secrets here are test-only values.
-import http from 'node:http';
+
 import { createHmac } from 'node:crypto';
+import http from 'node:http';
 
 export const SIGNING_SECRET = 'test-signing-secret';
 export const BOT_TOKEN = 'xoxb-test-token';
@@ -24,23 +25,43 @@ export async function startFakeSlack({ refuse, replies, answer: answerWith } = {
     for (const k of ['blocks', 'attachments', 'chunks', 'prompts', 'view', 'document_content', 'bookmark']) {
       if (typeof body[k] === 'string' && /^[[{]/.test(body[k])) body[k] = JSON.parse(body[k]);
     }
-    const method = req.url.replace(/^\/+/, '').replace(/^api\//, '').split('?')[0];
+    const method = req.url
+      .replace(/^\/+/, '')
+      .replace(/^api\//, '')
+      .split('?')[0];
     const call = { method, body };
     calls.push(call);
     const ts = `1700000${String(++n).padStart(3, '0')}.000100`;
     const answer =
       refuse?.(method, body) ??
       answerWith?.(method, body) ??
-      (method === 'auth.test' ? { ok: true, user_id: 'UBOT', bot_id: 'BBOT', team_id: 'T1', team: 'Test', url: 'https://test.slack.com/' }
-      // The bot resolves to its Slack username, as a real workspace answers for a bot user.
-      : method === 'users.info' && body.user === 'UBOT' ? { ok: true, user: { id: 'UBOT', name: 'voiceflow', real_name: 'voiceflow', is_bot: true, profile: { display_name: 'voiceflow' } } }
-      : method === 'users.info' ? { ok: true, user: { id: body.user, name: 'person', real_name: 'A Person', tz: 'America/Toronto', profile: { title: 'Head of Support', email: 'person@example.com' } } }
-      : method === 'conversations.replies' ? { ok: true, messages: replies?.(body) ?? [], has_more: false }
-      : method === 'conversations.info' ? { ok: true, channel: { id: body.channel, name: 'general', is_im: false } }
-      : method === 'chat.postMessage' ? { ok: true, ts, channel: body.channel, message: { ts, text: body.text } }
-      : method === 'chat.startStream' ? { ok: true, ts, channel: body.channel }
-      : method === 'chat.appendStream' || method === 'chat.stopStream' || method === 'chat.update' ? { ok: true, ts: body.ts, channel: body.channel }
-      : { ok: true });
+      (method === 'auth.test'
+        ? { ok: true, user_id: 'UBOT', bot_id: 'BBOT', team_id: 'T1', team: 'Test', url: 'https://test.slack.com/' }
+        : // The bot resolves to its Slack username, as a real workspace answers for a bot user.
+          method === 'users.info' && body.user === 'UBOT'
+          ? { ok: true, user: { id: 'UBOT', name: 'voiceflow', real_name: 'voiceflow', is_bot: true, profile: { display_name: 'voiceflow' } } }
+          : method === 'users.info'
+            ? {
+                ok: true,
+                user: {
+                  id: body.user,
+                  name: 'person',
+                  real_name: 'A Person',
+                  tz: 'America/Toronto',
+                  profile: { title: 'Head of Support', email: 'person@example.com' },
+                },
+              }
+            : method === 'conversations.replies'
+              ? { ok: true, messages: replies?.(body) ?? [], has_more: false }
+              : method === 'conversations.info'
+                ? { ok: true, channel: { id: body.channel, name: 'general', is_im: false } }
+                : method === 'chat.postMessage'
+                  ? { ok: true, ts, channel: body.channel, message: { ts, text: body.text } }
+                  : method === 'chat.startStream'
+                    ? { ok: true, ts, channel: body.channel }
+                    : method === 'chat.appendStream' || method === 'chat.stopStream' || method === 'chat.update'
+                      ? { ok: true, ts: body.ts, channel: body.channel }
+                      : { ok: true });
     call.answer = answer;
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(answer));
@@ -80,15 +101,20 @@ export async function startFakeSlack({ refuse, replies, answer: answerWith } = {
 }
 
 function sign(raw, secret, ts) {
-  return 'v0=' + createHmac('sha256', secret).update(`v0:${ts}:${raw}`).digest('hex');
+  return `v0=${createHmac('sha256', secret).update(`v0:${ts}:${raw}`).digest('hex')}`;
 }
 
 /** A Slack Events API request, signed the way Slack signs it. */
 export function slackEvent(event, { secret = SIGNING_SECRET } = {}) {
   const ts = String(Math.floor(Date.now() / 1000));
   const raw = JSON.stringify({
-    type: 'event_callback', team_id: 'T1', api_app_id: 'A1', event_id: `Ev${Math.random().toString(36).slice(2)}`,
-    event_time: Number(ts), event, authorizations: [{ user_id: 'UBOT', is_bot: true }],
+    type: 'event_callback',
+    team_id: 'T1',
+    api_app_id: 'A1',
+    event_id: `Ev${Math.random().toString(36).slice(2)}`,
+    event_time: Number(ts),
+    event,
+    authorizations: [{ user_id: 'UBOT', is_bot: true }],
   });
   return new Request('http://localhost/api/slack', {
     method: 'POST',

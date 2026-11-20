@@ -2,27 +2,28 @@
 // person's message, a table, a chart, a reply only they can see, and a form (a
 // button that opens a Slack dialog, whose answers become the person's next
 // message to the agent).
+
+import type { ExtensionHost, TraceHandler, TraceTurn } from '@voiceflow/channels-sdk';
 import {
   Actions,
   Button,
   Card,
+  CardText,
   Chart,
+  type Chat,
+  chartElementToFallbackText,
   DateInput,
   Modal,
+  type ModalChild,
   NumberInput,
   RadioSelect,
   Select,
   SelectOption,
   Table,
-  CardText,
   TextInput,
-  chartElementToFallbackText,
-  tableElementToAscii,
-  type Chat,
-  type ModalChild,
   type Thread,
+  tableElementToAscii,
 } from 'chat';
-import type { ExtensionHost, TraceHandler, TraceTurn } from '@voiceflow/channels-sdk';
 import { SLUG, slackAdapter, where } from './adapter.js';
 
 type AnyThread = Thread<any, any>;
@@ -82,7 +83,7 @@ export function presentation(host: () => ExtensionHost | undefined, options: Pre
       const { title, headers, rows } = trace.payload ?? {};
       if (!Array.isArray(headers) || !Array.isArray(rows)) return;
       const table = Table({ headers, rows, ...(title ? { caption: title } : {}), pageSize: Math.min(rows.length || 1, 10) });
-      const ascii = '```\n' + tableElementToAscii(headers, rows) + '\n```';
+      const ascii = `\`\`\`\n${tableElementToAscii(headers, rows)}\n\`\`\``;
       const text = title ? `*${title}*\n${ascii}` : ascii;
       await turn.post({ card: Card({ ...(title ? { title } : {}), children: [table] }), fallbackText: title || 'Table' }, text);
     },
@@ -103,7 +104,7 @@ export function presentation(host: () => ExtensionHost | undefined, options: Pre
         await turn.post(text);
         return;
       }
-      if (!turn.userId) throw new Error("slack_reply_privately: the turn has no person to send to, so nothing was sent");
+      if (!turn.userId) throw new Error('slack_reply_privately: the turn has no person to send to, so nothing was sent');
       await turn.flush();
       await turn.thread.postEphemeral(turn.userId, text, { fallbackToDM: true });
     },

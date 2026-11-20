@@ -5,7 +5,7 @@
 // agent's instructions or global prompt reference it: a variable is stored
 // data, not the model's context.
 import type { TurnContext } from '@voiceflow/channels-sdk';
-import { slackAdapter, where, type SlackWebClient } from './adapter.js';
+import { type SlackWebClient, slackAdapter, where } from './adapter.js';
 
 /** Every variable this package sets, with what it holds. The installer creates them on the agent. */
 export const CONTEXT_VARIABLES = {
@@ -18,7 +18,7 @@ export const CONTEXT_VARIABLES = {
   slack_channel_id: 'The Slack channel, DM or group DM this conversation is in.',
   slack_channel_name: 'The channel\'s name, without "#". Empty in DMs.',
   slack_channel_type: 'channel, private_channel, dm or group_dm.',
-  slack_thread_ts: 'The Slack thread this conversation is in (its first message\'s timestamp).',
+  slack_thread_ts: "The Slack thread this conversation is in (its first message's timestamp).",
   slack_message_ts: "The timestamp of the person's latest message. Empty when the turn came from a button.",
   slack_viewing_channel_id: 'In the assistant panel: the channel the person has open beside it.',
 } as const;

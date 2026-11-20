@@ -4,8 +4,8 @@
 // whenever something that can't stream (buttons, a card, an image) comes next.
 // A rich post the channel refuses is sent again as text, and the turn goes on.
 import type { SentMessage, StreamChunk, Thread } from 'chat';
-import { withSources, type ButtonsShown, type Post, type RenderOptions, type Renderer } from './render.js';
-import { sourcesOf, translate, type Choice, type Reply, type Source } from './translate.js';
+import { type ButtonsShown, type Post, type Renderer, type RenderOptions, withSources } from './render.js';
+import { type Choice, type Reply, type Source, sourcesOf, translate } from './translate.js';
 import type { Trace } from './voiceflow.js';
 
 type AnyThread = Thread<any, any>;
@@ -123,12 +123,7 @@ function chunkQueue() {
 }
 
 /** Streams one turn. Returns every trace it saw, for the turn's record. */
-export async function deliverStream(
-  thread: AnyThread,
-  traces: AsyncIterable<Trace>,
-  renderer: Renderer,
-  options: DeliveryOptions,
-): Promise<Trace[]> {
+export async function deliverStream(thread: AnyThread, traces: AsyncIterable<Trace>, renderer: Renderer, options: DeliveryOptions): Promise<Trace[]> {
   const seen: Trace[] = [];
   const progressTitle = options.progressTitle === undefined ? DEFAULT_PROGRESS_TITLE : options.progressTitle;
   const sourcesMode = options.sources ?? 'off';

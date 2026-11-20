@@ -48,8 +48,21 @@ export interface Translation {
 
 /** Traces that carry nothing for a person to read, so they're dropped silently. */
 const SILENT = new Set([
-  'block', 'path', 'flow', 'goto', 'debug', 'log', 'no-reply', 'reasoning', 'knowledgeBase',
-  'tool-call', 'entity-filling', 'stream', 'simulation-test-result', 'realtime-agent', 'dtmf',
+  'block',
+  'path',
+  'flow',
+  'goto',
+  'debug',
+  'log',
+  'no-reply',
+  'reasoning',
+  'knowledgeBase',
+  'tool-call',
+  'entity-filling',
+  'stream',
+  'simulation-test-result',
+  'realtime-agent',
+  'dtmf',
 ]);
 
 export interface TranslateOptions {
@@ -143,9 +156,7 @@ function pushText(replies: Reply[], message: unknown, sources: Source[]) {
 /** Knowledge-base sources on a trace (`sourceUrls`). */
 export function sourcesOf(value: unknown): Source[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .filter((s) => s && typeof s.url === 'string')
-    .map((s) => (typeof s.name === 'string' ? { url: s.url, name: s.name } : { url: s.url }));
+  return value.filter((s) => s && typeof s.url === 'string').map((s) => (typeof s.name === 'string' ? { url: s.url, name: s.name } : { url: s.url }));
 }
 
 function choicesOf(buttons: unknown): Choice[] {
@@ -181,5 +192,9 @@ function cardOf(card: any): CardData | null {
 /** A spoken reply can carry SSML or an <audio> clip; a messaging channel shows only its words. */
 function stripMarkup(message: unknown): string {
   if (typeof message !== 'string') return '';
-  return message.replace(/<audio[^>]*>[\s\S]*?<\/audio>/gi, '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  return message
+    .replace(/<audio[^>]*>[\s\S]*?<\/audio>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

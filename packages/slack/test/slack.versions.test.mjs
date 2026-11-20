@@ -3,9 +3,10 @@
 // reaches an agent that already has the tool. Every tool's code is recorded
 // here by version: changing it means raising the version and recording the new
 // hash in test/tool-versions.json.
-import test from 'node:test';
+
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import test from 'node:test';
 import { codeHash } from '@voiceflow/channels-sdk/install';
 import { slackTools } from '../dist/index.js';
 

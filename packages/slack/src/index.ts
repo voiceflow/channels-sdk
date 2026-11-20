@@ -4,11 +4,20 @@ import * as slackAdapter from '@chat-adapter/slack';
 import type { ChannelSpec } from '@voiceflow/channels-sdk';
 import { createSlackExtension, type SlackOptions } from './extension.js';
 
-export { createSlackExtension, DEFAULT_HOME_TEXT, type SlackOptions } from './extension.js';
-export { CONTEXT_VARIABLES, type ContextVariable } from './context.js';
 export type { SlackAdapterLike } from './adapter.js';
-export { slackTools, slackToolScopes, presentationTools, workspaceTools, SLACK_SECRETS, PRESENTATION_TRACES, type PresentationTrace, type SlackToolsOptions } from './tools/index.js';
+export { CONTEXT_VARIABLES, type ContextVariable } from './context.js';
+export { createSlackExtension, DEFAULT_HOME_TEXT, type SlackOptions } from './extension.js';
 export { answersText, FORM_ACTION_ID, type FormField } from './presentation.js';
+export {
+  PRESENTATION_TRACES,
+  type PresentationTrace,
+  presentationTools,
+  SLACK_SECRETS,
+  type SlackToolsOptions,
+  slackToolScopes,
+  slackTools,
+  workspaceTools,
+} from './tools/index.js';
 
 /**
  * Slack as a channel for `createChannels`, with everything only Slack has. It
