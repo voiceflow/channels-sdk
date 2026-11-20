@@ -67,3 +67,18 @@ test('a URL button keeps its link from its open_url action, and its request', ()
   const { replies } = translate([{ type: 'choice', payload: { buttons: [{ name: 'Book', request }, { name: 'Bad', request: { type: 'p', payload: { actions: [{ type: 'open_url', payload: { url: 'javascript:alert(1)' } }] } } }] } }]);
   assert.deepEqual(replies[0].choices.map((c) => [c.label, c.url, c.action.type]), [['Book', 'https://example.com/b', 'path-1'], ['Bad', undefined, 'p']]);
 });
+
+test('a trace type the channel shows natively is kept in its place, not skipped', () => {
+  const traces = [
+    { type: 'text', payload: { message: 'Before' } },
+    { type: 'slack.react', payload: { emoji: 'tada' } },
+    { type: 'mystery', payload: {} },
+    { type: 'text', payload: { message: 'After' } },
+  ];
+  const plain = translate(traces);
+  assert.deepEqual(plain.skipped, ['slack.react', 'mystery']);
+  const kept = translate(traces, { custom: (type) => type === 'slack.react' });
+  assert.deepEqual(kept.replies.map((r) => r.type), ['text', 'trace', 'text']);
+  assert.deepEqual(kept.replies[1].trace, traces[1]);
+  assert.deepEqual(kept.skipped, ['mystery']);
+});

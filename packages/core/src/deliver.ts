@@ -3,7 +3,7 @@
 // sends it, with a progress card per tool call, and closes that message
 // whenever something that can't stream (buttons, a card, an image) comes next.
 // A rich post the channel refuses is sent again as text, and the turn goes on.
-import type { StreamChunk, Thread } from 'chat';
+import type { SentMessage, StreamChunk, Thread } from 'chat';
 import { withSources, type ButtonsShown, type Post, type RenderOptions, type Renderer } from './render.js';
 import { sourcesOf, translate, type Choice, type Reply, type Source } from './translate.js';
 import type { Trace } from './voiceflow.js';
@@ -25,29 +25,60 @@ export interface DeliveryOptions extends RenderOptions {
   onButtons?: (message: ShownMessage) => void;
   /** Called when the channel refused a post and its text form was sent instead. */
   onRefused?: (error: unknown) => void;
+  /** Custom traces the channel shows natively, by type. Each runs in its place in the turn. */
+  traces?: Record<string, CustomTrace>;
 }
+
+/** What a custom trace's handler can do in the turn: post below what's shown, or close the streamed message. */
+export interface TraceIO {
+  post(post: Post, text?: Post): Promise<SentMessage | null>;
+  flush(): Promise<void>;
+}
+
+export type CustomTrace = (trace: Trace, io: TraceIO) => Promise<void>;
 
 export const DEFAULT_PROGRESS_TITLE = 'Working on it';
 
-/** Posts one rendered post, or its text form if the channel refuses it. */
-async function send(thread: AnyThread, renderer: Renderer, post: Post, options: DeliveryOptions): Promise<void> {
-  let sent: { id?: string };
+/** Posts a post, or `text` if the channel refuses it. Returns the sent message, or `null` when its text form went. */
+async function postOrText(thread: AnyThread, post: Post, text: Post | null | undefined, options: DeliveryOptions): Promise<SentMessage | null> {
   try {
-    sent = await thread.post(post);
+    return await thread.post(post);
   } catch (error) {
     // An image the channel can't fetch, say. Text keeps the reply, and its choices stay answerable by number.
-    const text = renderer.textOf(post);
     if (!text) throw error;
     options.onRefused?.(error);
     await thread.post(text);
-    return;
+    return null;
   }
+}
+
+/** Posts one rendered post, or its text form if the channel refuses it. */
+async function send(thread: AnyThread, renderer: Renderer, post: Post, options: DeliveryOptions): Promise<void> {
+  const sent = await postOrText(thread, post, renderer.textOf(post), options);
   const buttons = renderer.buttonsOf(post);
   if (buttons && sent?.id) options.onButtons?.({ ...buttons, messageId: sent.id });
 }
 
+/** Runs a custom trace's handler, if the channel has one for its type. */
+async function custom(thread: AnyThread, trace: Trace, options: DeliveryOptions, flush: () => Promise<void>): Promise<boolean> {
+  const handler = options.traces?.[trace.type];
+  if (!handler) return false;
+  await handler(trace, {
+    flush,
+    post: async (post, text) => {
+      await flush();
+      return postOrText(thread, post, text, options);
+    },
+  });
+  return true;
+}
+
 /** Posts one reply, unless `offerChoices` took its buttons. */
 async function postReply(thread: AnyThread, renderer: Renderer, reply: Reply, options: DeliveryOptions): Promise<void> {
+  if (reply.type === 'trace') {
+    await custom(thread, reply.trace, options, async () => {});
+    return;
+  }
   if (reply.type === 'choices' && (await options.offerChoices?.(reply.choices))) {
     renderer.offer(reply.choices);
     return;
@@ -162,6 +193,7 @@ export async function deliverStream(
         }
         continue;
       }
+      if (await custom(thread, trace, options, close)) continue;
       if (trace.type === 'tool-call' && typeof p?.callID === 'string') {
         if (p.state === 'start') {
           running.add(p.callID);
@@ -171,7 +203,7 @@ export async function deliverStream(
         }
         continue;
       }
-      for (const reply of translate([trace]).replies) {
+      for (const reply of translate([trace], { custom: (type) => type in (options.traces ?? {}) }).replies) {
         if (reply.type === 'text') {
           write(withSources(reply.markdown, reply.sources, sourcesMode), true);
         } else {

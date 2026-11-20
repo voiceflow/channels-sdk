@@ -1,8 +1,11 @@
 // The one-call setup: a Chat SDK bot with the named channels, answered by a
-// Voiceflow agent. Every adapter comes from the catalog (tier 1).
+// Voiceflow agent. Every adapter comes from the catalog (tier 1); a channel
+// package (`slack()` from @voiceflow/channels-slack) adds its extension.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Chat, type Adapter, type ChatConfig, type StateAdapter, type WebhookOptions } from 'chat';
 import { createVoiceflowAgent, type VoiceflowAgent, type VoiceflowAgentOptions } from './agent.js';
 import { ChannelsError } from './errors.js';
+import type { ChannelExtension } from './extension.js';
 import { loadAdapter, type Importer } from './loader.js';
 
 export type ChannelSpec =
@@ -13,9 +16,11 @@ export type ChannelSpec =
       options?: Record<string, unknown>;
       /** An adapter you built yourself; used as-is instead of loading from the catalog. */
       adapter?: Adapter;
+      /** What only this platform has, from its channel package. */
+      extension?: ChannelExtension;
     };
 
-export interface ChannelsOptions extends VoiceflowAgentOptions {
+export interface ChannelsOptions extends Omit<VoiceflowAgentOptions, 'extensions' | 'defer'> {
   channels: readonly ChannelSpec[];
   /** Where thread subscriptions, locks and Voiceflow session keys live. Use Redis or Postgres in production. */
   state: StateAdapter;
@@ -37,9 +42,13 @@ export interface Channels {
 
 export async function createChannels(options: ChannelsOptions): Promise<Channels> {
   const adapters: Record<string, Adapter> = {};
+  const extensions: ChannelExtension[] = [];
   for (const spec of options.channels) {
-    const { slug, options: adapterOptions, adapter } = typeof spec === 'string' ? { slug: spec } : spec as Extract<ChannelSpec, object>;
-    adapters[slug] = adapter ?? (await loadAdapter(slug, { options: adapterOptions, importer: options.importer }));
+    const { slug, options: adapterOptions, adapter, extension } = typeof spec === 'string' ? { slug: spec } : (spec as Extract<ChannelSpec, object>);
+    // The channel's defaults sit under the caller's own options; with neither, the adapter reads its env vars.
+    const merged = extension?.adapterDefaults ? { ...extension.adapterDefaults, ...adapterOptions } : adapterOptions;
+    adapters[slug] = adapter ?? (await loadAdapter(slug, { options: merged, importer: options.importer }));
+    if (extension) extensions.push(extension);
   }
 
   const bot = new Chat({
@@ -52,7 +61,14 @@ export async function createChannels(options: ChannelsOptions): Promise<Channels
     state: options.state,
   } as ChatConfig);
 
-  const agent = createVoiceflowAgent({ ...options, userName: options.userName ?? 'voiceflow' });
+  // Work an extension starts after the webhook answers (a submitted form, say) runs under that request's waitUntil.
+  const requests = new AsyncLocalStorage<WebhookOptions | undefined>();
+  const agent = createVoiceflowAgent({
+    ...options,
+    userName: options.userName ?? 'voiceflow',
+    extensions,
+    defer: (task) => requests.getStore()?.waitUntil?.(task),
+  });
   agent.attach(bot);
 
   const webhooks = bot.webhooks as Record<string, (request: Request, options?: WebhookOptions) => Promise<Response>>;
@@ -63,7 +79,7 @@ export async function createChannels(options: ChannelsOptions): Promise<Channels
     webhook(slug, request, webhookOptions) {
       const handler = webhooks[slug];
       if (!handler) throw new ChannelsError('unknown_channel', `This bot has no "${slug}" channel.`);
-      return handler(request, webhookOptions);
+      return requests.run(webhookOptions, () => handler(request, webhookOptions));
     },
   };
 }

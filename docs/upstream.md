@@ -141,6 +141,11 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
     `state`, so every progress card has the same title (`progressTitle`). The name is
     only in `debug` traces, which this package never reads. That one is a Voiceflow
     runtime ask, not Chat SDK's.
+  - **Slack message and global shortcuts.** The Slack adapter answers an interactive
+    payload of type `message_action` or `shortcut` with an empty 200 and dispatches
+    nothing, so "Ask the agent about this message" can't be built without verifying
+    Slack's signature ourselves, which this package never does. Ask for an
+    `onShortcut` handler (`callbackId`, the message, `triggerId`, the user).
 - **Goal:** a Voiceflow guide or template on chat-sdk.dev / vercel.com/kb/chat-sdk.
 
 ## 6. Keeping the Voiceflow side current

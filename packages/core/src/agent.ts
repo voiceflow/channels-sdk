@@ -4,14 +4,19 @@
 // wherever the bot's state adapter keeps it (memory in development, Redis in
 // production). Only the latest turn's buttons are live: when the next turn
 // starts, the last turn's come off their messages, as in Voiceflow's web chat.
+// Whatever only one platform has comes from that channel's extension
+// (`ChannelExtension`), matched to a thread by its adapter's name.
 import { createHash } from 'node:crypto';
-import type { ActionEvent, Adapter, AdapterPostableMessage, Author, Chat, Message, Thread } from 'chat';
+import type { ActionEvent, AdapterPostableMessage, Author, Chat, Message, Thread } from 'chat';
 import { capabilities, type ChannelCapabilities } from './catalog.js';
-import { deliverStream, deliverWhole, type DeliveryOptions, type ShownMessage } from './deliver.js';
+import { deliverStream, deliverWhole, type CustomTrace, type DeliveryOptions, type ShownMessage } from './deliver.js';
 import { ChannelsError } from './errors.js';
+import type { ChannelExtension, ExtensionHost, PinPrompts, RunOptions, TurnContext } from './extension.js';
 import { createRenderer, matchTypedChoice, parseActionId, retired, type RenderOptions } from './render.js';
 import { translate, type Choice, type Translation } from './translate.js';
 import { createVoiceflowClient, type SessionStore, type VoiceflowAction, type VoiceflowConfig } from './voiceflow.js';
+
+export type { PinPrompts, TurnContext } from './extension.js';
 
 export const STATE_KEY = 'voiceflow';
 
@@ -25,12 +30,6 @@ interface ConversationState {
 
 type AnyThread = Thread<any, any>;
 
-export interface TurnContext {
-  thread: AnyThread;
-  /** The incoming message; absent when the turn came from a button. */
-  message?: Message<any>;
-}
-
 export interface VoiceflowAgentOptions extends RenderOptions {
   voiceflow: VoiceflowConfig;
   /**
@@ -38,8 +37,15 @@ export interface VoiceflowAgentOptions extends RenderOptions {
    * is removed from what the person wrote before it reaches the agent.
    */
   userName?: string;
-  /** Variables set on the Voiceflow session before each turn. */
+  /** Variables set on the Voiceflow session before each turn, over the channel extension's own. */
   variables?: (ctx: TurnContext) => Record<string, unknown> | Promise<Record<string, unknown>>;
+  /** What only some platforms have, one extension per channel (`slack()` from @voiceflow/channels-slack). */
+  extensions?: readonly ChannelExtension[];
+  /**
+   * Keeps work running after a webhook has answered. `createChannels` passes
+   * the platform's `waitUntil`; without one, the work runs unawaited.
+   */
+  defer?: (task: Promise<unknown>) => void;
   /** Posted when a turn fails. `null` posts nothing. */
   errorMessage?: string | null;
   /** Posted when someone clicks a button from an earlier turn. `null` posts nothing. */
@@ -47,8 +53,8 @@ export interface VoiceflowAgentOptions extends RenderOptions {
   /**
    * Called when a turn fails (and `errorMessage` is posted), or when part of
    * one does and the turn carries on: a post the channel refused and that went
-   * as text instead (`post_refused`), or buttons that couldn't be taken off an
-   * earlier message (`edit_failed`).
+   * as text instead (`post_refused`), buttons that couldn't be taken off an
+   * earlier message (`edit_failed`), or a channel extension's own step.
    */
   onError?: (error: unknown, ctx: TurnContext) => void;
   /** Called after every turn: what was translated, for logging or metrics. */
@@ -62,25 +68,21 @@ export interface VoiceflowAgentOptions extends RenderOptions {
   /** The title on a tool call's progress card while streaming. `null` shows none. Default: `Working on it`. */
   progressTitle?: string | null;
   /**
-   * When someone opens the bot's assistant thread (Slack's AI app panel), run
-   * the agent's launch turn: its messages are posted, and its buttons become
-   * the thread's suggested prompts where the channel has them. Default: `true`.
-   */
-  launchOnOpen?: boolean;
-  /**
-   * Called when someone rates a reply with the channel's native feedback
-   * buttons (Slack: the adapter's `feedbackButtons` option).
+   * Called when someone rates a reply: with the channel's native feedback
+   * buttons, or (where the channel's extension counts them) a reaction.
    */
   onFeedback?: (feedback: Feedback) => void | Promise<void>;
-  /** The action ID the feedback buttons send. Default: `message_feedback`, the Slack adapter's. */
+  /** The action ID the feedback buttons send. Default: the channel extension's. */
   feedbackActionId?: string;
 }
 
 export interface Feedback {
   /** `true` for the positive button. */
   positive: boolean;
-  /** The button's value as the channel sent it (`positive` / `negative` by default). */
+  /** The button's value as the channel sent it (`positive` / `negative`), or the reaction's emoji name. */
   value: string;
+  /** How it was given. */
+  via: 'button' | 'reaction';
   thread: AnyThread;
   user: Author;
   /** The rated message. */
@@ -93,17 +95,15 @@ export interface VoiceflowAgent {
   /** Answers a click on one of the agent's buttons, or records feedback. Ignores other actions. */
   choose(event: ActionEvent<any>): Promise<void>;
   /** Runs the launch turn in a thread that just opened. `pin` offers its buttons as suggested prompts. */
-  open(thread: AnyThread, pin?: PinPrompts): Promise<void>;
-  /** Registers the mention, subscribed-message, button and thread-opened handlers on a bot. */
+  open(thread: AnyThread, pin?: PinPrompts, userId?: string): Promise<void>;
+  /** Runs one turn: any Voiceflow request, for a channel's own entry points. */
+  run(thread: AnyThread, action: VoiceflowAction, options?: RunOptions): Promise<void>;
+  /** Registers the mention, subscribed-message and button handlers on a bot, and each extension's own. */
   attach(bot: Chat<any, any>): void;
 }
 
-/** Pins a turn's choices as the thread's suggested prompts. Returns `false` when they can't be. */
-export type PinPrompts = (choices: readonly Choice[]) => Promise<boolean>;
-
 const DEFAULT_ERROR = 'Sorry, something went wrong. Please try again.';
 const DEFAULT_STALE = 'That option is no longer available.';
-const DEFAULT_FEEDBACK_ACTION = 'message_feedback';
 const NO_CAPABILITIES: ChannelCapabilities = {
   buttons: false,
   linkButtons: false,
@@ -112,12 +112,30 @@ const NO_CAPABILITIES: ChannelCapabilities = {
   typingIndicator: false,
   streaming: false,
   editMessages: false,
+  selectMenus: false,
 };
-/** Slack shows at most four suggested prompts. */
-const MAX_PROMPTS = 4;
 
 export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowAgent {
   const client = createVoiceflowClient(options.voiceflow);
+  const extensions = new Map((options.extensions ?? []).map((e) => [e.slug, e]));
+  const extensionOf = (thread: AnyThread) => extensions.get(thread.adapter.name);
+
+  const report = (error: unknown, ctx: Partial<TurnContext> = {}) => {
+    try {
+      options.onError?.(error, ctx as TurnContext);
+    } catch {
+      // A failing error handler must not take the turn down with it.
+    }
+  };
+  /** An extension's step never fails a turn: what it throws is reported. */
+  const quietly = async <T>(ctx: TurnContext, step: () => T | Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await step();
+    } catch (error) {
+      report(error, ctx);
+      return fallback;
+    }
+  };
 
   async function readState(thread: AnyThread): Promise<ConversationState> {
     const state = (await thread.state) as Record<string, unknown> | null;
@@ -147,7 +165,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       try {
         await thread.adapter.editMessage(thread.id, message.messageId, retired(message, picked, caps) as AdapterPostableMessage);
       } catch (error) {
-        options.onError?.(new ChannelsError('edit_failed', `Couldn't take the buttons off message ${message.messageId}.`, { cause: error }), ctx);
+        report(new ChannelsError('edit_failed', `Couldn't take the buttons off message ${message.messageId}.`, { cause: error }), ctx);
       }
     }
   }
@@ -159,7 +177,9 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
   async function runTurn(ctx: TurnContext, action: VoiceflowAction, { pin, picked }: { pin?: PinPrompts; picked?: number } = {}): Promise<void> {
     const { thread } = ctx;
     const caps = capabilitiesOf(thread);
+    const extension = extensionOf(thread);
     let retiring: Promise<void> = Promise.resolve();
+    if (extension?.turnStarted) await quietly(ctx, () => extension.turnStarted!(ctx), undefined);
     try {
       // The last turn's buttons come off while this turn runs.
       const before = await readState(thread);
@@ -169,27 +189,41 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       }
 
       if (caps.typingIndicator) await thread.startTyping().catch(() => {});
-      const variables = (await options.variables?.(ctx)) ?? {};
+      if (extension?.input && action.type === 'text' && typeof action.payload === 'string') {
+        const said = action.payload;
+        const shaped = await quietly(ctx, () => extension.input!(said, { ...ctx, isNew: !before.sessionKey }), said);
+        action = { ...action, payload: shaped };
+      }
+      const variables = {
+        ...(extension?.variables ? await quietly(ctx, () => extension.variables!(ctx), {}) : {}),
+        ...((await options.variables?.(ctx)) ?? {}),
+      };
       const input = { userID: voiceflowUserID(thread.id), action, variables, sessions: sessionStore(thread) };
       const renderer = createRenderer(caps, options);
       const shown: ShownMessage[] = [];
+      // The extension's custom traces, each run in its place in the turn. A failed one is reported, not fatal.
+      const traces: Record<string, CustomTrace> = {};
+      for (const [type, handler] of Object.entries(extension?.traces ?? {})) {
+        traces[type] = (trace, io) => quietly(ctx, () => handler(trace, { ...ctx, ...io, report: (error) => report(error, ctx) }), undefined);
+      }
       const delivery: DeliveryOptions = {
         sources: options.sources,
         progressTitle: options.progressTitle,
         offerChoices: pin,
+        traces,
         // Where messages can't be edited (WhatsApp), old buttons stay, and a click on one is refused as stale.
         onButtons: caps.editMessages ? (message) => shown.push(message) : undefined,
-        onRefused: (error) =>
-          options.onError?.(new ChannelsError('post_refused', 'The channel refused a post; its text form was sent instead.', { cause: error }), ctx),
+        onRefused: (error) => report(new ChannelsError('post_refused', 'The channel refused a post; its text form was sent instead.', { cause: error }), ctx),
       };
+      const custom = (type: string) => type in traces;
 
       let translation: Translation;
       if (caps.streaming && options.streaming !== false) {
-        const { traces } = await client.stream(input);
-        translation = translate(await deliverStream(thread, traces, renderer, delivery));
+        const { traces: stream } = await client.stream(input);
+        translation = translate(await deliverStream(thread, stream, renderer, delivery), { custom });
       } else {
-        const { traces } = await client.turn(input);
-        translation = translate(traces);
+        const { traces: whole } = await client.turn(input);
+        translation = translate(whole, { custom });
         await deliverWhole(thread, translation.replies, renderer, delivery);
       }
 
@@ -204,9 +238,11 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       options.onTurn?.(translation, ctx);
     } catch (error) {
       await retiring;
-      options.onError?.(error, ctx);
+      report(error, ctx);
       const text = options.errorMessage === undefined ? DEFAULT_ERROR : options.errorMessage;
       if (text !== null) await thread.post(text).catch(() => {});
+    } finally {
+      if (extension?.turnEnded) await quietly(ctx, () => extension.turnEnded!(ctx), undefined);
     }
   }
 
@@ -216,7 +252,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       const state = await readState(thread);
       const picked = state.choices?.length ? matchTypedChoice(text, state.choices) : null;
       await runTurn(
-        { thread, message },
+        { thread, message, userId: message.author?.userId },
         picked ? picked.action : { type: 'text', payload: text },
         picked ? { picked: state.choices!.indexOf(picked) } : {},
       );
@@ -225,12 +261,13 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
     async choose(event) {
       if (!event.thread) return;
       const thread = event.thread as AnyThread;
-      if (event.actionId === (options.feedbackActionId ?? DEFAULT_FEEDBACK_ACTION)) {
+      const feedbackActionId = options.feedbackActionId ?? extensionOf(thread)?.feedbackActionId;
+      if (feedbackActionId && event.actionId === feedbackActionId) {
         const value = event.value ?? '';
-        await options.onFeedback?.({ positive: value === 'positive', value, thread, user: event.user, messageId: event.messageId });
+        await options.onFeedback?.({ positive: value === 'positive', value, via: 'button', thread, user: event.user, messageId: event.messageId });
         return;
       }
-      const parsed = parseActionId(event.actionId);
+      const parsed = parseActionId(event.actionId, event.value);
       if (!parsed) return;
       const state = await readState(thread);
       const choice = state.nonce === parsed.nonce ? state.choices?.[parsed.index] : undefined;
@@ -239,11 +276,15 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
         if (text !== null) await thread.post(text).catch(() => {});
         return;
       }
-      await runTurn({ thread }, choice.action, { picked: parsed.index });
+      await runTurn({ thread, userId: event.user?.userId }, choice.action, { picked: parsed.index });
     },
 
-    async open(thread, pin) {
-      await runTurn({ thread }, { type: 'launch' }, { pin });
+    async open(thread, pin, userId) {
+      await runTurn({ thread, userId }, { type: 'launch' }, { pin });
+    },
+
+    async run(thread, action, { message, userId, pin } = {}) {
+      await runTurn({ thread, message, userId: userId ?? message?.author?.userId }, action, { pin });
     },
 
     attach(bot) {
@@ -254,36 +295,33 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       });
       bot.onSubscribedMessage((thread, message) => agent.reply(thread, message));
       bot.onAction((event) => agent.choose(event));
-      if (options.launchOnOpen !== false) {
-        bot.onAssistantThreadStarted(async (event) => {
-          const thread = bot.thread(event.threadId) as AnyThread;
-          await thread.subscribe();
-          await agent.open(thread, promptPinner(event.adapter, event.channelId, event.threadTs));
-        });
-      }
+      for (const extension of extensions.values()) extension.attach?.(bot, host(extension));
     },
   };
-  return agent;
-}
 
-/**
- * Suggested prompts, where the adapter can pin them (`setSuggestedPrompts`,
- * the Slack adapter's public method). A prompt sends its label, and a typed
- * label picks the choice, so a prompt click sends the button's own request.
- */
-function promptPinner(adapter: Adapter, channelId: string, threadTs: string): PinPrompts | undefined {
-  const pin = (adapter as { setSuggestedPrompts?: unknown }).setSuggestedPrompts;
-  if (typeof pin !== 'function') return undefined;
-  return async (choices) => {
-    // A link can't ride on a prompt, and more than the channel shows would hide some.
-    if (!choices.length || choices.length > MAX_PROMPTS || choices.some((c) => c.url)) return false;
-    try {
-      await pin.call(adapter, channelId, threadTs, choices.map((c) => ({ title: c.label, message: c.label })));
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  function host(extension: ChannelExtension): ExtensionHost {
+    const key = `${STATE_KEY}:${extension.slug}`;
+    return {
+      run: (thread, action, runOptions) => agent.run(thread, action, runOptions),
+      async getState<T>(thread: AnyThread) {
+        const state = (await thread.state) as Record<string, unknown> | null;
+        return state?.[key] as T | undefined;
+      },
+      async setState<T>(thread: AnyThread, value: T) {
+        await thread.setState({ [key]: value });
+      },
+      defer(task) {
+        const quiet = task.catch((error: unknown) => report(error));
+        options.defer?.(quiet);
+      },
+      report,
+      feedback: async (feedback) => {
+        await options.onFeedback?.(feedback);
+      },
+    };
+  }
+
+  return agent;
 }
 
 function capabilitiesOf(thread: AnyThread): ChannelCapabilities {

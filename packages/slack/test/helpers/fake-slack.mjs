@@ -10,8 +10,10 @@ export const BOT_TOKEN = 'xoxb-test-token';
 /**
  * A local Slack Web API that records every call, with its answer. `refuse(method, body)`
  * can return an error answer (`{ ok: false, error }`) to refuse a call, as Slack does.
+ * `replies(body)` returns a thread's messages for `conversations.replies`; `answer(method, body)`
+ * can answer any other method.
  */
-export async function startFakeSlack({ refuse } = {}) {
+export async function startFakeSlack({ refuse, replies, answer: answerWith } = {}) {
   const calls = [];
   let n = 0;
   const server = http.createServer(async (req, res) => {
@@ -19,17 +21,21 @@ export async function startFakeSlack({ refuse } = {}) {
     for await (const c of req) raw += c;
     const type = req.headers['content-type'] || '';
     const body = type.includes('json') ? JSON.parse(raw || '{}') : Object.fromEntries(new URLSearchParams(raw));
-    for (const k of ['blocks', 'attachments', 'chunks', 'prompts']) if (typeof body[k] === 'string') body[k] = JSON.parse(body[k]);
+    for (const k of ['blocks', 'attachments', 'chunks', 'prompts', 'view', 'document_content', 'bookmark']) {
+      if (typeof body[k] === 'string' && /^[[{]/.test(body[k])) body[k] = JSON.parse(body[k]);
+    }
     const method = req.url.replace(/^\/+/, '').replace(/^api\//, '').split('?')[0];
     const call = { method, body };
     calls.push(call);
     const ts = `1700000${String(++n).padStart(3, '0')}.000100`;
     const answer =
       refuse?.(method, body) ??
-      (method === 'auth.test' ? { ok: true, user_id: 'UBOT', bot_id: 'BBOT', team_id: 'T1' }
+      answerWith?.(method, body) ??
+      (method === 'auth.test' ? { ok: true, user_id: 'UBOT', bot_id: 'BBOT', team_id: 'T1', team: 'Test', url: 'https://test.slack.com/' }
       // The bot resolves to its Slack username, as a real workspace answers for a bot user.
       : method === 'users.info' && body.user === 'UBOT' ? { ok: true, user: { id: 'UBOT', name: 'voiceflow', real_name: 'voiceflow', is_bot: true, profile: { display_name: 'voiceflow' } } }
-      : method === 'users.info' ? { ok: true, user: { id: body.user, name: 'person', real_name: 'A Person', profile: {} } }
+      : method === 'users.info' ? { ok: true, user: { id: body.user, name: 'person', real_name: 'A Person', tz: 'America/Toronto', profile: { title: 'Head of Support', email: 'person@example.com' } } }
+      : method === 'conversations.replies' ? { ok: true, messages: replies?.(body) ?? [], has_more: false }
       : method === 'conversations.info' ? { ok: true, channel: { id: body.channel, name: 'general', is_im: false } }
       : method === 'chat.postMessage' ? { ok: true, ts, channel: body.channel, message: { ts, text: body.text } }
       : method === 'chat.startStream' ? { ok: true, ts, channel: body.channel }
@@ -47,6 +53,8 @@ export async function startFakeSlack({ refuse } = {}) {
     /** Every message Slack accepted (a refused post is in `calls`, not here). */
     posts: () => calls.filter((c) => c.method === 'chat.postMessage' && c.answer?.ok),
     updates: () => calls.filter((c) => c.method === 'chat.update'),
+    /** Calls to one Web API method. */
+    of: (method) => calls.filter((c) => c.method === method),
     /** Every native stream, read back the way Slack assembles it: its text, its task updates and its closing blocks. */
     streams: () => {
       const byTs = new Map();
@@ -93,6 +101,17 @@ export function slackEvent(event, { secret = SIGNING_SECRET } = {}) {
 export function slackAction(payload, { secret = SIGNING_SECRET } = {}) {
   const ts = String(Math.floor(Date.now() / 1000));
   const raw = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+  return new Request('http://localhost/api/slack', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-slack-request-timestamp': ts, 'x-slack-signature': sign(raw, secret, ts) },
+    body: raw,
+  });
+}
+
+/** A Slack slash command, form-encoded and signed. */
+export function slackCommand(params, { secret = SIGNING_SECRET } = {}) {
+  const ts = String(Math.floor(Date.now() / 1000));
+  const raw = new URLSearchParams({ team_id: 'T1', api_app_id: 'A1', trigger_id: 'trig', ...params }).toString();
   return new Request('http://localhost/api/slack', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-slack-request-timestamp': ts, 'x-slack-signature': sign(raw, secret, ts) },

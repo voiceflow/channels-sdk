@@ -4,12 +4,27 @@ export {
   voiceflowUserID,
   withoutBotMention,
   type Feedback,
-  type PinPrompts,
-  type TurnContext,
   type VoiceflowAgent,
   type VoiceflowAgentOptions,
 } from './agent.js';
-export { deliverStream, deliverWhole, DEFAULT_PROGRESS_TITLE, type DeliveryOptions, type ShownMessage } from './deliver.js';
+export type {
+  ChannelExtension,
+  ExtensionHost,
+  PinPrompts,
+  RunOptions,
+  TraceHandler,
+  TraceTurn,
+  TurnContext,
+} from './extension.js';
+export {
+  deliverStream,
+  deliverWhole,
+  DEFAULT_PROGRESS_TITLE,
+  type CustomTrace,
+  type DeliveryOptions,
+  type ShownMessage,
+  type TraceIO,
+} from './deliver.js';
 export {
   createVoiceflowClient,
   DEFAULT_EXCLUDED_TRACES,
@@ -23,9 +38,12 @@ export {
   type VoiceflowClient,
   type VoiceflowConfig,
 } from './voiceflow.js';
-export { sourcesOf, translate, type CardData, type Choice, type Reply, type Source, type Translation } from './translate.js';
+export { sourcesOf, translate, type CardData, type Choice, type Reply, type Source, type Translation, type TranslateOptions } from './translate.js';
 export {
   createRenderer,
+  DEFAULT_MAX_BUTTONS,
+  menuId,
+  parseActionId,
   render,
   retired,
   matchTypedChoice,

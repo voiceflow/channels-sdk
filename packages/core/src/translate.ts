@@ -34,7 +34,9 @@ export type Reply =
   | { type: 'choices'; choices: Choice[] }
   | { type: 'card'; card: CardData }
   | { type: 'carousel'; cards: CardData[] }
-  | { type: 'image'; url: string };
+  | { type: 'image'; url: string }
+  /** A trace the channel shows natively (a channel extension's custom type), kept in its place in the turn. */
+  | { type: 'trace'; trace: Trace };
 
 export interface Translation {
   replies: Reply[];
@@ -50,7 +52,12 @@ const SILENT = new Set([
   'tool-call', 'entity-filling', 'stream', 'simulation-test-result', 'realtime-agent', 'dtmf',
 ]);
 
-export function translate(traces: readonly Trace[]): Translation {
+export interface TranslateOptions {
+  /** Trace types the channel shows natively: kept as `trace` replies, in order, instead of skipped. */
+  custom?: (type: string) => boolean;
+}
+
+export function translate(traces: readonly Trace[], options: TranslateOptions = {}): Translation {
   const replies: Reply[] = [];
   const skipped: string[] = [];
   let ended = false;
@@ -109,7 +116,8 @@ export function translate(traces: readonly Trace[]): Translation {
         break;
       }
       default: {
-        if (!SILENT.has(trace?.type)) skipped.push(String(trace?.type ?? 'unknown'));
+        if (typeof trace?.type === 'string' && options.custom?.(trace.type)) replies.push({ type: 'trace', trace });
+        else if (!SILENT.has(trace?.type)) skipped.push(String(trace?.type ?? 'unknown'));
       }
     }
   }

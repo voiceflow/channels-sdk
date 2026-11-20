@@ -2,7 +2,7 @@
 // can show (its catalog capabilities). Where a channel lacks buttons or cards,
 // the reply degrades to text with numbered choices, and the person answers
 // with the number or the label.
-import { Actions, Button, Card, CardText, Image, LinkButton, type Thread } from 'chat';
+import { Actions, Button, Card, CardText, Image, LinkButton, Select, SelectOption, type Thread } from 'chat';
 import type { ChannelCapabilities } from './catalog.js';
 import type { CardData, Choice, Reply, Source } from './translate.js';
 
@@ -11,7 +11,18 @@ export type Post = Parameters<Thread['post']>[0];
 export interface RenderOptions {
   /** Show knowledge-base sources under a reply. Default: `off`. */
   sources?: 'off' | 'links';
+  /**
+   * The most choices shown as buttons. A longer list becomes a menu where the
+   * channel has select menus (and keeps its buttons where it doesn't). Default: 5.
+   */
+  maxButtons?: number;
+  /** The menu's placeholder. Default: `Choose an option`. */
+  menuPlaceholder?: string;
 }
+
+export const DEFAULT_MAX_BUTTONS = 5;
+const DEFAULT_MENU_PLACEHOLDER = 'Choose an option';
+const MENU = 'menu';
 
 export interface Rendered {
   posts: Post[];
@@ -27,9 +38,17 @@ export function actionId(nonce: string, index: number): string {
   return `${ACTION_PREFIX}:${nonce}:${index}`;
 }
 
-export function parseActionId(id: string): { nonce: string; index: number } | null {
-  const m = /^vf:([a-z0-9]+):(\d+)$/.exec(id);
-  return m ? { nonce: m[1]!, index: Number(m[2]) } : null;
+/** The ID of a turn's menu. The picked option's value is the choice's number. */
+export function menuId(nonce: string): string {
+  return `${ACTION_PREFIX}:${nonce}:${MENU}`;
+}
+
+/** The turn and the choice an action picked: a button's ID, or a menu's ID and the picked option's value. */
+export function parseActionId(id: string, value?: string): { nonce: string; index: number } | null {
+  const m = /^vf:([a-z0-9]+):(\d+|menu)$/.exec(id);
+  if (!m) return null;
+  const index = m[2] === MENU ? Number(value) : Number(m[2]);
+  return Number.isInteger(index) && index >= 0 ? { nonce: m[1]!, index } : null;
 }
 
 /**
@@ -72,6 +91,19 @@ export function createRenderer(caps: ChannelCapabilities, options: RenderOptions
 
   // A link the channel can't attach to a button would be lost, so a group with one goes as text.
   const canButton = (list: readonly Choice[]) => caps.buttons && (caps.linkButtons || list.every((c) => !c.url));
+  // A long list is a menu where the channel has one. A menu can't open a link, so a list with one keeps its buttons.
+  const asMenu = (list: readonly Choice[]) =>
+    caps.selectMenus && list.length > (options.maxButtons ?? DEFAULT_MAX_BUTTONS) && list.every((c) => !c.url);
+
+  const menu = (offered: Offered) =>
+    Actions([
+      Select({
+        id: menuId(nonce),
+        label: options.menuPlaceholder ?? DEFAULT_MENU_PLACEHOLDER,
+        placeholder: options.menuPlaceholder ?? DEFAULT_MENU_PLACEHOLDER,
+        options: offered.map(({ choice, index }) => SelectOption({ label: choice.label, value: String(index) })),
+      }),
+    ]);
 
   const buttons = (offered: Offered) =>
     Actions(
@@ -104,10 +136,11 @@ export function createRenderer(caps: ChannelCapabilities, options: RenderOptions
   const card = (data: CardData): Post => {
     const offered = offer(data.choices);
     const text = cardText(data, offered);
-    if (!caps.cards || (offered.length && !canButton(data.choices))) return text;
+    const inMenu = offered.length > 0 && asMenu(data.choices);
+    if (!caps.cards || (offered.length && !inMenu && !canButton(data.choices))) return text;
     const children = [];
     if (data.description) children.push(CardText(data.description));
-    if (offered.length) children.push(buttons(offered));
+    if (offered.length) children.push(inMenu ? menu(offered) : buttons(offered));
     const post = Card({ title: data.title, imageUrl: caps.imagesInCards ? data.imageUrl : undefined, children });
     return keep(post, text, offered.length ? { kind: 'card', card: data, first: firstOf(offered) } : undefined);
   };
@@ -127,6 +160,10 @@ export function createRenderer(caps: ChannelCapabilities, options: RenderOptions
         case 'choices': {
           const offered = offer(reply.choices);
           const text = { markdown: numbered(offered) };
+          if (asMenu(reply.choices)) {
+            const post = { card: Card({ children: [menu(offered)] }), fallbackText: reply.choices.map((c) => c.label).join(' · ') };
+            return [keep(post, text, { kind: 'choices', choices: reply.choices, first: firstOf(offered) })];
+          }
           if (!canButton(reply.choices)) return [text];
           // A card of buttons alone has no text, so its labels are the fallback where a channel shows one
           // (a notification, a screen reader). Slack's adapter ignores it today: see docs/upstream.md.
@@ -142,6 +179,9 @@ export function createRenderer(caps: ChannelCapabilities, options: RenderOptions
           const text = { markdown: reply.url };
           return [caps.cards && caps.imagesInCards ? keep(Card({ children: [Image({ url: reply.url })] }), text) : text];
         }
+        case 'trace':
+          // Shown by the channel's extension, not rendered.
+          return [];
       }
     },
   };

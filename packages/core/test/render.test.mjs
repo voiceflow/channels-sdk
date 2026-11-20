@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRenderer, render, retired, matchTypedChoice } from '../dist/index.js';
+import { createRenderer, menuId, parseActionId, render, retired, matchTypedChoice } from '../dist/index.js';
 
 const none = { buttons: false, cards: false, imagesInCards: false, typingIndicator: false };
 const rich = { buttons: true, cards: true, imagesInCards: true, typingIndicator: true };
+const CAPS = { ...rich, linkButtons: true, streaming: false, editMessages: true };
 const choices = [{ label: 'Yes', action: { type: 'yes' } }, { label: 'No', action: { type: 'no' } }];
 
 test('without buttons, choices become a numbered list numbered across the turn', () => {
@@ -79,4 +80,27 @@ test('a retired message has no buttons, and a pick from it shows as a check mark
   assert.match(json(card), /Details/);
   assert.match(json(card), /p\.png/);
   assert.doesNotMatch(json(card), /"type":"actions"|✓/);
+});
+
+test('a long list is one menu where the channel has menus, and buttons where it does not', () => {
+  const choices = Array.from({ length: 7 }, (_, i) => ({ label: `Option ${i + 1}`, action: { type: `p${i}` } }));
+  const withMenus = { ...CAPS, selectMenus: true };
+  const r = createRenderer(withMenus);
+  const [post] = r.render({ type: 'choices', choices });
+  const actions = post.card.children[0];
+  assert.equal(actions.children.length, 1);
+  assert.equal(actions.children[0].type, 'select');
+  assert.equal(actions.children[0].id, menuId(r.nonce));
+  assert.deepEqual(actions.children[0].options.map((o) => o.value), ['0', '1', '2', '3', '4', '5', '6']);
+  assert.deepEqual(parseActionId(menuId(r.nonce), '5'), { nonce: r.nonce, index: 5 });
+  assert.equal(parseActionId(menuId(r.nonce), 'x'), null);
+  assert.deepEqual(r.buttonsOf(post), { kind: 'choices', choices, first: 0 });
+
+  // Five or fewer stay buttons; so does a list with a link, which a menu can't open.
+  const five = createRenderer(withMenus).render({ type: 'choices', choices: choices.slice(0, 5) })[0];
+  assert.ok(five.card.children[0].children.every((c) => c.type === 'button'));
+  const linked = [...choices.slice(0, 6), { label: 'Docs', action: { type: 'd' }, url: 'https://example.com' }];
+  assert.ok(createRenderer(withMenus).render({ type: 'choices', choices: linked })[0].card.children[0].children.every((c) => c.type !== 'select'));
+  // Without menus, a long list keeps its buttons.
+  assert.ok(createRenderer({ ...CAPS, selectMenus: false }).render({ type: 'choices', choices })[0].card.children[0].children.every((c) => c.type === 'button'));
 });

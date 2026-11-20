@@ -30,6 +30,8 @@ export interface ChannelCapabilities {
   streaming: boolean;
   /** Editing a sent message, which takes an earlier turn's buttons off it. */
   editMessages: boolean;
+  /** Select menus, which show a long list of choices in one control. */
+  selectMenus: boolean;
 }
 
 /** The catalog entry for a platform adapter, or a `ChannelsError`. */
@@ -64,6 +66,7 @@ export function capabilities(slug: string): ChannelCapabilities {
     typingIndicator: supported(slug, 'typingIndicator'),
     streaming: supported(slug, 'streaming'),
     editMessages: supported(slug, 'editMessage'),
+    selectMenus: supported(slug, 'selectMenus'),
   };
 }
 
