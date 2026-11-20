@@ -20,8 +20,9 @@ It shows its whole plan and asks before it changes anything:
 
 ```
 Slack: workspace Acme (T0123)
-  + create app "Voiceflow agent" from the manifest: 21 bot scopes, 10 events, the assistant panel, the Home tab, /ask
+  + create app "Support" from the manifest: 21 bot scopes, 10 events, the assistant panel, the Home tab, /ask
     requests go to https://<your server>/api/slack (Slack checks it answers while it creates the app)
+  + set its icon to the agent's avatar in Voiceflow: https://…/avatar.png
   + install it in Acme (its bot token stays in memory and goes to Voiceflow as the slack_bot_token secret)
 Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment development (nothing is published)
   + variable slack_user_id
@@ -44,13 +45,23 @@ Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment developme
   `--port` (default 3000) while connect runs, and connect answers the check
   itself. When your server already holds that port, it answers instead.
 - **It never publishes.** The tools land on the environment's draft, compiled,
-  so you can try them before you publish in Voiceflow.
+  so you can try them in Voiceflow's test chat first. **Your bot runs the
+  environment's published version**, so publish the environment in Voiceflow
+  before you try the tools in Slack: until then the agent there doesn't have them.
 - **`--workspace <id>`** stops connect, changing nothing in Slack or Voiceflow,
   unless the project is in that Voiceflow workspace.
 - **Running it again only adds what's missing.** It reuses the app it made (kept
   in `.voiceflow/channels-slack-apps.json`, no secrets), and `--app <id>` adds
   what this package needs to an app you already have: scopes, events and
   features are only added, never taken away.
+- **The app looks like your agent.** A new app takes the agent's name and its
+  avatar from Voiceflow (the project's name and image). An agent with no avatar
+  gets Voiceflow's icon (the butterfly on Voiceflow blue), and so does one whose
+  avatar Slack won't take. `--name` and `--icon <url>` choose others;
+  `--icon none` sets none. An app that already exists keeps its icon unless you
+  name one. Slack takes a PNG, JPG or GIF from 512 to 2000 pixels, and fits a
+  non-square one between white bars, so a square avatar looks best. When Slack
+  refuses an icon you named, connect still finishes and says how to set one.
 - `--dry-run` shows the plan and stops. `--yes` skips the question.
   `--no-tools` makes the app and installs no tools. `--no-workspace-tools`
   installs only the presentation tools. `--print-manifest` prints the app's
@@ -79,7 +90,8 @@ clicks, dialogs and the slash command all arrive there.
 
 ## What it does in Slack
 
-Each is on by default; `slack({ … })` turns any of them off.
+Each is on by default except the feedback buttons; `slack({ … })` turns any of
+them off, or the buttons on.
 
 | Behaviour | Option |
 |---|---|
@@ -89,7 +101,8 @@ Each is on by default; `slack({ … })` turns any of them off.
 | The assistant panel: the launch turn runs when it opens, its buttons become suggested prompts | `launchOnOpen` |
 | The panel's thread is named after the person's first message | `titles` |
 | Who and where, as `slack_*` variables on every turn | `context` |
-| 👍 / 👎 reactions on the agent's messages reach `onFeedback` (so do Slack's feedback buttons) | `feedbackReactions` |
+| 👍 / 👎 reactions someone adds to the agent's messages reach `onFeedback` (nothing shows in Slack) | `feedbackReactions` |
+| Slack's 👍 / 👎 feedback buttons under each answer, reaching `onFeedback`: `true`, or `{ positiveLabel, negativeLabel }` | `feedbackButtons` (default off) |
 | `/ask <question>` posts the question in the channel and answers in its thread | `slashCommands` |
 | The App Home tab | `home` |
 
@@ -111,8 +124,8 @@ call Slack from Voiceflow with the `slack_bot_token` secret.
 | `slack_show_chart` | presentation | — | Show numbers as a native Slack chart (bar, line, area or pie). |
 | `slack_reply_privately` | presentation | — | Send the person a message only they can see. |
 | `slack_ask_form` | presentation | — | A button that opens a Slack dialog; the answers come back as the person's next message. |
-| `slack_post_to_channel` | workspace | chat:write, channels:read, groups:read | Post in a channel for the person. |
-| `slack_message_person` | workspace | chat:write, im:write, users:read, users:read.email | Send someone a direct message for the person. |
+| `slack_post_to_channel` | workspace | chat:write, channels:read, groups:read, channels:history, groups:history | Post in a channel for the person. |
+| `slack_message_person` | workspace | chat:write, im:write, im:history, users:read, users:read.email | Send someone a direct message for the person. |
 | `slack_read_channel` | workspace | channels:history, groups:history, channels:read, groups:read, users:read | Read a channel's recent messages. |
 | `slack_find_person` | workspace | users:read, users:read.email | Look people up by name, title or email. |
 | `slack_schedule_message` | workspace | chat:write, channels:read, groups:read | Schedule a message for later. |
@@ -134,8 +147,14 @@ act only within what that person can see:
   passes), and refuses otherwise.
 - **Posts say who asked.** A post or message made for someone carries a line
   saying so ("Posted for @ada").
-- **Times are the person's.** A time without an offset is read in their time
-  zone.
+- **Times are the person's.** A relative time (`in 10 minutes`) counts from
+  now, so the agent needn't know the time; a date without an offset is read in
+  their time zone.
+- **A repeated call posts once.** An agent retries a call it thinks was slow; a
+  post or message with the same text, made for the same person in the last two
+  minutes, is answered with the first one instead of going up twice.
+- **Channels by name are the bot's own.** A `#name` is looked up among the
+  channels the bot is in (the only ones it can read or post in), in one call.
 
 ### After connect, the tools are yours
 

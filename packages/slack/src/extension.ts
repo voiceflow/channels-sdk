@@ -39,7 +39,13 @@ export interface SlackOptions {
   catchUp?: number | false;
   /** Set who and where as `slack_*` variables on every turn. Default: `true`. */
   context?: boolean;
-  /** A 👍 or 👎 on one of the agent's messages reaches `onFeedback`. Default: `true`. */
+  /**
+   * Slack's 👍 / 👎 feedback buttons under each streamed answer. A click
+   * reaches `onFeedback` and is not a turn. `true` for Slack's labels ("Good
+   * response", "Bad response"), or your own. Default: off.
+   */
+  feedbackButtons?: boolean | { positiveLabel?: string; negativeLabel?: string };
+  /** A 👍 or 👎 reaction someone adds to one of the agent's messages reaches `onFeedback`. Nothing shows in Slack. Default: `true`. */
   feedbackReactions?: boolean;
   /** Called for every reaction someone adds or removes, after any feedback is recorded. */
   onReaction?: (event: ReactionEvent) => void | Promise<void>;
@@ -68,6 +74,8 @@ const MAX_LINE = 500;
 const MAX_CATCH_UP = 4000;
 const POSITIVE = new Set(['+1', 'thumbsup']);
 const NEGATIVE = new Set(['-1', 'thumbsdown']);
+/** The action the feedback buttons send, which `onFeedback` listens for. */
+const FEEDBACK_ACTION = 'message_feedback';
 export const DEFAULT_HOME_TEXT = "Message me here in the *Messages* tab, or mention me in a channel I'm in.";
 
 export function createSlackExtension(options: SlackOptions = {}): ChannelExtension {
@@ -84,9 +92,9 @@ export function createSlackExtension(options: SlackOptions = {}): ChannelExtensi
 
   const extension: ChannelExtension = {
     slug: SLUG,
-    // Slack's own thumbs up / down under each streamed answer.
-    adapterDefaults: { feedbackButtons: true },
-    feedbackActionId: 'message_feedback',
+    // Slack's own thumbs up / down under each streamed answer, when asked for.
+    adapterDefaults: { feedbackButtons: feedbackButtons(options.feedbackButtons) },
+    feedbackActionId: FEEDBACK_ACTION,
 
     variables: options.context === false ? undefined : async (ctx) => context(ctx, (await stateOf(ctx.thread)).viewing),
 
@@ -269,4 +277,15 @@ function titleOf(text: string): string {
   const cut = line.slice(0, MAX_TITLE - 1);
   const space = cut.lastIndexOf(' ');
   return `${(space > MAX_TITLE / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/** The adapter's `feedbackButtons` for this package's option: off unless asked for, and always on the action `onFeedback` listens for. */
+function feedbackButtons(option: SlackOptions['feedbackButtons']) {
+  if (!option) return false;
+  const labels = option === true ? {} : option;
+  return {
+    actionId: FEEDBACK_ACTION,
+    ...(labels.positiveLabel ? { positiveLabel: labels.positiveLabel } : {}),
+    ...(labels.negativeLabel ? { negativeLabel: labels.negativeLabel } : {}),
+  };
 }

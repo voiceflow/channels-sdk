@@ -195,14 +195,15 @@ export async function checkProject(options: ApiOptions & Pick<InstallOptions, 'p
 }
 
 async function readProject(api: VoiceflowApi, options: Pick<InstallOptions, 'projectID' | 'expectWorkspace'>) {
-  const { project } = await api<{ project: { id: string; name: string; workspaceID: string } }>('GET', `/v1/stable/project/${encodeURIComponent(options.projectID)}`);
+  const { project } = await api<{ project: { id: string; name: string; workspaceID: string; image?: string | null } }>('GET', `/v1/stable/project/${encodeURIComponent(options.projectID)}`);
   if (options.expectWorkspace && project.workspaceID !== options.expectWorkspace) {
     throw new ChannelsError(
       'wrong_workspace',
       `Project ${project.id} is in workspace ${project.workspaceID}, not ${options.expectWorkspace}. Nothing was changed.`,
     );
   }
-  return { id: project.id, name: project.name, workspaceID: project.workspaceID };
+  // The agent's avatar in Voiceflow, when it has one.
+  return { id: project.id, name: project.name, workspaceID: project.workspaceID, ...(typeof project.image === 'string' && project.image ? { image: project.image } : {}) };
 }
 
 async function readRemote(api: VoiceflowApi, projectID: string, environmentAlias: string): Promise<Remote> {

@@ -32,7 +32,10 @@ Options:
   --request-url <url>     or the whole webhook URL, if it isn't <url>/api/slack
   --team <id>             the Slack workspace (from \`slack login\`); default: the only one
   --app <id>              use this app, adding what's missing, instead of making one
-  --name <name>           a new app's name (default "Voiceflow agent")
+  --name <name>           a new app's name (default: the agent's name in Voiceflow)
+  --icon <url|none>       the app's icon, an image's URL (default: a new app gets
+                          the agent's avatar in Voiceflow, or Voiceflow's icon when
+                          it has none; an existing app keeps its icon)
   --command </name|none>  the slash command (default /ask)
   --no-tools              make the app, but install no tools
   --no-workspace-tools    install only the presentation tools
@@ -61,6 +64,7 @@ export async function cli(argv: string[]): Promise<number> {
       team: { type: 'string' },
       app: { type: 'string' },
       name: { type: 'string' },
+      icon: { type: 'string' },
       command: { type: 'string' },
       'no-tools': { type: 'boolean', default: false },
       'no-workspace-tools': { type: 'boolean', default: false },
@@ -81,6 +85,7 @@ export async function cli(argv: string[]): Promise<number> {
     return o.help ? 0 : 2;
   }
   const command = o.command === undefined ? undefined : o.command === 'none' ? (false as const) : o.command;
+  const icon = o.icon === undefined ? undefined : o.icon === 'none' ? (false as const) : o.icon;
   const app = { ...(o.name ? { name: o.name } : {}), ...(command !== undefined ? { command } : {}) };
   const tools = o['no-tools'] ? (false as const) : { workspace: !o['no-workspace-tools'] };
 
@@ -127,7 +132,7 @@ export async function cli(argv: string[]): Promise<number> {
       voiceflow,
       requestUrl: requestUrl!,
       ...(o.app ? { appId: o.app } : {}),
-      app,
+      app: { ...app, ...(icon !== undefined ? { icon } : {}) },
       tools,
       ...(o.restore ? { restore: o.restore.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
       confirm: (plan) => confirm(plan.lines),
@@ -165,7 +170,8 @@ Your server needs:
   })
 
 Slack sends to ${s.requestUrl}.${r.install ? `
-The tools are on the ${s.environment} environment's draft: try them, then publish in Voiceflow when you're ready.` : ''}`);
+The tools are on the ${s.environment} environment's draft: try them in Voiceflow's test chat.
+Your bot runs ${s.environment}'s published version, so the agent in Slack has them only once you publish ${s.environment} in Voiceflow.` : ''}`);
 }
 
 /** Answers Slack's URL check (and nothing else) on a local port, unless something already listens there. */

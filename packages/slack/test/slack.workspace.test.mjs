@@ -4,6 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runFunction } from '@voiceflow/channels-sdk/testing';
+import { codeHash } from '@voiceflow/channels-sdk/install';
+import { readFileSync } from 'node:fs';
 import { slackTools, slackToolScopes, workspaceTools } from '../dist/index.js';
 import { unixTime, utf8Length } from '../dist/tools/workspace.js';
 
@@ -32,6 +34,7 @@ function workspace({ fail = {} } = {}) {
     ],
   };
   const calls = [];
+  let posted = 0;
   const page = (items, cursor, size) => {
     const start = Number(cursor || 0);
     const next = start + size < items.length ? String(start + size) : '';
@@ -44,9 +47,9 @@ function workspace({ fail = {} } = {}) {
     switch (method) {
       case 'auth.test':
         return { ok: true, url: 'https://acme.slack.com/', team_id: 'T1', user_id: 'UBOT' };
-      case 'conversations.list': {
-        // One channel per page, so every lookup walks the cursor.
-        const { items, next } = page(channels.filter((c) => !c.is_private || c.members.includes('UBOT')), b.cursor, 1);
+      case 'users.conversations': {
+        // The bot's channels, one per page, so every lookup walks the cursor.
+        const { items, next } = page(channels.filter((c) => c.members.includes('UBOT')), b.cursor, 1);
         return { ok: true, channels: items.map(({ members, ...c }) => c), response_metadata: { next_cursor: next } };
       }
       case 'conversations.members': {
@@ -56,7 +59,7 @@ function workspace({ fail = {} } = {}) {
       }
       case 'conversations.history':
         if (!botIn(b.channel)) return { ok: false, error: 'not_in_channel' };
-        return { ok: true, messages: (history[b.channel] ?? []).slice(0, Number(b.limit)) };
+        return { ok: true, messages: (history[b.channel] ?? []).filter((m) => !b.oldest || Number(m.ts) > Number(b.oldest)).slice(0, Number(b.limit)) };
       case 'users.info': {
         const user = users.find((u) => u.id === b.user);
         return user ? { ok: true, user } : { ok: false, error: 'user_not_found' };
@@ -71,9 +74,14 @@ function workspace({ fail = {} } = {}) {
       }
       case 'conversations.open':
         return { ok: true, channel: { id: `D-${b.users}` } };
-      case 'chat.postMessage':
+      case 'chat.postMessage': {
         if (!botIn(b.channel)) return { ok: false, error: 'not_in_channel' };
-        return { ok: true, channel: b.channel, ts: '1700000999.000100' };
+        // Slack stores the post, newest first, as the bot's, with its text escaped.
+        const ts = `${Math.floor(Date.now() / 1000)}.${String(++posted).padStart(6, '0')}`;
+        const escaped = String(b.text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        (history[b.channel] ??= []).unshift({ ts, user: 'UBOT', bot_id: 'B1', text: escaped, blocks: b.blocks });
+        return { ok: true, channel: b.channel, ts };
+      }
       case 'chat.getPermalink':
         return { ok: true, permalink: `https://acme.slack.com/archives/${b.channel}/p${b.message_ts.replace('.', '')}` };
       case 'chat.scheduleMessage':
@@ -164,7 +172,9 @@ test('every workspace tool returns only primitive outputs, and calls Slack with 
 test('slack_post_to_channel posts by name, says who for, and only where the person and the bot both are', async () => {
   const { out, ws } = await run('slack_post_to_channel', { channel: '#General', text: 'Release is Friday.' });
   assert.equal(out.outputVars.channel_id, 'C1');
-  assert.equal(out.outputVars.link, 'https://acme.slack.com/archives/C1/p1700000999000100');
+  assert.equal(out.outputVars.link, `https://acme.slack.com/archives/C1/p${out.outputVars.message_ts.replace('.', '')}`);
+  assert.match(out.outputVars.result, /^Posted in <#C1>: https:/, 'the link is in what the agent relays');
+  assert.equal(ws.of('conversations.list').length, 0, "a name is looked up among the bot's channels, never the whole workspace");
   const [post] = ws.of('chat.postMessage');
   assert.equal(post.body.text, 'Release is Friday.');
   assert.deepEqual(post.body.blocks.at(-1), { type: 'context', elements: [{ type: 'mrkdwn', text: 'Posted for <@U2>' }] });
@@ -177,7 +187,35 @@ test('slack_post_to_channel posts by name, says who for, and only where the pers
   assert.match(random.out.outputVars.result, /Add me to it first/);
 
   const nowhere = await run('slack_post_to_channel', { channel: '#nope', text: 'hi' });
-  assert.match(nowhere.out.outputVars.result, /can't find a channel named #nope/);
+  assert.match(nowhere.out.outputVars.result, /I'm not in a channel named #nope/);
+  const notIn = await run('slack_post_to_channel', { channel: '#random', text: 'hi' });
+  assert.match(notIn.out.outputVars.result, /I'm not in a channel named #random\. If it exists, add me/);
+  assert.equal(notIn.ws.of('chat.postMessage').length, 0);
+});
+
+test('slack_post_to_channel and slack_message_person post once when the agent repeats the call', async () => {
+  const ws = workspace();
+  const text = 'Ship it & <celebrate>';
+  const first = await run('slack_post_to_channel', { channel: '#general', text }, ws);
+  const again = await run('slack_post_to_channel', { channel: '#general', text }, ws);
+  assert.equal(ws.of('chat.postMessage').length, 1, 'posted once');
+  assert.equal(again.out.outputVars.ok, true);
+  assert.equal(again.out.outputVars.message_ts, first.out.outputVars.message_ts, 'the repeat answers with the first post');
+  assert.match(again.out.outputVars.result, /^Already posted in <#C1>: https:.*didn't post it twice/);
+  await run('slack_post_to_channel', { channel: '#general', text: 'Something else' }, ws);
+  assert.equal(ws.of('chat.postMessage').length, 2, 'different text is a new post');
+  await run('slack_post_to_channel', { channel: '#general', text, user_id: 'U3' }, ws);
+  assert.equal(ws.of('chat.postMessage').length, 3, "the same text for someone else is that person's post");
+
+  const dm = workspace();
+  await run('slack_message_person', { person: '<@U3>', text: 'Standup moved.' }, dm);
+  const dmAgain = await run('slack_message_person', { person: '<@U3>', text: 'Standup moved.' }, dm);
+  assert.equal(dm.of('chat.postMessage').length, 1, 'messaged once');
+  assert.match(dmAgain.out.outputVars.result, /Already sent to Grace Hopper/);
+
+  const blind = workspace({ fail: { 'conversations.history': { ok: false, error: 'missing_scope', needed: 'channels:history' } } });
+  await run('slack_post_to_channel', { channel: '#general', text }, blind);
+  assert.equal(blind.of('chat.postMessage').length, 1, 'a history it cannot read never stops the post');
 });
 
 test('slack_message_person finds them by mention, email or name, and asks when a name is ambiguous', async () => {
@@ -241,7 +279,10 @@ test('slack_schedule_message reads times in the person\'s zone and schedules int
   assert.equal(top.body.post_at, Date.UTC(2030, 11, 2, 9, 0) / 1000);
   assert.equal(top.body.thread_ts, undefined, 'a channel named means a new post, not a reply');
 
-  assert.match((await run('slack_schedule_message', { text: 'x', post_at: 'tomorrow' })).out.outputVars.result, /as a date and time/);
+  assert.match((await run('slack_schedule_message', { text: 'x', post_at: 'tomorrow' })).out.outputVars.result, /relative time, like in 10 minutes, or as a date and time/);
+  const soon = await run('slack_schedule_message', { text: 'x', post_at: 'in 10 minutes' });
+  const at = Number(soon.ws.of('chat.scheduleMessage')[0].body.post_at);
+  assert.ok(Math.abs(at - (Math.floor(Date.now() / 1000) + 600)) <= 2, 'a relative time counts from now');
   assert.match((await run('slack_schedule_message', { text: 'x', post_at: '2001-01-01T09:00' })).out.outputVars.result, /in the past/);
   assert.match((await run('slack_schedule_message', { text: 'x', post_at: '2030-12-02T09:00', channel: '#secret' })).out.outputVars.result, /aren't a member/);
 });
@@ -268,6 +309,7 @@ test('slack_create_canvas writes markdown, lets the person edit it and this chan
     { canvas_id: 'F0CANVAS', access_level: 'read', channel_ids: ['C1'] },
   ]);
   assert.equal(out.outputVars.link, 'https://acme.slack.com/docs/T1/F0CANVAS');
+  assert.equal(out.outputVars.result, 'Created the canvas Release plan: https://acme.slack.com/docs/T1/F0CANVAS', 'the link is in what the agent relays');
   const dm = await run('slack_create_canvas', { title: 't', content: 'c', current_channel: 'D9' });
   assert.equal(dm.ws.of('canvases.access.set').length, 1, 'a DM is not shared to');
 });
@@ -296,5 +338,10 @@ test('times and sizes, computed without Node or browser globals', () => {
   assert.equal(unixTime('2030-07-01T09:00+02:00', 'America/Toronto'), Date.UTC(2030, 6, 1, 7, 0) / 1000);
   assert.equal(unixTime('2030-07-01', ''), Date.UTC(2030, 6, 1, 9, 0) / 1000, 'a date alone means 09:00');
   assert.ok(Number.isNaN(unixTime('next week', 'UTC')));
+  const now = Math.floor(Date.now() / 1000);
+  for (const [said, seconds] of [['in 10 minutes', 600], ['+15m', 900], ['in an hour', 3600], ['2 hours', 7200], ['in 1.5 hours', 5400], ['in 3 days', 259200], ['in a week', 604800], ['5 mins from now', 300]]) {
+    assert.ok(Math.abs(unixTime(said, 'America/Toronto') - (now + seconds)) <= 2, said);
+  }
+  assert.ok(Number.isNaN(unixTime('in 2 months', 'UTC')), 'months are not minutes');
   assert.equal(utf8Length('héllo 👋'), 11);
 });

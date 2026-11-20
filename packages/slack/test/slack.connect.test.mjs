@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { memoryRecordStore } from '@voiceflow/channels-sdk/install';
 import { fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
 import {
+  appNameOf,
   BOT_EVENTS,
   BOT_SCOPES,
   connectSlack,
@@ -28,18 +29,27 @@ const VF_KEY = 'VF.DM.connect-test';
 const CLI_TOKEN = 'xoxp-cli-login-never-printed';
 const BOT_TOKEN = 'xoxb-bot-token-never-printed';
 const SIGNING = 'signing-secret-never-printed';
+const USER_TOKEN = 'xoxp-user-token-never-printed';
 
 /** Slack's app API as a `fetch`: apps made from manifests, installs, and every call recorded. */
-function fakeSlack({ team = 'T1', invalid, apps: existing = {} } = {}) {
+function fakeSlack({ team = 'T1', invalid, apps: existing = {}, images = {}, iconError } = {}) {
   const apps = new Map(Object.entries(existing).map(([id, manifest]) => [id, structuredClone(manifest)]));
   const calls = [];
+  const downloads = [];
   let n = 0;
-  const fetch = async (url, init) => {
+  const fetch = async (url, init = {}) => {
+    // Images on the web, for the app's icon.
+    if (!String(url).startsWith('https://slack.com/api/')) {
+      downloads.push(String(url));
+      const image = images[String(url)];
+      return image ? new Response(image.bytes, { headers: { 'content-type': image.type } }) : new Response('not found', { status: 404 });
+    }
     const method = String(url).split('/').pop();
     const auth = new Headers(init.headers).get('authorization');
     const form = String(new Headers(init.headers).get('content-type')).startsWith('application/x-www-form-urlencoded');
-    const body = form ? Object.fromEntries(new URLSearchParams(init.body)) : JSON.parse(init.body || '{}');
-    calls.push({ method, body, form, token: auth?.replace('Bearer ', '') });
+    const multipart = init.body instanceof FormData;
+    const body = multipart ? Object.fromEntries(init.body.entries()) : form ? Object.fromEntries(new URLSearchParams(init.body)) : JSON.parse(init.body || '{}');
+    calls.push({ method, body, form, multipart, token: auth?.replace('Bearer ', '') });
     const ok = (more = {}) => Response.json({ ok: true, ...more });
     const no = (error, more = {}) => Response.json({ ok: false, error, ...more });
     if (method === 'auth.test') {
@@ -64,20 +74,28 @@ function fakeSlack({ team = 'T1', invalid, apps: existing = {} } = {}) {
         return ok({ app_id: body.app_id });
       case 'apps.manifest.delete':
         return apps.delete(body.app_id) ? ok() : no('app_not_found');
+      case 'apps.icon.set':
+        if (!multipart || !(body.file instanceof File)) return no('invalid_arguments');
+        if (!apps.has(body.app_id)) return no('app_not_found');
+        {
+          // A refusal for every image, or only for the ones a function names.
+          const refused = typeof iconError === 'function' ? iconError(body.file) : iconError;
+          return refused ? no(refused) : ok();
+        }
       case 'apps.developerInstall':
         if (!form) return no('invalid_arguments');
-        return apps.has(body.app_id) ? ok({ api_access_tokens: { bot: BOT_TOKEN, app_level: null, user: null } }) : no('app_not_found');
+        return apps.has(body.app_id) ? ok({ api_access_tokens: { bot: BOT_TOKEN, app_level: null, user: body.user_scopes ? USER_TOKEN : null } }) : no('app_not_found');
       default:
         return no('unknown_method');
     }
   };
-  const writes = () => calls.filter((c) => /create|update|delete|developerInstall/.test(c.method));
-  return { fetch, calls, apps, writes };
+  const writes = () => calls.filter((c) => /create|update|delete|developerInstall|icon/.test(c.method));
+  return { fetch, calls, apps, writes, downloads, of: (method) => calls.filter((c) => c.method === method) };
 }
 
-function setup({ slack: slackOptions, voiceflow: vfOptions = {}, more = {} } = {}) {
+function setup({ slack: slackOptions, voiceflow: vfOptions = {}, more = {}, project = PROJECT } = {}) {
   const slack = fakeSlack(slackOptions);
-  const vf = fakeVoiceflowApi({ project: PROJECT, apiKey: VF_KEY });
+  const vf = fakeVoiceflowApi({ project, apiKey: VF_KEY });
   const record = memoryRecordStore();
   const appRecords = memoryAppRecordStore();
   const progress = [];
@@ -94,7 +112,7 @@ function setup({ slack: slackOptions, voiceflow: vfOptions = {}, more = {} } = {
 }
 
 const noSecrets = (text) => {
-  for (const secret of [CLI_TOKEN, BOT_TOKEN, SIGNING, VF_KEY]) assert.ok(!String(text).includes(secret), `a secret leaked into: ${String(text).slice(0, 200)}`);
+  for (const secret of [CLI_TOKEN, BOT_TOKEN, SIGNING, VF_KEY, USER_TOKEN]) assert.ok(!String(text).includes(secret), `a secret leaked into: ${String(text).slice(0, 200)}`);
 };
 
 // ── The manifest ────────────────────────────────────────────────────────────
@@ -167,7 +185,7 @@ test('the plan comes first, and saying no changes nothing anywhere', async () =>
   assert.equal(appRecords.apps.size, 0);
   assert.equal(shown.app.action, 'create');
   const text = shown.lines.join('\n');
-  assert.match(text, /\+ create app "Voiceflow agent" from the manifest: \d+ bot scopes, 10 events/);
+  assert.match(text, /\+ create app "Spike" from the manifest: \d+ bot scopes, 10 events/, "named after the agent");
   assert.match(text, /\+ install it in Example/);
   assert.match(text, /environment sdk-test \(nothing is published\)/);
   assert.match(text, /\+ secret slack_bot_token \(new, restricted; value: the app's bot token\)/);
@@ -189,7 +207,7 @@ test('connect makes the app, installs it, and puts the bot token on the agent as
   assert.equal(result.botUserId, 'UBOT');
 
   // Slack: made from the manifest, then installed with every scope in it.
-  assert.deepEqual(slack.writes().map((c) => c.method), ['apps.manifest.create', 'apps.developerInstall']);
+  assert.deepEqual(slack.writes().map((c) => c.method), ['apps.manifest.create', 'apps.icon.set', 'apps.developerInstall']);
   const install = slack.calls.find((c) => c.method === 'apps.developerInstall');
   assert.equal(install.form, true);
   assert.deepEqual(install.body.bot_scopes.split(','), slack.apps.get('A1').oauth_config.scopes.bot);
@@ -245,7 +263,7 @@ test('running connect again reuses the app, changing only what is missing', asyn
   let plan;
   const again = await connectSlack(options({ confirm: (p) => ((plan = p), true) }));
   assert.equal(plan.app.action, 'unchanged');
-  assert.match(plan.lines.join('\n'), /= app A1 "Voiceflow agent" has everything this package uses/);
+  assert.match(plan.lines.join('\n'), /= app A1 "Spike" has everything this package uses/);
   assert.equal(again.created, false);
   assert.equal(again.signingSecret, undefined, 'Slack gives the signing secret once');
   const slackWrites = slack.writes().slice(writesBefore.slack).map((c) => c.method);
@@ -254,6 +272,141 @@ test('running connect again reuses the app, changing only what is missing', asyn
   for (const s of plan.voiceflow.steps.filter((s) => s.kind === 'tool')) assert.equal(s.action, 'current', s.name);
   const vfWrites = vf.writes().slice(writesBefore.vf);
   assert.ok(vfWrites.every((w) => /secret|compile/.test(w.path)), `only the token is written again: ${vfWrites.map((w) => w.path)}`);
+});
+
+// ── The app's name and icon ─────────────────────────────────────────────────
+
+const AVATAR = 'https://assets.example.com/1768-agent%20face.png';
+const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+const VOICEFLOW_ICON = new Uint8Array(await readFile(new URL('../assets/voiceflow-icon.png', import.meta.url)));
+const isVoiceflowIcon = async (file) => file.name === 'voiceflow-icon.png' && file.type === 'image/png' && Buffer.from(await file.arrayBuffer()).equals(VOICEFLOW_ICON);
+const withAvatar = (slack = {}) => ({ project: { ...PROJECT, name: 'Acme Support', image: AVATAR }, slack: { images: { [AVATAR]: { bytes: PNG_BYTES, type: 'image/png' } }, ...slack } });
+
+test("an agent's name becomes an app name Slack takes", () => {
+  // Each pair checked against Slack's apps.manifest.validate on 2026-11-20.
+  for (const [agent, app] of [
+    ['[SPIKE] Channel Relay', '(SPIKE) Channel Relay'],
+    ['Inventables CX Agent', 'Inventables CX Agent'],
+    ['Acme & Co: Support!', 'Acme and Co Support'],
+    ['Agent #2 / EU', 'Agent 2 EU'],
+    ['Café 🤖 Bot', 'Café Bot'],
+    ['{beta} Help, Inc.', '(beta) Help Inc.'],
+    ["Mr. A's (new) help_desk", "Mr. A's (new) help_desk"],
+    ['🤖🤖', 'Voiceflow agent'],
+    ['A very long agent name that goes well past the limit', 'A very long agent name that goes'],
+    ['Supercalifragilisticexpialidociousagentname', 'Supercalifragilisticexpialidociousa'],
+  ]) {
+    assert.equal(appNameOf(agent), app, agent);
+    assert.ok(appNameOf(agent).length <= 35);
+  }
+});
+
+test("a new app takes the agent's name and avatar from Voiceflow", async () => {
+  const { slack, progress, options } = setup({ ...withAvatar(), project: { ...PROJECT, name: '[BETA] Acme Support', image: AVATAR } });
+  let plan;
+  const result = await connectSlack(options({ confirm: (p) => ((plan = p), true) }));
+  const app = slack.apps.get('A1');
+  assert.equal(app.display_information.name, '(BETA) Acme Support', 'in the characters Slack takes');
+  assert.equal(app.features.bot_user.display_name, 'beta-acme-support');
+  assert.match(plan.lines.join('\n'), /\+ set its icon to the agent's avatar in Voiceflow \(Voiceflow's icon if Slack won't take it\): https:\/\/assets\.example\.com\/1768-agent%20face\.png/);
+  const [icon] = slack.of('apps.icon.set');
+  assert.equal(icon.body.app_id, 'A1');
+  assert.equal(icon.token, CLI_TOKEN, "set with the CLI login, like the app's manifest");
+  assert.deepEqual(new Uint8Array(await icon.body.file.arrayBuffer()), PNG_BYTES, 'the avatar, as Voiceflow serves it');
+  assert.equal(icon.body.file.type, 'image/png');
+  assert.equal(icon.body.file.name, '1768-agent face.png');
+  assert.ok(progress.includes("+ set the app's icon to the agent's avatar"));
+  assert.equal(result.notes, undefined);
+  noSecrets(progress.join('\n'));
+});
+
+test("a name or icon you give wins, and an app that exists keeps its icon unless you name one", async () => {
+  const named = setup(withAvatar());
+  await connectSlack(named.options({ app: { name: 'Help & Desk', icon: false } }));
+  assert.equal(named.slack.apps.get('A1').display_information.name, 'Help & Desk', "a name you give is used as you gave it (Slack's check says if it can't be)");
+  assert.equal(named.slack.of('apps.icon.set').length, 0, 'icon: false sets none');
+  assert.equal(named.slack.downloads.length, 0);
+
+  const { slack, options } = setup(withAvatar({ images: { [AVATAR]: { bytes: PNG_BYTES, type: 'image/png' }, 'https://cdn.example.com/other.jpg': { bytes: PNG_BYTES, type: 'image/jpeg' } } }));
+  await connectSlack(options());
+  await connectSlack(options());
+  assert.equal(slack.of('apps.icon.set').length, 1, 'a second connect leaves the icon alone');
+  let plan;
+  await connectSlack(options({ app: { icon: 'https://cdn.example.com/other.jpg' }, confirm: (p) => ((plan = p), true) }));
+  assert.match(plan.lines.join('\n'), /\+ set its icon to the image: https:\/\/cdn\.example\.com\/other\.jpg/);
+  assert.equal(slack.of('apps.icon.set').at(-1).body.file.type, 'image/jpeg');
+
+  const plain = setup({ project: { ...PROJECT, image: null } });
+  let plainPlan;
+  await connectSlack(plain.options({ confirm: (p) => ((plainPlan = p), true) }));
+  assert.match(plainPlan.lines.join('\n'), /\+ set its icon to Voiceflow's icon \(the agent has no avatar in Voiceflow\)/);
+  assert.deepEqual(plainPlan.app.icon, { from: 'default' });
+  const [standIn] = plain.slack.of('apps.icon.set');
+  assert.ok(await isVoiceflowIcon(standIn.body.file), "an agent without an avatar gets Voiceflow's icon");
+  assert.equal(plain.slack.downloads.length, 0, 'from the package, not the web');
+  assert.ok(plain.progress.includes("+ set the app's icon to Voiceflow's icon"));
+  await connectSlack(plain.options());
+  assert.equal(plain.slack.of('apps.icon.set').length, 1, "and an app that exists keeps whatever icon it has");
+  const none = setup({ project: { ...PROJECT, image: null } });
+  await connectSlack(none.options({ app: { icon: false } }));
+  assert.equal(none.slack.of('apps.icon.set').length, 0, "icon: false means none, not Voiceflow's");
+
+  for (const icon of ['ftp://example.com/a.png', 'not a url']) {
+    const bad = setup(withAvatar());
+    await assert.rejects(connectSlack(bad.options({ app: { icon } })), /must be an image's http\(s\) URL/);
+    assert.equal(bad.slack.writes().length, 0, 'nothing changed');
+  }
+
+  const dry = setup(withAvatar());
+  await connectSlack(dry.options({ confirm: () => false }));
+  assert.equal(dry.slack.downloads.length, 0, 'the plan downloads nothing');
+});
+
+test("an avatar Slack refuses, or one that won't download, gives way to Voiceflow's icon, and connect says why", async () => {
+  // Slack refuses the avatar (too small) and takes Voiceflow's.
+  const small = setup(withAvatar({ iconError: (file) => (file.name === 'voiceflow-icon.png' ? undefined : 'invalid_icon_size') }));
+  const result = await connectSlack(small.options());
+  assert.equal(result.applied, true);
+  assert.ok(result.botToken && result.install, 'installed, with its tools');
+  assert.equal(
+    result.notes[0],
+    "Slack didn't take the agent's avatar as the app's icon: Slack takes icons from 512 to 2000 pixels. It has Voiceflow's icon instead; set another in Basic Information, https://api.slack.com/apps/A1/general",
+  );
+  assert.ok(small.progress.includes(`! ${result.notes[0]}`));
+  const tries = small.slack.of('apps.icon.set');
+  assert.equal(tries.length, 2);
+  assert.ok(await isVoiceflowIcon(tries[1].body.file), "the second try is Voiceflow's icon");
+
+  // An avatar that won't download: Voiceflow's icon, and only that is sent to Slack.
+  const gone = setup(withAvatar({ images: {} }));
+  const missing = await connectSlack(gone.options());
+  assert.match(missing.notes[0], /^Slack didn't take the agent's avatar as the app's icon: it couldn't be downloaded \(HTTP 404\)\. It has Voiceflow's icon instead/);
+  assert.equal(gone.slack.of('apps.icon.set').length, 1);
+  assert.ok(await isVoiceflowIcon(gone.slack.of('apps.icon.set')[0].body.file));
+
+  // Slack refuses both: connect still finishes and says so.
+  const format = setup(withAvatar({ iconError: 'error_bad_format' }));
+  const both = await connectSlack(format.options());
+  assert.equal(both.applied, true);
+  assert.equal(
+    both.notes[0],
+    "Slack didn't take the agent's avatar (Slack takes a PNG, JPG or GIF) or Voiceflow's icon (Slack takes a PNG, JPG or GIF) as the app's icon. Set one in Basic Information, https://api.slack.com/apps/A1/general",
+  );
+
+  // An icon you named isn't swapped for Voiceflow's: it's yours to fix.
+  const named = setup(withAvatar({ images: {} }));
+  const yours = await connectSlack(named.options({ app: { icon: 'https://cdn.example.com/mine.png' } }));
+  assert.equal(yours.notes[0], "Slack didn't take the icon as the app's icon: it couldn't be downloaded (HTTP 404). Set one in Basic Information, https://api.slack.com/apps/A1/general");
+  assert.equal(named.slack.of('apps.icon.set').length, 0);
+});
+
+test("Voiceflow's icon is an image Slack takes", () => {
+  // A PNG (Slack takes PNG, JPG or GIF), square, within Slack's 512 to 2000 pixels.
+  assert.deepEqual([...VOICEFLOW_ICON.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'a PNG');
+  const view = new DataView(VOICEFLOW_ICON.buffer, VOICEFLOW_ICON.byteOffset);
+  const [width, height] = [view.getUint32(16), view.getUint32(20)];
+  assert.equal(width, height, 'square, so Slack adds no white bars');
+  assert.ok(width >= 512 && width <= 2000, `${width} pixels`);
 });
 
 test('an app that was deleted in Slack is made again, and the plan says why', async () => {
@@ -301,6 +454,28 @@ test('with tools: false the app is made and the agent is left alone', async () =
   assert.deepEqual(vf.writes(), []);
   assert.match(result.plan.lines.join('\n'), /no tools installed/);
   assert.ok(!result.plan.lines.join('\n').includes('slack_bot_token secret'));
+});
+
+test('user scopes are asked for only when named, and their token comes back in memory', async () => {
+  assert.equal(slackManifest({ requestUrl: URL_ }).oauth_config.scopes.user, undefined, 'none by default');
+  const { slack, options, progress } = setup();
+  let plan;
+  const result = await connectSlack(options({ tools: false, app: { userScopes: ['chat:write', 'im:history', 'chat:write'] }, confirm: (p) => ((plan = p), true) }));
+  assert.match(plan.lines.join('\n'), /and user scopes, so it can act as you: chat:write, im:history/);
+  const install = slack.calls.find((c) => c.method === 'apps.developerInstall');
+  assert.equal(install.body.user_scopes, 'chat:write,im:history');
+  assert.equal(result.userToken, USER_TOKEN);
+  noSecrets(progress.join('\n'));
+  noSecrets(JSON.stringify(result.plan));
+  // Without them, the install asks for none and no user token comes back.
+  const plain = setup();
+  const none = await connectSlack(plain.options({ tools: false }));
+  assert.equal(plain.slack.calls.find((c) => c.method === 'apps.developerInstall').body.user_scopes, undefined);
+  assert.equal(none.userToken, undefined);
+  // Merging adds them to an app you have, and says so.
+  const { manifest, changes } = mergeManifest(slackManifest({ requestUrl: URL_ }), slackManifest({ requestUrl: URL_, userScopes: ['chat:write'] }));
+  assert.deepEqual(manifest.oauth_config.scopes.user, ['chat:write']);
+  assert.deepEqual(changes.userScopesAdded, ['chat:write']);
 });
 
 test('an expired Slack CLI login says how to refresh it', async () => {

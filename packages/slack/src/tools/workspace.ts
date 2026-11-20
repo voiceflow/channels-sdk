@@ -80,7 +80,12 @@ export function personOf(value: unknown): string {
   return /^[UW][A-Z0-9]+$/.test(id) ? id : '';
 }
 
-/** A channel the model named (#name, <#C123|name>, C123) or, when it named none, the fallback. */
+/**
+ * A channel the model named (#name, <#C123|name>, C123) or, when it named none,
+ * the fallback. A name is looked up among the channels the bot is in, the only
+ * ones it can read or post in: one short list, where every channel in the
+ * workspace would be many slow pages.
+ */
 export async function resolveChannel(token: string, input: unknown, fallback: unknown) {
   const value = String(input || '').trim();
   const here = String(fallback || '').trim();
@@ -92,14 +97,14 @@ export async function resolveChannel(token: string, input: unknown, fallback: un
   const name = value.replace(/^#/, '').trim().toLowerCase();
   let cursor = '';
   for (let page = 0; page < 20; page++) {
-    const data = await slackCall(token, 'conversations.list', { types: 'public_channel,private_channel', exclude_archived: true, limit: 1000, cursor });
+    const data = await slackCall(token, 'users.conversations', { types: 'public_channel,private_channel', exclude_archived: true, limit: 1000, cursor });
     if (!data.ok) return { error: slackProblem(data) };
     const found = (data.channels || []).find((c: any) => c.name === name);
     if (found) return { id: found.id, name: found.name };
     cursor = (data.response_metadata && data.response_metadata.next_cursor) || '';
     if (!cursor) break;
   }
-  return { error: `I can't find a channel named #${name} that I can see.` };
+  return { error: `I'm not in a channel named #${name}. If it exists, add me to it first (type /invite @ and my name there).` };
 }
 
 /**
@@ -164,6 +169,23 @@ export function messageBlocks(text: string, note: string) {
   return blocks;
 }
 
+/**
+ * A post this tool made in the last two minutes with the same text and note, so
+ * a call the agent repeats (it retries when a call is slow) doesn't post twice.
+ * Its timestamp, or '' when there is none or the history can't be read.
+ */
+export async function alreadySent(token: string, channel: string, text: string, note: string) {
+  const plain = (s: unknown) => String(s || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  const history = await slackCall(token, 'conversations.history', { channel, oldest: String(Math.floor(Date.now() / 1000) - 120), limit: 20 });
+  if (!history.ok) return '';
+  const same = (history.messages || []).find((m: any) => {
+    if (!m.bot_id || plain(m.text) !== plain(text)) return false;
+    if (!note) return true;
+    return (m.blocks || []).some((b: any) => b.type === 'context' && (b.elements || []).some((e: any) => e.text === note));
+  });
+  return same ? String(same.ts) : '';
+}
+
 /** A failed result the agent can relay. */
 export function refused(result: string) {
   return { outputVars: { ok: false, result }, next: { path: 'error' } };
@@ -185,11 +207,19 @@ export function utf8Length(text: string): number {
 }
 
 /**
- * A time the model gave, as Unix seconds. With no offset it is read in the
- * person's time zone. Accepts ISO 8601 (`2026-12-01T09:00`, with or without an offset).
+ * A time the model gave, as Unix seconds. A relative time (`in 10 minutes`,
+ * `+2h`, `in a day`) counts from now, so the agent needn't know the time. A
+ * date and time is ISO 8601 (`2026-12-01T09:00`), read in the person's time
+ * zone when it has no offset.
  */
 export function unixTime(value: unknown, timeZone: unknown): number {
   const text = String(value || '').trim();
+  const rel = text.toLowerCase().match(/^(?:in\s+)?\+?\s*(\d+(?:\.\d+)?|an?|one)\s*(m|mins?|minutes?|h|hrs?|hours?|d|days?|w|weeks?)(?:\s+from\s+now)?$/);
+  if (rel) {
+    const count = /^\d/.test(rel[1]) ? Number(rel[1]) : 1;
+    const unit = rel[2][0] === 'm' ? 60 : rel[2][0] === 'h' ? 3600 : rel[2][0] === 'd' ? 86400 : 604800;
+    return Math.round(Date.now() / 1000 + count * unit);
+  }
   const m = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?\s*(Z|[+-]\d{2}:?\d{2})?$/i);
   if (!m) return NaN;
   const [, y, mo, d, h = '9', mi = '0', s = '0', zone] = m;
@@ -228,11 +258,24 @@ export async function slackPostToChannel(args: any) {
   if (channel.error) return refused(channel.error);
   const allowed: any = await mayUse(token, channel.id, user, input.current_channel);
   if (!allowed.ok) return refused(allowed.problem);
-  const sent = await slackCall(token, 'chat.postMessage', { channel: channel.id, text, blocks: messageBlocks(text, `Posted for <@${user}>`), unfurl_links: false });
-  if (!sent.ok) return refused(slackProblem(sent));
-  const link = await slackCall(token, 'chat.getPermalink', { channel: channel.id, message_ts: sent.ts });
+  const note = `Posted for <@${user}>`;
+  const earlier = await alreadySent(token, channel.id, text, note);
+  let ts = earlier;
+  if (!ts) {
+    const sent = await slackCall(token, 'chat.postMessage', { channel: channel.id, text, blocks: messageBlocks(text, note), unfurl_links: false });
+    if (!sent.ok) return refused(slackProblem(sent));
+    ts = String(sent.ts);
+  }
+  const link = await slackCall(token, 'chat.getPermalink', { channel: channel.id, message_ts: ts });
+  const url = link.ok ? String(link.permalink) : '';
   return {
-    outputVars: { ok: true, result: `Posted in <#${channel.id}>.`, channel_id: channel.id, message_ts: String(sent.ts), link: link.ok ? String(link.permalink) : '' },
+    outputVars: {
+      ok: true,
+      result: `${earlier ? 'Already posted' : 'Posted'} in <#${channel.id}>${url ? `: ${url}` : '.'}${earlier ? " (it went up a moment ago, so I didn't post it twice)" : ''}`,
+      channel_id: channel.id,
+      message_ts: ts,
+      link: url,
+    },
     next: { path: 'success' },
   };
 }
@@ -250,10 +293,14 @@ export async function slackMessagePerson(args: any) {
   const opened = await slackCall(token, 'conversations.open', { users: found.user.id });
   if (!opened.ok) return refused(slackProblem(opened));
   const note = found.user.id === user ? '' : `Sent for <@${user}>`;
-  const sent = await slackCall(token, 'chat.postMessage', { channel: opened.channel.id, text, blocks: messageBlocks(text, note), unfurl_links: false });
-  if (!sent.ok) return refused(slackProblem(sent));
+  const earlier = await alreadySent(token, opened.channel.id, text, note);
+  if (!earlier) {
+    const sent = await slackCall(token, 'chat.postMessage', { channel: opened.channel.id, text, blocks: messageBlocks(text, note), unfurl_links: false });
+    if (!sent.ok) return refused(slackProblem(sent));
+  }
+  const who = `${found.user.real_name || found.user.name} (<@${found.user.id}>)`;
   return {
-    outputVars: { ok: true, result: `Sent to ${found.user.real_name || found.user.name} (<@${found.user.id}>).`, person_id: String(found.user.id) },
+    outputVars: { ok: true, result: earlier ? `Already sent to ${who} a moment ago, so I didn't send it twice.` : `Sent to ${who}.`, person_id: String(found.user.id) },
     next: { path: 'success' },
   };
 }
@@ -344,7 +391,7 @@ export async function slackScheduleMessage(args: any) {
   if (!user) return refused("I can't tell who's asking, so I won't schedule anything for them.");
   if (!text) return refused('The message is empty.');
   const when = unixTime(input.post_at, input.user_timezone);
-  if (!isFinite(when)) return refused('Give the time as a date and time, like 2026-12-01T09:00.');
+  if (!isFinite(when)) return refused('Give the time as a relative time, like in 10 minutes, or as a date and time, like 2026-12-01T09:00.');
   const named = String(input.channel || '').trim();
   const channel: any = await resolveChannel(token, named, input.current_channel);
   if (channel.error) return refused(channel.error);
@@ -426,7 +473,7 @@ export async function slackCreateCanvas(args: any) {
   const link = team.ok && team.url && team.team_id ? `${String(team.url).replace(/\/$/, '')}/docs/${team.team_id}/${id}` : '';
   const notes = [!forPerson.ok ? `I couldn't give you edit access (${slackProblem(forPerson)})` : '', !shared.ok ? `I couldn't share it here (${slackProblem(shared)})` : ''].filter(Boolean);
   return {
-    outputVars: { ok: true, result: `Created the canvas ${title}.${notes.length ? ` ${notes.join('. ')}.` : ''}`, canvas_id: id, link },
+    outputVars: { ok: true, result: `Created the canvas ${title}${link ? `: ${link}` : '.'}${notes.length ? ` ${notes.join('. ')}.` : ''}`, canvas_id: id, link },
     next: { path: 'success' },
   };
 }
@@ -473,10 +520,10 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_post_to_channel',
     kind: 'workspace',
-    version: 1,
+    version: 2,
     description:
       'Post a message in a Slack channel for the person, when they ask you to share or announce something there. Only in channels they are a member of and you have been added to; the post says who it was for.',
-    code: functionSource(slackPostToChannel, [...BASE, ...CHANNELS, messageBlocks]),
+    code: functionSource(slackPostToChannel, [...BASE, ...CHANNELS, messageBlocks, alreadySent]),
     inputs: {
       channel: { description: 'The channel: #name or its ID.' },
       text: { description: 'The message, in Slack markdown.' },
@@ -485,15 +532,15 @@ export const workspaceTools: ToolDefinition[] = [
       current_channel: HERE,
     },
     outputs: { ...RESULT, channel_id: 'The channel posted in.', message_ts: "The post's timestamp.", link: 'A link to the post.' },
-    requires: ['chat:write', 'channels:read', 'groups:read'],
+    requires: ['chat:write', 'channels:read', 'groups:read', 'channels:history', 'groups:history'],
   },
   {
     name: 'slack_message_person',
     kind: 'workspace',
-    version: 1,
+    version: 2,
     description:
       'Send someone in the workspace a direct message from you, for the person, when they ask you to tell or remind someone something. The message says who it was for.',
-    code: functionSource(slackMessagePerson, [...BASE, resolvePerson, messageBlocks]),
+    code: functionSource(slackMessagePerson, [...BASE, resolvePerson, messageBlocks, alreadySent]),
     inputs: {
       person: { description: 'Who: their @mention, user ID, email, or full name.' },
       text: { description: 'The message, in Slack markdown.' },
@@ -501,12 +548,12 @@ export const workspaceTools: ToolDefinition[] = [
       user_id: USER,
     },
     outputs: { ...RESULT, person_id: 'Their Slack user ID.' },
-    requires: ['chat:write', 'im:write', 'users:read', 'users:read.email'],
+    requires: ['chat:write', 'im:write', 'im:history', 'users:read', 'users:read.email'],
   },
   {
     name: 'slack_read_channel',
     kind: 'workspace',
-    version: 1,
+    version: 2,
     description:
       "Read a Slack channel's recent messages, to summarize or answer questions about what was said. With no channel named it reads this conversation, or in the assistant panel the channel the person has open. Only channels they are a member of.",
     code: functionSource(slackReadChannel, [...BASE, ...CHANNELS]),
@@ -539,13 +586,13 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_schedule_message',
     kind: 'workspace',
-    version: 1,
+    version: 2,
     description:
-      "Schedule a Slack message for later: a reminder in this thread, or a post in a channel at a set time. Times without an offset are in the person's time zone. Only in channels they are a member of.",
+      "Schedule a Slack message for later: a reminder in this thread, or a post in a channel at a set time. Pass a relative time as the person said it (in 10 minutes, in 2 hours): you don't need to know the current time. Dates without an offset are in the person's time zone. Only in channels they are a member of.",
     code: functionSource(slackScheduleMessage, [...BASE, ...CHANNELS, messageBlocks, unixTime]),
     inputs: {
       text: { description: 'The message, in Slack markdown.' },
-      post_at: { description: 'When, as an ISO date and time: 2026-12-01T09:00 (their time zone) or with an offset.' },
+      post_at: { description: 'When: a relative time (in 10 minutes, in 2 hours, in 3 days), or a date and time, 2026-12-01T09:00 (their time zone) or with an offset.' },
       channel: { description: 'The channel: #name or its ID. Empty for this thread.' },
       token: TOKEN,
       user_id: USER,
@@ -576,7 +623,7 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_add_bookmark',
     kind: 'workspace',
-    version: 1,
+    version: 2,
     description: "Add a link to a channel's bookmarks bar, by default this one's. Only in channels the person is a member of.",
     code: functionSource(slackAddBookmark, [...BASE, ...CHANNELS]),
     inputs: {
@@ -594,7 +641,7 @@ export const workspaceTools: ToolDefinition[] = [
   {
     name: 'slack_create_canvas',
     kind: 'workspace',
-    version: 1,
+    version: 2,
     description:
       'Write a Slack canvas: a document for anything longer than a message (a summary, plan, meeting notes, a how-to). The person can edit it and this conversation can read it; share its link in your reply.',
     code: functionSource(slackCreateCanvas, [...BASE]),
@@ -605,7 +652,7 @@ export const workspaceTools: ToolDefinition[] = [
       user_id: USER,
       current_channel: HERE,
     },
-    outputs: { ...RESULT, canvas_id: "The canvas's ID.", link: 'A link to the canvas.' },
+    outputs: { ...RESULT, canvas_id: "The canvas's ID, for other Slack calls. Give people the link, not this.", link: 'A link to the canvas, to share in your reply.' },
     requires: ['canvases:write'],
   },
   {

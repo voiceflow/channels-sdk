@@ -28,22 +28,29 @@ export interface SlackApiOptions {
   fetch?: typeof fetch;
 }
 
-export type SlackApi = <T = any>(method: string, params?: Record<string, unknown>, options?: { form?: boolean; token?: string }) => Promise<T>;
+/** `form` sends the params form-encoded; `multipart` as a multipart form, where a `File` goes as an upload. */
+export type SlackApi = <T = any>(method: string, params?: Record<string, unknown>, options?: { form?: boolean; multipart?: boolean; token?: string }) => Promise<T>;
 
 export function createSlackApi(options: SlackApiOptions): SlackApi {
   const base = (options.apiURL ?? 'https://slack.com/api').replace(/\/$/, '');
   const doFetch = options.fetch ?? fetch;
-  return async (method, params = {}, { form = false, token = options.token } = {}) => {
-    const body = form
-      ? Object.entries(params)
-          .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
-          .join('&')
-      : JSON.stringify(params);
-    const res = await doFetch(`${base}/${method}`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': form ? 'application/x-www-form-urlencoded' : 'application/json; charset=utf-8' },
-      body,
-    });
+  return async (method, params = {}, { form = false, multipart = false, token = options.token } = {}) => {
+    let body: string | FormData;
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+    if (multipart) {
+      // fetch sets the multipart content type, with its boundary.
+      body = new FormData();
+      for (const [k, v] of Object.entries(params)) body.append(k, v instanceof Blob ? v : String(v));
+    } else if (form) {
+      body = Object.entries(params)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+        .join('&');
+      headers['content-type'] = 'application/x-www-form-urlencoded';
+    } else {
+      body = JSON.stringify(params);
+      headers['content-type'] = 'application/json; charset=utf-8';
+    }
+    const res = await doFetch(`${base}/${method}`, { method: 'POST', headers, body });
     const json = (await res.json().catch(() => ({ ok: false, error: `http_${res.status}` }))) as any;
     if (!json.ok) throw new SlackApiError(method, json.error ?? 'unknown_error', json.errors ?? []);
     return json;

@@ -105,8 +105,9 @@ The same `options` turn on an adapter's own features, such as Slack's
 - **Opening the assistant thread runs the agent's launch turn** (`launchOnOpen`,
   on by default). Its messages are posted, and up to four of its buttons are
   pinned as suggested prompts. Clicking one sends the button's own request.
-- **Feedback buttons** (Slack: the adapter's `feedbackButtons: true`) reach
-  `onFeedback`. A rating is not a turn: the agent doesn't answer it.
+- **Feedback buttons** are off by default. Turned on (Slack:
+  `slack({ feedbackButtons: true })`), they reach `onFeedback`. A rating is not
+  a turn: the agent doesn't answer it.
 - **Only the latest turn's buttons are live**, as in Voiceflow's web chat. When the
   next turn starts, the last turn's buttons come off their messages: a card keeps
   its title, image and text; buttons alone keep their labels as plain text; a

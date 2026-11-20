@@ -77,6 +77,8 @@ export interface FakeApiProject {
   id: string;
   name: string;
   workspaceID: string;
+  /** The agent's avatar, a URL. */
+  image?: string | null;
 }
 
 /**

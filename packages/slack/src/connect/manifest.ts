@@ -41,7 +41,7 @@ export const DEFAULT_COMMAND = '/ask';
 export interface ManifestOptions {
   /** Where Slack sends events, button clicks and slash commands: your server's Slack webhook (`https://…/api/slack`). */
   requestUrl: string;
-  /** The app's name in Slack. Default: `Voiceflow agent`. */
+  /** The app's name in Slack. Default: `Voiceflow agent` (connect passes the agent's name). */
   name?: string;
   description?: string;
   /** The bot's display name (lowercase, no spaces). Default: from `name`. */
@@ -50,6 +50,11 @@ export interface ManifestOptions {
   command?: string | false;
   /** Which of Slack's tools the app needs scopes for, or `false` for none. Default: all. */
   tools?: SlackToolsOptions | false;
+  /**
+   * User scopes: what the app may do as the person who installs it. None by
+   * default; the live test harness asks for some so it can post as the tester.
+   */
+  userScopes?: readonly string[];
 }
 
 export interface SlackManifest {
@@ -62,6 +67,28 @@ export interface SlackManifest {
 
 const MAX_NAME = 35;
 const MAX_BOT_NAME = 80;
+
+/**
+ * An agent's name as a Slack app name. Slack refuses most punctuation and any
+ * emoji in an app's name (measured with apps.manifest.validate: [ ] { } & / : !
+ * ? + # @ , " ~ * = % $ < > ^ refused; letters, digits, spaces and . ' - _ ( )
+ * taken), so brackets become parentheses, & becomes "and", and anything else
+ * Slack refuses becomes a space.
+ */
+export function appNameOf(agentName: string): string {
+  const name = agentName
+    .replace(/[[{]/g, '(')
+    .replace(/[\]}]/g, ')')
+    .replace(/\s*&\s*/g, ' and ')
+    .replace(/[^\p{L}\p{M}\p{N} .'()_-]+/gu, ' ')
+    .replace(/\(\s*\)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Too long: cut at the last whole word that fits.
+  const head = name.slice(0, MAX_NAME + 1);
+  const cut = name.length <= MAX_NAME ? name : /\s/.test(head) ? head.replace(/\s+\S*$/, '') : name.slice(0, MAX_NAME);
+  return /[\p{L}\p{N}]/u.test(cut) ? cut.trim() : 'Voiceflow agent';
+}
 
 function botNameOf(name: string): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
@@ -88,7 +115,7 @@ export function slackManifest(options: ManifestOptions): SlackManifest {
       assistant_view: { assistant_description: description },
       ...(command ? { slash_commands: [slashCommand(command, requestUrl, name)] } : {}),
     },
-    oauth_config: { scopes: { bot: requiredScopes(options.tools) } },
+    oauth_config: { scopes: { bot: requiredScopes(options.tools), ...(options.userScopes?.length ? { user: [...new Set(options.userScopes)].sort() } : {}) } },
     settings: {
       event_subscriptions: { request_url: requestUrl, bot_events: [...BOT_EVENTS] },
       interactivity: { is_enabled: true, request_url: requestUrl },
@@ -101,6 +128,7 @@ export function slackManifest(options: ManifestOptions): SlackManifest {
 
 export interface ManifestChanges {
   scopesAdded: string[];
+  userScopesAdded: string[];
   eventsAdded: string[];
   /** The request URL changed from this one. */
   urlFrom?: string;
@@ -120,11 +148,13 @@ export function mergeManifest(existing: SlackManifest, wanted: SlackManifest): {
   const before = {
     scopes: new Set<string>(existing.oauth_config?.scopes?.bot ?? []),
     events: new Set<string>(existing.settings?.event_subscriptions?.bot_events ?? []),
+    userScopes: new Set<string>(existing.oauth_config?.scopes?.user ?? []),
   };
   const requestUrl = wanted.settings.event_subscriptions.request_url as string;
   const scopes = [...new Set([...before.scopes, ...wanted.oauth_config.scopes.bot])].sort();
   const events = [...new Set([...before.events, ...wanted.settings.event_subscriptions.bot_events])].sort();
-  manifest.oauth_config = { ...manifest.oauth_config, scopes: { ...manifest.oauth_config?.scopes, bot: scopes } };
+  const userScopes = [...new Set([...before.userScopes, ...(wanted.oauth_config.scopes.user ?? [])])].sort();
+  manifest.oauth_config = { ...manifest.oauth_config, scopes: { ...manifest.oauth_config?.scopes, bot: scopes, ...(userScopes.length ? { user: userScopes } : {}) } };
 
   const features = (manifest.features ??= {});
   const assistantAdded = !features.assistant_view;
@@ -158,6 +188,7 @@ export function mergeManifest(existing: SlackManifest, wanted: SlackManifest): {
     manifest,
     changes: {
       scopesAdded: scopes.filter((s) => !before.scopes.has(s)),
+      userScopesAdded: userScopes.filter((s) => !before.userScopes.has(s)),
       eventsAdded: events.filter((e) => !before.events.has(e)),
       ...(urlFrom !== requestUrl ? { urlFrom: urlFrom ?? '(none)' } : {}),
       ...(commandAdded ? { commandAdded } : {}),

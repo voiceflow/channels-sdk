@@ -1,0 +1,50 @@
+{
+  "slack_react": {
+    "1": "sha256:777e0383cb946e8ea65df13dae53749323a577eab42ef1ef6e3fa05ed589046d"
+  },
+  "slack_show_table": {
+    "1": "sha256:34ced8f82c323457211dc93f3bc19312772d3967aae4ce49c013c0109f7f726d"
+  },
+  "slack_show_chart": {
+    "1": "sha256:84c85b7bb196761b2f27bbf8f489267a60d295ac81281598d3a4ae30c75a332c"
+  },
+  "slack_reply_privately": {
+    "1": "sha256:e60e48f2b8d31f867a42637d3c1a9afdfb779d5cd40430ebbfadaa550c9b0298"
+  },
+  "slack_ask_form": {
+    "1": "sha256:dd4303a594d6257c61fd9dd64aa0370d15732dcc8120a5ea45aea37441a1e8ec"
+  },
+  "slack_post_to_channel": {
+    "1": "sha256:4b183e17351d2bf4a435bb8eccdd60f8ac5e322ef1a1970a743e3e57aa70254f",
+    "2": "sha256:bbd07ec83a554a710b13245e5140e7cd4f059d3fb1d1d9c83e445015b1be6b49"
+  },
+  "slack_message_person": {
+    "1": "sha256:5ace1edbc92f9d0a9658d3142ff8bc2fb73fe5a4781a604a823f49d574b3f5ff",
+    "2": "sha256:c77fa39bcf94619a491d9f7c34dec7054c844f48b4b3db985d5ec341276cf790"
+  },
+  "slack_read_channel": {
+    "1": "sha256:9c01b0ad04fae816eb40545847b32b7e1c304c30bd81ee509f7175f9e47f58c1",
+    "2": "sha256:f54ab85799029c8aee84b4d41cb7af222c59c40bd65c1e92e03fa103baee165d"
+  },
+  "slack_find_person": {
+    "1": "sha256:d00666e38d298fd1f22d8b901fb62a8356b430a1a0791f4bf82724c82a3618cd"
+  },
+  "slack_schedule_message": {
+    "1": "sha256:ebbc5bfd705a4e33b4f193ea2f6b3c0abaf1e51b6fe6ec906f747c7545a2c923",
+    "2": "sha256:cbd160472e48a1d86d7ca26cf3c21e91f448a38786b28e6bf44ab4f9e68bdaa1"
+  },
+  "slack_pin_message": {
+    "1": "sha256:1ae77f4417d1994d5f0200fdbe2c9d446cdf3d5c40a5eb24443a8d9c289ed7bb"
+  },
+  "slack_add_bookmark": {
+    "1": "sha256:80f80c20a8631a681f8612b2a81936ea08991b0b4741d513245519db3d69f8b2",
+    "2": "sha256:fc392099308a67b8645cc4ad095dde653f04e6a39194344e0b70ed7a37ae7881"
+  },
+  "slack_create_canvas": {
+    "1": "sha256:40e0303e7ff4b7d51caa7d201d94399277d5a2e2d323924cc11be854132c3c12",
+    "2": "sha256:6598c41305df04f9e386c6755df5d0147fca9279b2c799e1ccab6235c2896d20"
+  },
+  "slack_send_file": {
+    "1": "sha256:3936c477f6256533089c01946f5c937a0d3b5e62e391ced5dd46c3ce642a1b24"
+  }
+}

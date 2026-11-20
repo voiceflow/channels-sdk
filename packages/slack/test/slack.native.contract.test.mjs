@@ -112,17 +112,37 @@ test('a URL button opens its link and still sends its Voiceflow request', async 
   assert.deepEqual(vf.interacts.at(-1).action, book);
 });
 
-test('feedback buttons close a streamed answer, and a rating reaches onFeedback without a turn', async (t) => {
+const feedbackOf = (stream) => stream.blocks?.flatMap((b) => b.elements ?? []).find((e) => e.type === 'feedback_buttons');
+
+test('no feedback buttons by default', async (t) => {
+  const { slack, send } = await setup(() => completion('a1', 'Done.'), { onFeedback: () => {} });
+  t.after(slack.close);
+  await send(slackEvent(mention('do it')));
+  const [stream] = slack.streams();
+  assert.ok(stream, 'the answer streamed');
+  assert.equal(feedbackOf(stream), undefined, 'no 👍 / 👎 unless asked for');
+});
+
+test('feedback buttons, when asked for, take your labels', async (t) => {
+  const { slack, send } = await setup(() => completion('a1', 'Done.'), { extension: { feedbackButtons: { positiveLabel: 'Helpful', negativeLabel: 'Not helpful' } } });
+  t.after(slack.close);
+  await send(slackEvent(mention('do it')));
+  const feedback = feedbackOf(slack.streams()[0]);
+  assert.equal(feedback.action_id, 'message_feedback');
+  assert.equal(feedback.positive_button.text.text, 'Helpful');
+  assert.equal(feedback.negative_button.text.text, 'Not helpful');
+});
+
+test('feedback buttons, when asked for, close a streamed answer, and a rating reaches onFeedback without a turn', async (t) => {
   const ratings = [];
   const { slack, vf, send } = await setup(() => completion('a1', 'Done.'), {
-    slack: { feedbackButtons: true },
+    extension: { feedbackButtons: true },
     onFeedback: (f) => ratings.push({ positive: f.positive, value: f.value, user: f.user.userId }),
   });
   t.after(slack.close);
 
   await send(slackEvent(mention('do it')));
-  const [stream] = slack.streams();
-  const feedback = stream.blocks.flatMap((b) => b.elements ?? []).find((e) => e.type === 'feedback_buttons');
+  const feedback = feedbackOf(slack.streams()[0]);
   assert.ok(feedback, 'Slack feedback buttons on the streamed reply');
 
   await send(click(feedback.action_id, 'positive'));
