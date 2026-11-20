@@ -203,8 +203,10 @@ await check('slack_show_chart', async () => {
   return { pass: t.traces.includes('slack_show_chart') && types.some((x) => /visual|chart/.test(x)), evidence: `block types [${types.join(' ')}]; ${summary(t)}` };
 });
 
+// The message is given, so the check tests the tool alone: the agent sees a slack_* value (your time zone, say)
+// only where its instructions reference it, and an agent asked for one it can't see rightly declines.
 await check('slack_reply_privately', async () => {
-  const t = await send(info.channel, `${BOT} Use your private reply tool to tell me, so only I can see it, which time zone I'm in.`);
+  const t = await send(info.channel, `${BOT} Use your private reply tool to send me "just for you", so only I can see it.`);
   return {
     pass: t.traces.includes('slack_reply_privately') && !t.errors.length,
     evidence: `sent without error (a script can't read an ephemeral message: look for it in the thread); ${summary(t)}`,

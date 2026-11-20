@@ -111,6 +111,24 @@ The `slack_*` variables: `slack_user_id`, `slack_user_name`, `slack_user_title`,
 `slack_channel_name`, `slack_channel_type`, `slack_thread_ts`,
 `slack_message_ts`, `slack_viewing_channel_id`.
 
+**The tools see them; the agent sees only the ones you reference.** The Slack
+tools are wired to these variables, so they always act for the right person.
+The agent itself sees a variable only where its instructions or global prompt
+reference it: a variable is stored data, not the model's context
+([Voiceflow's docs](https://www.voiceflow.com/docs/documentation/build/data/variables#stored-values-and-model-context)).
+Without a reference, asked "what time zone am I in?", the agent rightly says
+it can't tell. To let it know who it's talking to, add a line like this to the
+global prompt:
+
+```
+You're talking to {slack_user_name}. Their title: {slack_user_title}. Their time zone: {slack_user_timezone}.
+```
+
+Use the values that stay the same through a conversation. Leave out the ones
+that change every turn (the channel, thread and message): a prompt that changes
+between turns makes every response slower and more expensive
+([Global prompt, Variable consistency](https://www.voiceflow.com/docs/documentation/build/global-prompt)).
+
 ## Slack's tools
 
 Connect installs these on the agent, as Voiceflow functions attached as tools.

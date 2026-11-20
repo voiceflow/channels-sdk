@@ -37,7 +37,11 @@ export interface SlackOptions {
    * `false` for none. Default: 20.
    */
   catchUp?: number | false;
-  /** Set who and where as `slack_*` variables on every turn. Default: `true`. */
+  /**
+   * Set who and where as `slack_*` variables on every turn. Default: `true`.
+   * The Slack tools read them; the agent sees one only where its instructions
+   * or global prompt reference it (`{slack_user_name}`).
+   */
   context?: boolean;
   /**
    * Slack's 👍 / 👎 feedback buttons under each streamed answer. A click
