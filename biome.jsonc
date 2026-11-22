@@ -28,7 +28,7 @@
       // A tool's code is the text of its functions, hashed in
       // packages/slack/test/tool-versions.json: changing that text needs a new
       // tool version (CONTRIBUTING.md). So nothing here only restyles it.
-      "includes": ["packages/slack/src/tools/**"],
+      "includes": ["packages/slack/src/tools/**", "packages/core/src/sandbox/**"],
       "formatter": { "enabled": false },
       "assist": { "enabled": false },
       "linter": {

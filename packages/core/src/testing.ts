@@ -22,10 +22,10 @@ export interface FakeSession {
 
 /**
  * A fake Voiceflow runtime as a `fetch`. `answer(action, call)` returns the
- * traces for each interact call, or throws to fail it. Records sessions and
- * interact calls.
+ * traces for each interact call (or a promise of them), or throws to fail it.
+ * Records sessions and interact calls.
  */
-export function fakeVoiceflow(answer: (action: VoiceflowAction, call: FakeInteract) => Trace[]) {
+export function fakeVoiceflow(answer: (action: VoiceflowAction, call: FakeInteract) => Trace[] | Promise<Trace[]>) {
   const sessions: FakeSession[] = [];
   const interacts: FakeInteract[] = [];
   let n = 0;
@@ -42,7 +42,8 @@ export function fakeVoiceflow(answer: (action: VoiceflowAction, call: FakeIntera
       const stream = href.endsWith('/stream');
       const call: FakeInteract = { sessionKey: headers.authorization!, action: body.action, variables: body.variables, config: body.config, stream };
       interacts.push(call);
-      const traces = answer(body.action, call);
+      // Awaited, so a fake turn can call a server tool partway through, as the runtime's functions do.
+      const traces = await answer(body.action, call);
       if (!stream) return new Response(JSON.stringify({ traces }), { status: 200 });
       // Server-sent events, the runtime's shape: one `trace` event per trace, then `end`.
       const sse = `${traces.map((t, i) => `event: trace\nid: ${i}\ndata: ${JSON.stringify(t)}\n\n`).join('')}event: end\ndata: {}\n\n`;

@@ -7,6 +7,8 @@
 import { ChannelsError } from './errors.js';
 
 export const DEFAULT_RUNTIME_URL = 'https://general-runtime.voiceflow.com';
+/** A turn's budget, stream included. */
+export const DEFAULT_TIMEOUT_MS = 90_000;
 
 /** Trace types a messaging channel never shows. A `debug` trace that explains a 402 is always returned by the runtime. */
 export const DEFAULT_EXCLUDED_TRACES = ['block', 'path', 'flow', 'debug', 'log'] as const;
@@ -80,7 +82,7 @@ async function resolve(secret: Secret): Promise<string> {
 export function createVoiceflowClient(config: VoiceflowConfig): VoiceflowClient {
   const runtime = (config.runtimeURL ?? DEFAULT_RUNTIME_URL).replace(/\/+$/, '');
   const environment = config.environment ?? 'production';
-  const timeoutMs = config.timeoutMs ?? 90_000;
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const excludeTypes = [...(config.excludeTypes ?? DEFAULT_EXCLUDED_TRACES)];
   const doFetch = config.fetch ?? fetch;
 

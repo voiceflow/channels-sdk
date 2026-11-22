@@ -7,6 +7,7 @@ import { createVoiceflowAgent, type VoiceflowAgent, type VoiceflowAgentOptions }
 import { ChannelsError } from './errors.js';
 import type { ChannelExtension } from './extension.js';
 import { type Importer, loadAdapter } from './loader.js';
+import { isToolCall } from './tool-server.js';
 
 export type ChannelSpec =
   | string
@@ -42,8 +43,13 @@ export interface Channels {
   agent: VoiceflowAgent;
   /** The channel slugs this bot answers on. */
   slugs: string[];
-  /** Handles a platform's webhook request. */
+  /**
+   * Handles a request to a channel's URL: the platform's webhook, or a call
+   * from one of the agent's server tools, which arrives at the same address.
+   */
   webhook(slug: string, request: Request, options?: WebhookOptions): Promise<Response>;
+  /** Handles a server tool's call alone, for a route of its own. */
+  tools(request: Request): Promise<Response>;
 }
 
 export async function createChannels(options: ChannelsOptions): Promise<Channels> {
@@ -85,7 +91,10 @@ export async function createChannels(options: ChannelsOptions): Promise<Channels
     webhook(slug, request, webhookOptions) {
       const handler = webhooks[slug];
       if (!handler) throw new ChannelsError('unknown_channel', `This bot has no "${slug}" channel.`);
+      // A tool's call is checked by its pass; everything else is the platform's, checked by the adapter.
+      if (isToolCall(request)) return agent.tools(request);
       return requests.run(webhookOptions, () => handler(request, webhookOptions));
     },
+    tools: (request) => agent.tools(request),
   };
 }

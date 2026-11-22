@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { listStateAdapters } from '@chat-adapter/catalog';
-import { ChannelsError, capabilities, credentialVars, listChannels, loadAdapter, platformEntry, secretName, secretVars } from '../dist/index.js';
+import { ChannelsError, capabilities, credentialVars, listChannels, loadAdapter, platformEntry, secretVars } from '../dist/index.js';
 
 test('every platform in the catalog has what the loader needs', () => {
   const list = listChannels();
@@ -39,13 +39,12 @@ test('capabilities come from the catalog: only a full "yes" counts', () => {
   }
 });
 
-test('credentials and secret names follow the catalog with one rule', () => {
+test("a platform's credentials, and which of them are secret, come from the catalog", () => {
   const keys = credentialVars('slack').map((v) => v.key);
   assert.ok(keys.includes('SLACK_BOT_TOKEN'));
   assert.ok(secretVars('slack').includes('SLACK_SIGNING_SECRET'));
-  assert.equal(secretName('SLACK_BOT_TOKEN'), 'slack_bot_token');
   for (const { slug } of listChannels()) {
-    for (const key of secretVars(slug)) assert.match(secretName(key), /^[a-z0-9_]+$/, `${slug} ${key}`);
+    for (const key of secretVars(slug)) assert.match(key, /^[A-Z0-9_]+$/, `${slug} ${key}`);
   }
 });
 
