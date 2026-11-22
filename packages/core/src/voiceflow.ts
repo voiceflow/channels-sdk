@@ -7,6 +7,8 @@
 import { ChannelsError } from './errors.js';
 
 export const DEFAULT_RUNTIME_URL = 'https://general-runtime.voiceflow.com';
+/** A turn's budget, stream included. */
+export const DEFAULT_TIMEOUT_MS = 90_000;
 
 /** Trace types a messaging channel never shows. A `debug` trace that explains a 402 is always returned by the runtime. */
 export const DEFAULT_EXCLUDED_TRACES = ['block', 'path', 'flow', 'debug', 'log'] as const;
@@ -80,7 +82,7 @@ async function resolve(secret: Secret): Promise<string> {
 export function createVoiceflowClient(config: VoiceflowConfig): VoiceflowClient {
   const runtime = (config.runtimeURL ?? DEFAULT_RUNTIME_URL).replace(/\/+$/, '');
   const environment = config.environment ?? 'production';
-  const timeoutMs = config.timeoutMs ?? 90_000;
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const excludeTypes = [...(config.excludeTypes ?? DEFAULT_EXCLUDED_TRACES)];
   const doFetch = config.fetch ?? fetch;
 
@@ -105,7 +107,7 @@ export function createVoiceflowClient(config: VoiceflowConfig): VoiceflowClient 
 
   type Send = (sessionKey: string) => Promise<Response>;
 
-  /** Sends with the conversation's session, replacing it once if the runtime refuses it. */
+  /** Sends with the conversation's session, replacing it once if the runtime refuses it or no longer has it. */
   async function withSession({ userID, sessions }: TurnInput, send: Send): Promise<Response> {
     let sessionKey = await sessions.get();
     if (!sessionKey) {
@@ -113,8 +115,10 @@ export function createVoiceflowClient(config: VoiceflowConfig): VoiceflowClient 
       await sessions.set(sessionKey);
     }
     let res = await send(sessionKey);
-    if (res.status === 401 || res.status === 403) {
-      // The session expired or was replaced: start a new one, once.
+    // 401 and 403: the runtime refuses the key. 404: it has no active session for it, which is how a session
+    // that ended while the conversation sat idle answers. Either way the conversation carries on in a new one.
+    if (res.status === 401 || res.status === 403 || res.status === 404) {
+      // Start a new one, once.
       await res.body?.cancel().catch(() => {});
       await sessions.delete();
       sessionKey = await startSession(userID);

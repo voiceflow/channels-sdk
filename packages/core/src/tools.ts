@@ -3,8 +3,10 @@
 // them on the agent once, and from then on they are the agent's to change.
 //
 // A tool is either presentation, a function that returns a custom trace this
-// package renders in the channel, or workspace, a function that calls the
-// channel's own API from Voiceflow with the channel's token as a secret.
+// package renders in the channel, or a server tool, a function that passes the
+// call to your server, which runs it (server-tools.ts). A function that calls
+// an API itself from Voiceflow, with a credential kept as a Voiceflow secret,
+// is `workspace`: nothing this project ships is one.
 
 /** One input of a tool's function. */
 export interface ToolInput {
@@ -12,9 +14,8 @@ export interface ToolInput {
   description: string;
   /**
    * The agent variable or secret the runtime fills this input from, by name
-   * (`slack_user_id`, `slack_bot_token`). The model is never asked for it and
-   * can't change it, so identity and credentials never come from the model.
-   * Without it, the model supplies the input.
+   * (`channels_turn_pass`). The model is never asked for it and can't change
+   * it. Without it, the model supplies the input.
    */
   from?: string;
 }
@@ -40,8 +41,8 @@ export interface ToolDefinition {
   version: number;
   /** What the channel's app needs for this tool to work (Slack OAuth scopes, say). The channel's connect command reads it. */
   requires?: string[];
-  /** `presentation` tools return a trace this package renders; `workspace` tools call the channel's API themselves. */
-  kind: 'presentation' | 'workspace';
+  /** `presentation` tools return a trace this package renders; `server` tools run on your server; `workspace` tools call an API from Voiceflow themselves. */
+  kind: 'presentation' | 'server' | 'workspace';
 }
 
 /** A channel's tools and what they read. */
@@ -52,6 +53,8 @@ export interface ToolSet {
   variables?: Record<string, string>;
   /** Secrets the tools read, by name, with what each holds. Created when missing. */
   secrets?: Record<string, string>;
+  /** Secrets an earlier version's tools read and these don't, by name, with why. An install says so when one is still on the project. */
+  retiredSecrets?: Record<string, string>;
   tools: ToolDefinition[];
 }
 

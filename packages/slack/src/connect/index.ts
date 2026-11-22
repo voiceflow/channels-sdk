@@ -1,8 +1,9 @@
 // `connect slack`: one command from a Voiceflow agent to a working Slack app.
 // It creates the app from this package's manifest (or adds what's missing to
 // an app you have), installs it in the workspace, and installs Slack's default
-// tools on the agent with the app's bot token as a Voiceflow secret. It shows
-// its whole plan before it changes anything, and never publishes the agent.
+// tools on the agent, pointed at your server, which runs them. The app's bot
+// token is for your server alone: it never goes to Voiceflow. Connect shows its
+// whole plan before it changes anything, and never publishes the agent.
 //
 // After that the app and the tools are yours: change them in Slack and in
 // Voiceflow. Running connect again only adds what's missing.
@@ -11,6 +12,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TOOLS_URL_SECRET } from '@voiceflow/channels-sdk';
 import {
   type ApiOptions,
   checkProject,
@@ -41,7 +43,6 @@ export {
 } from './manifest.js';
 
 export const DEFAULT_APP_RECORD_PATH = '.voiceflow/channels-slack-apps.json';
-const BOT_TOKEN_SECRET = 'slack_bot_token';
 
 // ── Which app belongs to which agent ────────────────────────────────────────
 
@@ -129,6 +130,13 @@ export interface ConnectSlackOptions {
    * changes, so it must be up then (the CLI answers for you while it runs).
    */
   requestUrl: string;
+  /**
+   * Where the agent's Slack tools reach your server, which runs them. Default:
+   * `requestUrl`, since `channels.webhook('slack', request)` answers a tool's
+   * call too. Give another address if you serve `channels.tools(request)` on a
+   * route of its own.
+   */
+  toolsUrl?: string;
   /** Use this app instead of the one connect made before, or a new one. */
   appId?: string;
   /**
@@ -189,6 +197,8 @@ export interface ConnectResult {
   botToken?: string;
   /** Only when the app was created now: Slack returns it once. Afterwards it's in the app's Basic Information. */
   signingSecret?: string;
+  /** Where the agent's Slack tools call your server. */
+  toolsUrl?: string;
   /** With `app.userScopes`: a token that acts as the person who installed the app. Kept in memory; never print it. */
   userToken?: string;
   botUserId?: string;
@@ -281,9 +291,10 @@ export async function connectSlack(options: ConnectSlackOptions): Promise<Connec
     install = await installTools(slackTools(options.tools), {
       ...options.voiceflow,
       ...(options.restore ? { restore: options.restore } : {}),
-      secretValues: { [BOT_TOKEN_SECRET]: botToken },
+      secretValues: { [TOOLS_URL_SECRET]: toolsUrlOf(options) },
       onStep: (step) => say(connectStepLine(step)),
     });
+    notes.push(...install.notes);
   }
   return {
     applied: true,
@@ -292,11 +303,20 @@ export async function connectSlack(options: ConnectSlackOptions): Promise<Connec
     created: plan.app.action === 'create',
     botToken,
     ...(signingSecret ? { signingSecret } : {}),
+    ...(install ? { toolsUrl: toolsUrlOf(options) } : {}),
     ...(userToken ? { userToken } : {}),
     botUserId: me.user_id,
     ...(install ? { install } : {}),
     ...(notes.length ? { notes } : {}),
   };
+}
+
+/** Where the agent's tools call your server: the address you gave, or the webhook's own. */
+function toolsUrlOf(options: Pick<ConnectSlackOptions, 'toolsUrl' | 'requestUrl'>): string {
+  const url = options.toolsUrl ?? options.requestUrl;
+  // A turn's pass travels with every call, so the address is https.
+  if (!/^https:\/\/\S+$/.test(url)) throw new TypeError(`connectSlack: the tools URL must be an https address, not "${url}"`);
+  return url;
 }
 
 /** Slack refuses icons outside 512 to 2000 pixels (measured: 100 and 3000 refused, 512x512 and 800x500 taken) and anything but an image. */
@@ -416,8 +436,7 @@ export async function planConnect(slack: SlackApi, options: ConnectSlackOptions)
     install = await installTools(slackTools(options.tools), {
       ...voiceflow,
       ...(options.restore ? { restore: options.restore } : {}),
-      // A stand-in, so the plan shows the secret getting a value: the real one exists once the app is installed.
-      secretValues: { [BOT_TOKEN_SECRET]: 'planned' },
+      secretValues: { [TOOLS_URL_SECRET]: toolsUrlOf(options) },
       dryRun: true,
     });
   }
@@ -470,21 +489,24 @@ function planLines(plan: ConnectPlan, options: ConnectSlackOptions): string[] {
     lines.push(`  + set its icon to the agent's avatar in Voiceflow (${DEFAULT_ICON_NAME} if Slack won't take it): ${app.icon.url}`);
   else if (app.icon?.from === 'option') lines.push(`  + set its icon to the image: ${app.icon.url}`);
   else if (app.icon) lines.push(`  + set its icon to ${DEFAULT_ICON_NAME} (the agent has no avatar in Voiceflow)`);
-  lines.push(
-    `  + install it in ${plan.team.name} (its bot token stays in memory${plan.voiceflow ? ` and goes to Voiceflow as the ${BOT_TOKEN_SECRET} secret` : ''})`,
-  );
+  lines.push(`  + install it in ${plan.team.name} (its bot token is for your server alone: it never goes to Voiceflow)`);
   lines.push(
     `Voiceflow: project "${plan.project.name}" (${plan.project.id}) in workspace ${plan.project.workspaceID}, environment ${plan.environment} (nothing is published)`,
   );
-  if (plan.voiceflow) lines.push(...plan.voiceflow.steps.map((s) => `  ${connectStepLine(s)}`));
-  else lines.push('  = no tools installed (tools: false)');
+  if (plan.voiceflow) {
+    lines.push(...plan.voiceflow.steps.map((s) => `  ${connectStepLine(s)}`));
+    if (plan.voiceflow.steps.some((s) => s.kind === 'secret' && s.name === TOOLS_URL_SECRET)) {
+      lines.push(`    Slack's tools run on your server: the agent calls them at ${toolsUrlOf(options)}`);
+    }
+    lines.push(...plan.voiceflow.notes.map((note) => `  ! ${note}`));
+  } else lines.push('  = no tools installed (tools: false)');
   return lines;
 }
 
-/** A plan step as a line; the bot token's value is described, never shown. */
+/** A plan step as a line, with what the tools URL secret holds said in words. */
 export function connectStepLine(step: Step): string {
-  if (step.kind === 'secret' && step.name === BOT_TOKEN_SECRET && step.value === 'set') {
-    return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${secretState(step)}; value: the app's bot token)`;
+  if (step.kind === 'secret' && step.name === TOOLS_URL_SECRET && step.value === 'set') {
+    return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${secretState(step)}; value: where your server runs the tools)`;
   }
   return formatStep(step);
 }

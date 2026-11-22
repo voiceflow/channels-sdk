@@ -173,6 +173,8 @@ export interface InstallResult {
   applied: boolean;
   /** Problems found after writing, such as a `{name}` Voiceflow couldn't resolve. */
   problems: string[];
+  /** What the install leaves for you to do, each a line for a person: a secret nothing reads any more, say. */
+  notes: string[];
 }
 
 interface Remote {
@@ -304,7 +306,11 @@ export async function installTools(set: ToolSet, options: InstallOptions): Promi
   const changes = steps.some((s) => s.action === 'create' || s.action === 'update' || s.action === 'attach' || (s.kind === 'secret' && s.value === 'set'));
   steps.push({ kind: 'compile', action: changes && options.compile !== false ? 'compile' : 'skip' });
 
-  const result: InstallResult = { project, environment: env, steps, applied: false, problems: [] };
+  // A secret an earlier version's tools read is never deleted here: something of yours may read it too.
+  const notes = Object.entries(set.retiredSecrets ?? {})
+    .filter(([name]) => remote.secrets.some((s) => s.name === name))
+    .map(([name, why]) => `The ${name} secret is still on ${project.name}. ${why} Delete it in Voiceflow (More → Secrets) unless something of yours reads it.`);
+  const result: InstallResult = { project, environment: env, steps, applied: false, problems: [], notes };
   if (options.dryRun) return result;
 
   const q = { projectID: project.id, environmentAlias: env };
@@ -527,7 +533,7 @@ export async function uninstallTools(set: ToolSet, options: UninstallOptions): P
   }
   const changes = steps.some((s) => s.action === 'remove' || s.action === 'detach');
   steps.push({ kind: 'compile', action: changes && options.compile !== false ? 'compile' : 'skip' });
-  const result: InstallResult = { project, environment: env, steps, applied: false, problems: [] };
+  const result: InstallResult = { project, environment: env, steps, applied: false, problems: [], notes: [] };
   if (options.dryRun) return result;
 
   const q = { projectID: project.id, environmentAlias: env };

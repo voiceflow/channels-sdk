@@ -67,7 +67,10 @@ test('who and where reach the agent as slack_* variables on every turn', async (
   t.after(slack.close);
 
   await send(slackEvent(mention('hello')));
-  assert.deepEqual(vf.interacts[0].variables, {
+  // Beside them goes the turn's pass, which the agent's server tools send back (slack.tools.contract.test.mjs).
+  const { channels_turn_pass: pass, ...context } = vf.interacts[0].variables;
+  assert.match(pass, /^v1\./);
+  assert.deepEqual(context, {
     slack_user_id: 'U2',
     slack_user_name: 'A Person',
     slack_user_title: 'Head of Support',
@@ -102,7 +105,13 @@ test("the agent's own variables win over the context, and context: false sets no
   const off = await setup(() => [say('Hi')], { extension: { context: false } });
   t.after(off.slack.close);
   await off.send(slackEvent(mention('hello')));
-  assert.deepEqual(off.vf.interacts[0].variables, {});
+  assert.deepEqual(Object.keys(off.vf.interacts[0].variables), ['channels_turn_pass'], 'only the pass its tools need');
+
+  // With the workspace tools off too, a turn sets nothing at all.
+  const bare = await setup(() => [say('Hi')], { extension: { context: false, workspaceTools: false } });
+  t.after(bare.slack.close);
+  await bare.send(slackEvent(mention('hello')));
+  assert.deepEqual(bare.vf.interacts[0].variables, {});
 });
 
 test("👀 shows on the person's message while the agent works, and comes off when it answers", async (t) => {

@@ -44,6 +44,37 @@ test('starts a session once and reuses it for the next turn', async () => {
   assert.deepEqual(rt.calls[1].body.config.excludeTypes, ['block', 'path', 'flow', 'debug', 'log']);
 });
 
+test('a session the runtime no longer has is replaced, so a conversation left idle carries on', async () => {
+  // Voiceflow answers 404 when there is no active session for the key: one that ended while the thread sat idle.
+  for (const stream of [false, true]) {
+    let n = 0;
+    const rt = runtime((url) => {
+      if (url.endsWith('/session')) return ok({ sessionKey: `sk-${++n}` });
+      if (rt.calls.at(-1).headers.authorization === 'sk-idle') return ok({ message: 'No active session' }, 404);
+      return stream ? new Response('event: end\ndata: {}\n\n', { status: 200 }) : ok({ traces: [] });
+    });
+    const sessions = memorySessions();
+    await sessions.set('sk-idle');
+    const client = createVoiceflowClient({ apiKey: 'k', projectID: 'p1', fetch: rt.fetch });
+    const input = { userID: 'u', action: { type: 'text', payload: 'still there?' }, sessions };
+    if (stream) for await (const _ of (await client.stream(input)).traces);
+    else await client.turn(input);
+    assert.equal(sessions.peek(), 'sk-1', stream ? 'streamed' : 'whole');
+    assert.equal(rt.calls.filter((c) => c.url.endsWith('/session')).length, 1, 'one new session');
+    assert.equal(rt.calls.at(-1).headers.authorization, 'sk-1', 'and the turn is sent again with it');
+  }
+  // A runtime that has no session for the new key either is a failure, not a loop.
+  const rt = runtime((url) => (url.endsWith('/session') ? ok({ sessionKey: 'sk-new' }) : ok({ message: 'No active session' }, 404)));
+  const sessions = memorySessions();
+  await sessions.set('sk-idle');
+  const client = createVoiceflowClient({ apiKey: 'k', projectID: 'p1', fetch: rt.fetch });
+  await assert.rejects(
+    client.turn({ userID: 'u', action: { type: 'text', payload: 'x' }, sessions }),
+    (e) => e.code === 'voiceflow_http' && /404/.test(e.message),
+  );
+  assert.equal(rt.calls.filter((c) => c.url.endsWith('/session')).length, 1);
+});
+
 test('a rejected session key is replaced once', async () => {
   let n = 0;
   const rt = runtime((url) => {

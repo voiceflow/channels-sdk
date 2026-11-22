@@ -1,5 +1,6 @@
-// Slack sends every event, button click, dialog and slash command here.
-// `connect slack` points the app at <your public URL>/api/slack.
+// Slack sends every event, button click, dialog and slash command here, and
+// the agent's Slack tools call here too: they run on this server, with its own
+// SLACK_BOT_TOKEN. `connect slack` points both at <your public URL>/api/slack.
 
 import { createMemoryState } from '@chat-adapter/state-memory';
 import { createRedisState } from '@chat-adapter/state-redis';
@@ -28,5 +29,6 @@ function bot(): Promise<Channels> {
 
 export async function POST(request: Request) {
   // Slack wants an answer within three seconds, so the agent's turn finishes after the response.
+  // A tool's call is answered within the request: the agent is waiting for it.
   return (await bot()).webhook('slack', request, { waitUntil: (task) => after(() => task) });
 }

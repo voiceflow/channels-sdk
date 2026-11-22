@@ -13,7 +13,7 @@ behaviours, its tools, and the `connect` command that makes its app.
 
 | Import | What it is |
 |---|---|
-| `@voiceflow/channels-sdk` | `createChannels`, the agent, rendering, the extension API. Runs anywhere. |
+| `@voiceflow/channels-sdk` | `createChannels`, the agent, rendering, server tools, the extension API. |
 | `@voiceflow/channels-sdk/install` | `installTools` / `uninstallTools`: puts a channel's tools on an agent. Node only. |
 | `@voiceflow/channels-sdk/testing` | Fakes of Voiceflow's API and runtime, and `runFunction`, which runs a tool as Voiceflow's sandbox does. |
 | `voiceflow-channels` (bin) | `voiceflow-channels connect <channel>`: hands off to `@voiceflow/channels-<channel>/connect`. |
@@ -34,8 +34,85 @@ A channel package gives `createChannels` an extension (`ChannelExtension`):
 - `input`: rewrite the person's message before the agent sees it.
 - `turnStarted` / `turnEnded`: around each turn (a reaction while it works).
 - `traces`: handlers for custom traces, by type, which show a tool's output natively.
+- `tools`: the channel's [server tools](#server-tools), callable only from its own conversations.
 - `attach`: the bot's own events (the assistant panel, reactions, slash commands).
 - `adapterDefaults`: the adapter options the channel turns on.
+
+## Server tools
+
+A server tool is a tool the agent calls whose code runs in your app. The agent
+holds only a small Voiceflow function that passes the call on. Your server
+runs it, knowing which conversation and person it is for.
+
+```ts
+import { createChannels, type ServerTool } from '@voiceflow/channels-sdk';
+
+const lookUpOrder: ServerTool = {
+  name: 'look_up_order',
+  description: 'Look up an order by its number, when the person asks about one.',
+  inputs: { number: 'The order number.' },
+  async run(input, turn) {
+    // turn.thread is the conversation; turn.userId is the person, as the channel identifies them.
+    const order = await orders.find(input.number, { customer: turn.userId });
+    if (!order) return { ok: false, result: "I can't find that order." };
+    return { ok: true, result: `Order ${order.number} is ${order.status}.` };
+  },
+};
+
+const channels = await createChannels({ voiceflow, channels: [slack()], state, tools: [lookUpOrder] });
+```
+
+- **Credentials stay in your app.** A tool uses your server's environment. No
+  token or key goes to Voiceflow.
+- **The model never chooses who a tool acts for.** On every turn the server
+  makes a pass naming the thread and the person, signed with a key only the
+  server holds, and sets it as the `channels_turn_pass` variable. The agent's
+  function sends it back with the call. A call without a pass this server
+  made, or with one whose turn has ended, does nothing. Only the inputs a tool
+  declares reach it, each as a string.
+- **Calls arrive where the channel's webhook does.** `channels.webhook(slug,
+  request)` answers a tool's call as well as the platform's events, so there
+  is nothing more to route. `channels.tools(request)` answers them on a route
+  of their own.
+- **Approval.** `approval: true` asks the person before every call, showing
+  every input. A tool that only sometimes needs it returns
+  `askFirst('Refund this order?', details)` from `run` while `turn.approved`
+  is false, and runs again once the person approves. The request is a card
+  with Approve and Cancel (or, where a channel has no buttons, a reply of
+  `approve` or `cancel`). Only the person who asked can approve it, from where
+  it was asked, and it acts once.
+- **What they approve is what they see.** A request's text is shown whole, so
+  one too long to show (12,000 characters) isn't asked and isn't done. Put
+  anything the model wrote through `quoted()`, so it can't pass for what your
+  tool says. Give `askFirst` a third argument with the IDs your tool resolved
+  names to, and that is what runs.
+- **`requireApproval`** on `createChannels` turns asking off or on, for every
+  tool or by name. A tool that only reads says `approval: false`, and `true`
+  leaves it alone: its outputs go back to the agent, which an approval can't do.
+- **`toolSecret`** signs the pass. By default the key is derived from your
+  Voiceflow API key, so every instance has it already. Give your own (32 or
+  more random characters, the same on every instance) to keep the two apart.
+- **State.** A pass needs no shared state. Approval requests are kept in the
+  bot's state until they're answered or expire (ten minutes, or
+  `approvalTimeoutMs`), so on more than one instance they need a shared state
+  adapter, as conversations do.
+
+Put your tools on the agent with the installer. The secret holds the address
+the agent calls: a route that runs `channels.webhook` or `channels.tools`.
+
+```ts
+import { serverToolSet, TOOLS_URL_SECRET } from '@voiceflow/channels-sdk';
+import { installTools } from '@voiceflow/channels-sdk/install';
+
+await installTools(serverToolSet('my-app', [lookUpOrder]), {
+  apiKey, projectID, environment: 'development',
+  secretValues: { [TOOLS_URL_SECRET]: 'https://<your server>/api/slack' },
+});
+```
+
+Raise a tool's `version` when its name, description, inputs or outputs change,
+and install again. A change to what `run` does needs no install: it ships
+with your server.
 
 ## Installing tools
 
@@ -54,16 +131,19 @@ public API:
 - **Secrets are made restricted, without a value**, and the value you give is
   written to the environment's draft and published versions only. Values are
   never printed or returned.
-- **Wired inputs** (`from: 'slack_user_id'`) default to a variable or secret and
-  are not the model's to fill.
+- **Wired inputs** (`from: 'channels_turn_pass'`) default to a variable or
+  secret and are not the model's to fill.
+- **A secret nothing reads any more** (`retiredSecrets` on the set) is never
+  deleted: the result's `notes` say it is still there.
 
 `uninstallTools` detaches the set's tools and deletes their functions, keeping
 any function you edited.
 
 A tool is a `ToolDefinition`: its Voiceflow function's code (written as a plain
 named function, made into one with `functionSource`), inputs, outputs, paths, a
-version, the OAuth scopes it needs, and whether it's a presentation tool (returns
-a trace the channel shows) or a workspace tool (calls the platform itself).
+version, the OAuth scopes it needs, and its kind: a presentation tool returns
+a trace the channel shows, and a server tool (`serverToolDefinition`) passes
+the call to your server.
 Build the code in a getter (`get code() { return functionSource(main, helpers); }`):
 `functionSource` reads the functions' source text, which a bundler's minifier
 rewrites, and a getter means only an install reads it. Install from Node, not

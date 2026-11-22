@@ -76,12 +76,17 @@ run.
   launch buttons as suggested prompts, forms in Slack dialogs, tables and
   charts, reactions, `/ask`, the App Home tab and feedback buttons.
   `slack({ … })` turns each of Slack's own behaviours on or off.
-- **Tools for the agent.** Connect installs 14 Voiceflow functions: post in a
-  channel, message someone, read a channel, find a person, schedule, pin,
-  bookmark, write a canvas, send a file, reply privately, and more.
+- **Tools for the agent.** Connect installs 14 tools: post in a channel,
+  message someone, read a channel, find a person, schedule, pin, bookmark,
+  write a canvas, send a file, reply privately, and more.
 - **They act only for the person asking.** Who that is comes from Slack's
   verified event, never from the model, and a tool reads or posts only where
-  that person can.
+  that person can. Anything that leaves the conversation waits for their
+  approval.
+- **Your credentials stay on your server.** The tools that act in Slack run
+  there, so the bot token never goes to Voiceflow.
+- **Your own tools, the same way.** A server tool is a function in your app
+  that the agent can call, with the conversation and the person it is for.
 - **One command to set up.** Connect makes the Slack app from a manifest,
   installs it, and wires the tools to your agent. It never publishes your
   agent, and never prints a secret.
@@ -105,8 +110,8 @@ run.
   Chat SDK adapters, and the design rules.
 - [`@voiceflow/channels-slack`](packages/slack/README.md): `connect slack`, every
   Slack option, the tools, and the `slack_*` variables.
-- [`@voiceflow/channels-sdk`](packages/core/README.md): the API, channel
-  extensions, and installing tools.
+- [`@voiceflow/channels-sdk`](packages/core/README.md): the API, server tools,
+  channel extensions, and installing tools.
 - [Staying current with Chat SDK](docs/upstream.md).
 - [Voiceflow's documentation](https://www.voiceflow.com/docs), for building the
   agent itself.

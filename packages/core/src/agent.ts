@@ -13,8 +13,10 @@ import { type CustomTrace, type DeliveryOptions, deliverStream, deliverWhole, ty
 import { ChannelsError } from './errors.js';
 import type { ChannelExtension, ExtensionHost, PinPrompts, RunOptions, TurnContext } from './extension.js';
 import { createRenderer, matchTypedChoice, parseActionId, type RenderOptions, retired } from './render.js';
+import { PASS_VARIABLE, type ServerTool } from './server-tools.js';
+import { type ApprovalPolicy, createToolServer } from './tool-server.js';
 import { type Choice, type Translation, translate } from './translate.js';
-import { createVoiceflowClient, type SessionStore, type VoiceflowAction, type VoiceflowConfig } from './voiceflow.js';
+import { createVoiceflowClient, DEFAULT_TIMEOUT_MS, type SessionStore, type VoiceflowAction, type VoiceflowConfig } from './voiceflow.js';
 
 export type { PinPrompts, TurnContext } from './extension.js';
 
@@ -41,6 +43,28 @@ export interface VoiceflowAgentOptions extends RenderOptions {
   variables?: (ctx: TurnContext) => Record<string, unknown> | Promise<Record<string, unknown>>;
   /** What only some platforms have, one extension per channel (`slack()` from @voiceflow/channels-slack). */
   extensions?: readonly ChannelExtension[];
+  /**
+   * Your own server tools: tools the agent calls whose code runs here, with
+   * the conversation and the person it is acting for. Install them on the agent
+   * with `installTools(serverToolSet('my-app', tools), …)`.
+   */
+  tools?: readonly ServerTool[];
+  /**
+   * Signs each turn's pass, which a server tool's call sends back so the
+   * server knows which conversation it is for. Default: a key derived from the
+   * Voiceflow API key. Give your own (32 or more random characters, the same
+   * on every instance) to keep the two apart.
+   */
+  toolSecret?: string | (() => string | Promise<string>);
+  /**
+   * Which server tools ask the person before they act. By default each tool
+   * decides: Slack's ask before anything that leaves the conversation. `false`
+   * never asks; `true` asks before every call; or say per tool, by name
+   * (`{ slack_post_to_channel: false }`).
+   */
+  requireApproval?: ApprovalPolicy;
+  /** How long a request for approval waits for its answer, in milliseconds. After that it has expired. Default: 10 minutes. */
+  approvalTimeoutMs?: number;
   /**
    * Keeps work running after a webhook has answered. `createChannels` passes
    * the platform's `waitUntil`; without one, the work runs unawaited.
@@ -100,6 +124,8 @@ export interface VoiceflowAgent {
   run(thread: AnyThread, action: VoiceflowAction, options?: RunOptions): Promise<void>;
   /** Registers the mention, subscribed-message and button handlers on a bot, and each extension's own. */
   attach(bot: Chat<any, any>): void;
+  /** Answers a server tool's call: the request the agent's tool makes from Voiceflow. Needs `attach` first. */
+  tools(request: Request): Promise<Response>;
 }
 
 const DEFAULT_ERROR = 'Sorry, something went wrong. Please try again.';
@@ -119,6 +145,9 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
   const client = createVoiceflowClient(options.voiceflow);
   const extensions = new Map((options.extensions ?? []).map((e) => [e.slug, e]));
   const extensionOf = (thread: AnyThread) => extensions.get(thread.adapter.name);
+  let attached: Chat<any, any> | undefined;
+  if (typeof options.toolSecret === 'string' && options.toolSecret.length < 32) throw new TypeError('`toolSecret` must be 32 or more random characters.');
+  if (options.approvalTimeoutMs !== undefined && !(options.approvalTimeoutMs > 0)) throw new TypeError('`approvalTimeoutMs` must be more than 0.');
 
   const report = (error: unknown, ctx: Partial<TurnContext> = {}) => {
     try {
@@ -136,6 +165,24 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       return fallback;
     }
   };
+
+  const toolServer = createToolServer({
+    tools: options.tools ?? [],
+    extensions,
+    secret: async () => {
+      const own = typeof options.toolSecret === 'function' ? await options.toolSecret() : options.toolSecret;
+      if (own) return own;
+      const { apiKey } = options.voiceflow;
+      return typeof apiKey === 'function' ? apiKey() : apiKey;
+    },
+    // A pass lasts as long as a turn can, and a little longer for the last call's trip.
+    passTtlMs: (options.voiceflow.timeoutMs ?? DEFAULT_TIMEOUT_MS) + 30_000,
+    requireApproval: options.requireApproval,
+    approvalTtlMs: options.approvalTimeoutMs,
+    bot: () => attached,
+    capabilities: capabilitiesOf,
+    report,
+  });
 
   async function readState(thread: AnyThread): Promise<ConversationState> {
     const state = (await thread.state) as Record<string, unknown> | null;
@@ -179,6 +226,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
     const caps = capabilitiesOf(thread);
     const extension = extensionOf(thread);
     let retiring: Promise<void> = Promise.resolve();
+    let turnId: string | undefined;
     if (extension?.turnStarted) await quietly(ctx, () => extension.turnStarted!(ctx), undefined);
     try {
       // The last turn's buttons come off while this turn runs.
@@ -194,10 +242,16 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
         const shaped = await quietly(ctx, () => extension.input!(said, { ...ctx, isNew: !before.sessionKey }), said);
         action = { ...action, payload: shaped };
       }
-      const variables = {
+      const variables: Record<string, unknown> = {
         ...(extension?.variables ? await quietly(ctx, () => extension.variables!(ctx), {}) : {}),
         ...((await options.variables?.(ctx)) ?? {}),
       };
+      if (toolServer.offers(thread)) {
+        // Set last, and on every turn: nothing else can stand in for it, and an earlier turn's pass never stays on the session.
+        const minted = await toolServer.mint(ctx);
+        variables[PASS_VARIABLE] = minted.pass;
+        turnId = minted.turn;
+      }
       const input = { userID: voiceflowUserID(thread.id), action, variables, sessions: sessionStore(thread) };
       const renderer = createRenderer(caps, options);
       const shown: ShownMessage[] = [];
@@ -242,6 +296,8 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       const text = options.errorMessage === undefined ? DEFAULT_ERROR : options.errorMessage;
       if (text !== null) await thread.post(text).catch(() => {});
     } finally {
+      // The turn is over: its pass stops working.
+      if (turnId) await quietly(ctx, () => toolServer.end(turnId!), undefined);
       if (extension?.turnEnded) await quietly(ctx, () => extension.turnEnded!(ctx), undefined);
     }
   }
@@ -249,6 +305,8 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
   const agent: VoiceflowAgent = {
     async reply(thread, message) {
       const text = withoutBotMention(message.text ?? '', thread.adapter, options.userName);
+      // Where a channel has no buttons, a request for approval is answered in words.
+      if (!capabilitiesOf(thread).buttons && (await toolServer.typed(thread, message.author?.userId, text))) return;
       const state = await readState(thread);
       const picked = state.choices?.length ? matchTypedChoice(text, state.choices) : null;
       await runTurn(
@@ -259,6 +317,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
     },
 
     async choose(event) {
+      if (await toolServer.choose(event)) return;
       if (!event.thread) return;
       const thread = event.thread as AnyThread;
       const feedbackActionId = options.feedbackActionId ?? extensionOf(thread)?.feedbackActionId;
@@ -287,7 +346,10 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       await runTurn({ thread, message, userId: userId ?? message?.author?.userId }, action, { pin });
     },
 
+    tools: (request) => toolServer.handle(request),
+
     attach(bot) {
+      attached = bot;
       // A direct message with no DM handler counts as a mention, so this covers DMs too.
       bot.onNewMention(async (thread, message) => {
         await thread.subscribe();

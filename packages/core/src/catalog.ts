@@ -74,12 +74,3 @@ export function secretVars(slug: string): string[] {
   platformEntry(slug);
   return getSecretEnvVars(slug).map((v) => v.key);
 }
-
-/**
- * The name a catalog env var takes in Voiceflow's secrets manager. One rule
- * for every adapter, so no list is kept by hand: `SLACK_BOT_TOKEN` becomes
- * `slack_bot_token`.
- */
-export function secretName(envKey: string): string {
-  return envKey.trim().toLowerCase();
-}

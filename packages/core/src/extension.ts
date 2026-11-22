@@ -6,6 +6,7 @@
 import type { Chat, Message, SentMessage, Thread } from 'chat';
 import type { Feedback } from './agent.js';
 import type { Post } from './render.js';
+import type { ServerTool } from './server-tools.js';
 import type { Choice } from './translate.js';
 import type { Trace, VoiceflowAction } from './voiceflow.js';
 
@@ -81,6 +82,8 @@ export interface ChannelExtension {
   turnEnded?(ctx: TurnContext): void | Promise<void>;
   /** Custom traces this channel shows natively, by trace type: its presentation tools. */
   traces?: Record<string, TraceHandler>;
+  /** Tools this channel runs on your server, callable only from its own conversations: its server tools. */
+  tools?: readonly ServerTool[];
   /** Registers the channel's own events on the bot. */
   attach?(bot: Chat<any, any>, host: ExtensionHost): void;
 }
