@@ -23,14 +23,15 @@ Slack: workspace Acme (T0123)
   + create app "Support" from the manifest: 21 bot scopes, 10 events, the assistant panel, the Home tab, /ask
     requests go to https://<your server>/api/slack (Slack checks it answers while it creates the app)
   + set its icon to the agent's avatar in Voiceflow: https://…/avatar.png
-  + install it in Acme (its bot token stays in memory and goes to Voiceflow as the slack_bot_token secret)
+  + install it in Acme (its bot token is for your server alone: it never goes to Voiceflow)
 Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment development (nothing is published)
   + variable slack_user_id
   …
-  + secret slack_bot_token (new, restricted; value: the app's bot token)
+  + secret channels_tools_url (new, restricted; value: where your server runs the tools)
   + tool slack_react: create and attach
   …
   ~ compile the environment (nothing is published)
+    Slack's tools run on your server: the agent calls them at https://<your server>/api/slack
 ```
 
 - **Slack login:** the [Slack CLI](https://tools.slack.dev/slack-cli)'s
@@ -44,10 +45,15 @@ Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment developme
 - **Slack checks the request URL** while it makes the app. Point your tunnel at
   `--port` (default 3000) while connect runs, and connect answers the check
   itself. When your server already holds that port, it answers instead.
-- **It never publishes.** The tools land on the environment's draft, compiled,
-  so you can try them in Voiceflow's test chat first. **Your bot runs the
-  environment's published version**, so publish the environment in Voiceflow
-  before you try the tools in Slack: until then the agent there doesn't have them.
+- **The bot token stays with your server.** The tools that act in Slack run
+  on your server, so Voiceflow gets only the address the agent calls them at:
+  the webhook URL, or `--tools-url` for a route of their own. When that
+  address changes, run connect again.
+- **It never publishes.** The tools land on the environment's draft, compiled.
+  **Your bot runs the environment's published version**, so publish the
+  environment in Voiceflow before you try the tools in Slack: until then the
+  agent there doesn't have them. In Voiceflow's test chat the tools that act
+  in Slack say they only work there.
 - **`--workspace <id>`** stops connect, changing nothing in Slack or Voiceflow,
   unless the project is in that Voiceflow workspace.
 - **Running it again only adds what's missing.** It reuses the app it made (kept
@@ -64,8 +70,9 @@ Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment developme
   refuses an icon you named, connect still finishes and says how to set one.
 - `--dry-run` shows the plan and stops. `--yes` skips the question.
   `--no-tools` makes the app and installs no tools. `--no-workspace-tools`
-  installs only the presentation tools. `--print-manifest` prints the app's
-  manifest, to paste into api.slack.com ("Create New App", "From a manifest").
+  installs only the presentation tools (pass `workspaceTools: false` to
+  `slack()` then). `--print-manifest` prints the app's manifest, to paste into
+  api.slack.com ("Create New App", "From a manifest").
 - `voiceflow-channels disconnect slack` deletes the app. The tools stay on the
   agent unless you add `--remove-tools`.
 
@@ -87,7 +94,8 @@ const channels = await createChannels({
 ```
 
 Route `POST /api/slack` to `channels.webhook('slack', request)`. Events, button
-clicks, dialogs and the slash command all arrive there. In Next.js, make the
+clicks, dialogs and the slash command all arrive there, and so do the calls the
+agent's Slack tools make. In Next.js, make the
 bot on the first request rather than at build time, as
 [`examples/nextjs-slack`](../../examples/nextjs-slack/app/api/slack/route.ts) does:
 the build has no Slack signing secret. `slack()` carries the Slack adapter's
@@ -116,11 +124,12 @@ The `slack_*` variables: `slack_user_id`, `slack_user_name`, `slack_user_title`,
 `slack_channel_name`, `slack_channel_type`, `slack_thread_ts`,
 `slack_message_ts`, `slack_viewing_channel_id`.
 
-**The tools see them; the agent sees only the ones you reference.** The Slack
-tools are wired to these variables, so they always act for the right person.
-The agent itself sees a variable only where its instructions or global prompt
+**They are for the agent's prompts, and the agent sees only the ones you
+reference.** It sees a variable only where its instructions or global prompt
 reference it: a variable is stored data, not the model's context
 ([Voiceflow's docs](https://www.voiceflow.com/docs/documentation/build/data/variables#stored-values-and-model-context)).
+Slack's tools don't read them: they take who is asking from the turn itself
+([Who a tool acts for](#who-a-tool-acts-for)).
 Without a reference, asked "what time zone am I in?", the agent rightly says
 it can't tell. To let it know who it's talking to, add a line like this to the
 global prompt:
@@ -137,34 +146,59 @@ between turns makes every response slower and more expensive
 ## Slack's tools
 
 Connect installs these on the agent, as Voiceflow functions attached as tools.
-Presentation tools return a trace this package shows natively; workspace tools
-call Slack from Voiceflow with the `slack_bot_token` secret.
 
-| Tool | Kind | Scopes | What it does |
-|---|---|---|---|
-| `slack_react` | presentation | reactions:write | Add an emoji reaction to the person's latest message. |
-| `slack_show_table` | presentation | — | Show data as a native Slack table. |
-| `slack_show_chart` | presentation | — | Show numbers as a native Slack chart (bar, line, area or pie). |
-| `slack_reply_privately` | presentation | — | Send the person a message only they can see. |
-| `slack_ask_form` | presentation | — | A button that opens a Slack dialog; the answers come back as the person's next message. |
-| `slack_post_to_channel` | workspace | chat:write, channels:read, groups:read, channels:history, groups:history | Post in a channel for the person. |
-| `slack_message_person` | workspace | chat:write, im:write, im:history, users:read, users:read.email | Send someone a direct message for the person. |
-| `slack_read_channel` | workspace | channels:history, groups:history, channels:read, groups:read, users:read | Read a channel's recent messages. |
-| `slack_find_person` | workspace | users:read, users:read.email | Look people up by name, title or email. |
-| `slack_schedule_message` | workspace | chat:write, channels:read, groups:read | Schedule a message for later. |
-| `slack_pin_message` | workspace | pins:write, channels:read, groups:read | Pin a message. |
-| `slack_add_bookmark` | workspace | bookmarks:write, channels:read, groups:read | Add a link to a channel's bookmarks bar. |
-| `slack_create_canvas` | workspace | canvases:write | Write a Slack canvas, shared with the person. |
-| `slack_send_file` | workspace | files:write | Send a text file in the conversation. |
+- A **presentation** tool returns a trace this package shows natively.
+- A **workspace** tool acts in Slack. Its function on the agent only passes the
+  call to your server, which runs it with the Slack adapter's own client. No
+  Slack credential goes to Voiceflow.
+
+| Tool | Kind | Scopes | What it does | Asks the person first |
+|---|---|---|---|---|
+| `slack_react` | presentation | reactions:write | Add an emoji reaction to the person's latest message. | — |
+| `slack_show_table` | presentation | — | Show data as a native Slack table. | — |
+| `slack_show_chart` | presentation | — | Show numbers as a native Slack chart (bar, line, area or pie). | — |
+| `slack_reply_privately` | presentation | — | Send the person a message only they can see. | — |
+| `slack_ask_form` | presentation | — | A button that opens a Slack dialog; the answers come back as the person's next message. | — |
+| `slack_post_to_channel` | workspace | chat:write, channels:read, groups:read, channels:history, groups:history | Post in a channel for the person. | Always |
+| `slack_message_person` | workspace | chat:write, im:write, im:history, users:read, users:read.email | Send someone a direct message for the person. | Unless it's to themselves |
+| `slack_read_channel` | workspace | channels:history, groups:history, channels:read, groups:read, users:read | Read a channel's recent messages. | No |
+| `slack_find_person` | workspace | users:read, users:read.email | Look people up by name, title or email. | No |
+| `slack_schedule_message` | workspace | chat:write, channels:read, groups:read, users:read | Schedule a message for later. | Unless it's a reply in this thread |
+| `slack_pin_message` | workspace | pins:write, channels:read, groups:read | Pin a message. | For another channel |
+| `slack_add_bookmark` | workspace | bookmarks:write, channels:read, groups:read | Add a link to a channel's bookmarks bar. | Outside a direct message |
+| `slack_create_canvas` | workspace | canvases:write | Write a Slack canvas, shared with the person. | No |
+| `slack_send_file` | workspace | files:write | Send a text file in the conversation. | No |
 
 ### Who a tool acts for
 
 The bot can reach more than the person talking to it, so the workspace tools
-act only within what that person can see:
+act only within what that person can see, and only for the conversation they
+were called from:
 
-- **Identity comes from Slack, never the model.** The person, channel and thread
-  are wired from the `slack_*` variables this package sets from the verified
-  event, so the agent can't fill them in.
+- **Who is asking comes from Slack, never the model.** On every turn your
+  server makes a pass that names the thread and the person, from Slack's
+  verified event, and signs it with a key only the server holds. The agent's
+  tool sends the pass back with its call, and the server acts for the
+  conversation the pass names: nothing in the call can name another.
+- **A call from anywhere else does nothing.** Voiceflow's test chat, a web
+  chat on the same agent, or anyone calling your server directly has no pass.
+  A pass stops working when its turn ends, wherever the bot's state is shared
+  (Redis). Otherwise it lasts as long as a turn can, plus 30 seconds: two
+  minutes by default.
+- **What leaves the conversation waits for approval.** Before a post in a
+  channel, a message to someone else, or a link on a channel's bookmarks bar,
+  the agent posts a request with **Approve** and **Cancel** in the thread.
+  Only the person who asked can approve it, with a click Slack signs, and the
+  tool then acts once. What stays in the conversation (a reminder in this
+  thread, a file, a canvas) and what only reads needs no approval.
+- **What they approve is what they see.** The request shows where it goes, by
+  the channel or the person's real name and title, and the whole message,
+  quoted. A message too long to show in full (12,000 characters) isn't asked
+  about and isn't sent. What runs is the channel or person the request showed,
+  by ID.
+- **`requireApproval`** on `createChannels` changes when a tool asks: `false`
+  never asks, `true` asks before every tool that acts, or say per tool
+  (`{ slack_post_to_channel: false }`).
 - **Only where the person is.** A tool that reads or posts in a channel checks
   the person is a member of it first (the conversation they're in always
   passes), and refuses otherwise. The refusal is the same whether the channel
@@ -172,10 +206,15 @@ act only within what that person can see:
 - **What's read stays with those who could read it.** In a channel, the agent
   reads only that channel: everyone there sees what it says. Another channel is
   read only in a direct message (the assistant panel is one).
-- **The directory is for full members.** Guests, and people from another
-  organization in a shared channel, can't look people up or message them
-  through the agent. A lookup never shows an email: a workspace can hide its
-  members' emails from each other, and the bot sees them all.
+- **The directory is for full members.** Guests, people from another
+  organization in a shared channel, and other apps can't look people up or
+  message them through the agent. In a channel a lookup shows names and
+  mentions, as a message would; titles and time zones are for a direct
+  message. It never shows an email: a workspace can hide its members' emails
+  from each other, and the bot sees them all.
+- **A name means one person or it's a question.** Someone's full name picks
+  them. A handle or display name, which its owner chose, picks them only when
+  no one else matches: otherwise the agent asks which person.
 - **Posts say who asked.** A post or message made for someone carries a line
   saying so ("Posted for @ada").
 - **Times are the person's.** A relative time (`in 10 minutes`) counts from
@@ -187,14 +226,27 @@ act only within what that person can see:
 - **Channels by name are the bot's own.** A `#name` is looked up among the
   channels the bot is in (the only ones it can read or post in), in one call.
 
+Approval requests are kept in the bot's state for ten minutes
+(`approvalTimeoutMs` on `createChannels` changes that), so on more than one
+instance they need a shared state adapter (Redis), as conversations do.
+
+The tools need the app's bot token as a plain value on the server
+(`SLACK_BOT_TOKEN`), which is what connect sets up: one app in one workspace.
+With a token the adapter looks up per workspace, they answer that the server
+has no token to act with.
+
 ### After connect, the tools are yours
 
-Edit, detach or delete them in Voiceflow. A later connect (or `installTools`)
-leaves your changes alone: a function you edited is never overwritten, and a
-tool you deleted or detached is never added again unless you name it with
-`--restore`. An unedited tool is updated when this package ships a new version.
-What was installed is kept in `.voiceflow/channels-install.json`: commit it with
-your server's code.
+Edit their descriptions, detach or delete them in Voiceflow. A later connect
+(or `installTools`) leaves your changes alone: a function you edited is never
+overwritten, and a tool you deleted or detached is never added again unless
+you name it with `--restore`. An unedited tool is updated when this package
+ships a new version. What was installed is kept in
+`.voiceflow/channels-install.json`: commit it with your server's code.
+
+What a workspace tool does is in this package, on your server, and changes
+when you update the package. For a tool of your own, write a
+[server tool](../core/README.md#server-tools).
 
 To install the tools without connect:
 
@@ -204,9 +256,14 @@ import { slackTools } from '@voiceflow/channels-slack';
 
 await installTools(slackTools(), {
   apiKey, projectID, environment: 'development',
-  secretValues: { slack_bot_token: process.env.SLACK_BOT_TOKEN! },
+  // Where the agent calls the tools: the route that runs channels.webhook('slack', request).
+  secretValues: { channels_tools_url: 'https://<your server>/api/slack' },
 });
 ```
+
+If you connected an agent before the tools ran on your server, it still has a
+`slack_bot_token` secret that nothing reads now. Connect says so; delete it in
+Voiceflow (More → Secrets).
 
 ## Trying it against real Slack
 

@@ -7,6 +7,7 @@ import type { Chat, ReactionEvent, Thread } from 'chat';
 import { SLUG, type SlackAdapterLike, slackAdapter, where } from './adapter.js';
 import { createContext } from './context.js';
 import { attachFormEvents, presentation } from './presentation.js';
+import { createWorkspaceTools } from './workspace.js';
 
 type AnyThread = Thread<any, any>;
 
@@ -39,9 +40,10 @@ export interface SlackOptions {
    */
   catchUp?: number | false;
   /**
-   * Set who and where as `slack_*` variables on every turn. Default: `true`.
-   * The Slack tools read them; the agent sees one only where its instructions
-   * or global prompt reference it (`{slack_user_name}`).
+   * Set who and where as `slack_*` variables on every turn, for the agent's
+   * prompts. Default: `true`. The agent sees one only where its instructions
+   * or global prompt reference it (`{slack_user_name}`). Slack's tools don't
+   * read them.
    */
   context?: boolean;
   /**
@@ -61,6 +63,12 @@ export interface SlackOptions {
   slashCommands?: boolean;
   /** The App Home tab's text (Slack mrkdwn), or `false` to leave the tab alone. */
   home?: { text?: string } | false;
+  /**
+   * Run Slack's workspace tools on this server when the agent calls them (post
+   * to a channel, message someone, read a channel, …). `false` if the agent
+   * doesn't have them (`connect slack --no-workspace-tools`). Default: `true`.
+   */
+  workspaceTools?: boolean;
 }
 
 interface SlackThreadState {
@@ -171,6 +179,9 @@ export function createSlackExtension(options: SlackOptions = {}): ChannelExtensi
         if (kept.size > 1000) kept.delete(kept.values().next().value!);
       },
     }),
+
+    // Slack's workspace tools, run here with the adapter's own client.
+    tools: options.workspaceTools === false ? [] : createWorkspaceTools({ viewing: async (thread) => (await stateOf(thread)).viewing }),
 
     attach(bot, lent) {
       host = lent;

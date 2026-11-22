@@ -209,7 +209,11 @@ test('the plan comes first, and saying no changes nothing anywhere', async () =>
   assert.match(text, /\+ create app "Spike" from the manifest: \d+ bot scopes, 10 events/, 'named after the agent');
   assert.match(text, /\+ install it in Example/);
   assert.match(text, /environment sdk-test \(nothing is published\)/);
-  assert.match(text, /\+ secret slack_bot_token \(new, restricted; value: the app's bot token\)/);
+  assert.match(text, /\+ install it in Example \(its bot token is for your server alone: it never goes to Voiceflow\)/);
+  assert.match(text, /\+ secret channels_tools_url \(new, restricted; value: where your server runs the tools\)/);
+  assert.match(text, /Slack's tools run on your server: the agent calls them at https:\/\/bot\.example\.com\/api\/slack/);
+  assert.match(text, /\+ variable channels_turn_pass/);
+  assert.doesNotMatch(text, /slack_bot_token/);
   assert.match(text, /\+ tool slack_post_to_channel: create and attach/);
   assert.match(text, /~ compile the environment/);
   assert.ok(
@@ -219,7 +223,7 @@ test('the plan comes first, and saying no changes nothing anywhere', async () =>
   noSecrets(text);
 });
 
-test('connect makes the app, installs it, and puts the bot token on the agent as a secret', async () => {
+test("connect makes the app, installs it, and points the agent's tools at your server: the bot token never goes to Voiceflow", async () => {
   const { slack, vf, options, appRecords, progress } = setup();
   const credentials = [];
   const result = await connectSlack(options({ onCredentials: (c) => credentials.push(c) }));
@@ -245,17 +249,21 @@ test('connect makes the app, installs it, and puts the bot token on the agent as
     { appId: 'A1', botToken: BOT_TOKEN, botUserId: 'UBOT' },
   ]);
 
-  // Voiceflow: the token as the secret's value on the environment (draft and published), tools attached, compiled, never published.
-  const secret = vf.state.secrets.find((s) => s.name === 'slack_bot_token');
-  assert.equal(secret.visibility, 'restricted');
-  const values = vf.state.secretValues.filter((v) => v.secretID === secret.id);
+  // Voiceflow: where the tools call your server, on the environment (draft and published); tools attached, compiled, never published.
   assert.deepEqual(
-    values.map((v) => [v.value, v.environmentAlias, v.versionVariant]),
+    vf.state.secrets.map((s) => [s.name, s.visibility]),
+    [['channels_tools_url', 'restricted']],
+  );
+  assert.deepEqual(
+    vf.state.secretValues.map((v) => [v.value, v.environmentAlias, v.versionVariant]),
     [
-      [BOT_TOKEN, 'sdk-test', 'draft'],
-      [BOT_TOKEN, 'sdk-test', 'published'],
+      [URL_, 'sdk-test', 'draft'],
+      [URL_, 'sdk-test', 'published'],
     ],
   );
+  assert.equal(result.toolsUrl, URL_, "the webhook's own address, which answers tool calls too");
+  // No call to Voiceflow, of any kind, carries the token.
+  assert.ok(!JSON.stringify(vf.state.calls).includes(BOT_TOKEN), 'the bot token never reaches Voiceflow');
   assert.equal(vf.state.functions.length, slackTools().tools.length);
   assert.equal(vf.state.tools.length, slackTools().tools.length);
   assert.deepEqual(vf.state.compiles, ['sdk-test']);
@@ -269,6 +277,35 @@ test('connect makes the app, installs it, and puts the bot token on the agent as
   noSecrets(progress.join('\n'));
   noSecrets(JSON.stringify(result.plan));
   noSecrets(JSON.stringify(result.install));
+});
+
+test('the tools can call a route of their own, and a tools URL that is not an address stops connect', async () => {
+  const { vf, options } = setup();
+  const result = await connectSlack(options({ toolsUrl: 'https://bot.example.com/api/tools' }));
+  assert.equal(result.toolsUrl, 'https://bot.example.com/api/tools');
+  assert.deepEqual([...new Set(vf.state.secretValues.map((v) => v.value))], ['https://bot.example.com/api/tools']);
+  assert.match(result.plan.lines.join('\n'), /the agent calls them at https:\/\/bot\.example\.com\/api\/tools/);
+
+  const bad = setup();
+  await assert.rejects(connectSlack(bad.options({ toolsUrl: 'http://bot.example.com/api/tools' })), /tools URL must be an https address/);
+  assert.deepEqual(bad.slack.writes(), []);
+  assert.deepEqual(bad.vf.writes(), []);
+});
+
+test('an agent connected before keeps its old slack_bot_token secret, and connect says to delete it', async () => {
+  const { vf, options, progress } = setup();
+  vf.state.secrets.push({ id: 'old', name: 'slack_bot_token', visibility: 'restricted', hasValue: true });
+  let plan;
+  const result = await connectSlack(options({ confirm: (p) => ((plan = p), true) }));
+  const note = /! The slack_bot_token secret is still on Spike\. .*they run on your server now.* Delete it in Voiceflow \(More → Secrets\)/;
+  assert.match(plan.lines.join('\n'), note, 'in the plan, before anything changes');
+  assert.match(result.notes.join('\n'), /slack_bot_token secret is still on Spike/);
+  assert.ok(
+    vf.state.secrets.some((s) => s.name === 'slack_bot_token'),
+    'connect never deletes a secret',
+  );
+  assert.equal(vf.state.secretValues.filter((v) => v.secretID === 'old').length, 0, 'and writes nothing to it');
+  noSecrets(progress.join('\n'));
 });
 
 test('a project in another Voiceflow workspace stops connect before it reads or writes Slack', async () => {

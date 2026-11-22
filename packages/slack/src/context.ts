@@ -1,9 +1,8 @@
 // Who the agent is talking to, and where: Slack context set as Voiceflow
-// variables on every turn. The Slack tools read these as their identity (wired
-// so the agent can't fill them), which is why they come from the verified
-// event, never from the model. The model itself sees one only where the
-// agent's instructions or global prompt reference it: a variable is stored
-// data, not the model's context.
+// variables on every turn, for the agent's prompts. The model sees one only
+// where the agent's instructions or global prompt reference it: a variable is
+// stored data, not the model's context. Nothing trusts them: Slack's tools take
+// who is asking from the turn's pass (workspace.ts), never from a variable.
 import type { TurnContext } from '@voiceflow/channels-sdk';
 import { type SlackWebClient, slackAdapter, where } from './adapter.js';
 

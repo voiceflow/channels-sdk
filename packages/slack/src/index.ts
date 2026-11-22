@@ -12,12 +12,13 @@ export {
   PRESENTATION_TRACES,
   type PresentationTrace,
   presentationTools,
-  SLACK_SECRETS,
+  RETIRED_SECRETS,
   type SlackToolsOptions,
   slackToolScopes,
   slackTools,
   workspaceTools,
 } from './tools/index.js';
+export { createWorkspaceTools, type WorkspaceToolsOptions } from './workspace.js';
 
 /**
  * Slack as a channel for `createChannels`, with everything only Slack has. It

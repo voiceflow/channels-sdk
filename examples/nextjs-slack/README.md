@@ -48,8 +48,10 @@ the assistant panel, buttons, forms and `/ask` all arrive there.
 
    It shows its plan and asks first. It makes and installs the app, installs
    Slack's tools on the agent, and writes `SLACK_BOT_TOKEN` and
-   `SLACK_SIGNING_SECRET` to `.env.local`. It asks for your Voiceflow API key
-   in a hidden prompt, unless `VOICEFLOW_API_KEY` is set.
+   `SLACK_SIGNING_SECRET` to `.env.local`. The tools that act in Slack run on
+   this server, so the bot token goes nowhere else: Voiceflow gets only the
+   address the agent calls them at, which is the same route. It asks for your
+   Voiceflow API key in a hidden prompt, unless `VOICEFLOW_API_KEY` is set.
 
 5. Publish the agent's `development` environment in Voiceflow. The bot runs
    the environment's published version, and connect never publishes.
@@ -67,7 +69,8 @@ Slack's assistant panel.
 
 - Set the same environment variables on your host, with `REDIS_URL` pointing at
   a Redis database: conversations live in memory without it, and end when the
-  server restarts or a request reaches another instance.
+  server restarts or a request reaches another instance. So do requests for
+  approval, which the click that answers one must find.
 - Run connect again from this folder, with the same environment and your
   deployment's URL. It reuses the app it made for that environment and points
   it at the new URL. A different environment gets an app of its own.
@@ -84,3 +87,7 @@ Slack's assistant panel.
   and the Slack adapter's module, so Next.js can bundle it.
 - `after()` lets the agent's turn finish after the response: Slack wants an
   answer within three seconds.
+- The same route answers the agent's Slack tools. When the agent posts in a
+  channel or messages someone, its tool calls this server in the middle of the
+  turn, and the server acts in Slack for the person who asked. Anything that
+  leaves the conversation waits for their approval first.

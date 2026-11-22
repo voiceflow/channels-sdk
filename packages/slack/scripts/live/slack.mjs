@@ -14,9 +14,10 @@
 // later runs reuse it, adding anything missing, and ask for its signing secret.
 // --app <id> uses an app you have instead: the manifest it had is saved to
 // .run/slack-manifest.before.json, and --restore puts it back. --install-tools
-// installs Slack's tools on the environment's draft (never published), with the
-// app's bot token as the slack_bot_token secret. The plan is shown first; --dry-run
-// stops there, and without --yes it asks.
+// installs Slack's tools on the environment's draft (never published), pointed at
+// this server, which runs them: the bot token stays in this process and never goes
+// to Voiceflow. The plan is shown first; --dry-run stops there, and without --yes
+// it asks.
 //
 // --drive lets a script run the test as you: the app also gets user scopes, and a
 // driver on a Unix socket (.run/drive.sock, yours only; never a port, so nothing
@@ -43,6 +44,7 @@ const { values: args } = parseArgs({
     'key-file': { type: 'string' },
     'public-url': { type: 'string' },
     port: { type: 'string', default: '8788' },
+    'approval-minutes': { type: 'string' },
     'install-tools': { type: 'boolean', default: false },
     'remove-tools': { type: 'boolean', default: false },
     'dry-run': { type: 'boolean', default: false },
@@ -81,6 +83,13 @@ const DRIVE_USER_SCOPES = [
 /** What happened, for the driver: turns, failures, feedback and each streamed turn's trace types. */
 const events = [];
 const note = (event) => events.push({ at: Date.now(), ...event });
+const safeJSON = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
 const appRecords = fileAppRecordStore('.run/slack-sdk-apps.json');
 const record = fileRecordStore('.run/channels-install.json');
 const login = slackCliLogin(need('team'));
@@ -163,9 +172,29 @@ const server = http.createServer(async (req, res) => {
   const raw = Buffer.concat(chunks).toString('utf8');
   const request = new Request(`${publicUrl}${req.url}`, { method: req.method, headers: req.headers, body: req.method === 'POST' ? raw : undefined });
   try {
+    // A call from one of the agent's tools, running in Voiceflow: its name and how it ended, never its pass.
+    const toolCall = request.headers.has('x-voiceflow-tool-call') ? safeJSON(raw)?.tool : undefined;
+    // A click, as Slack sends it: what was clicked and by whom, so a click that never arrives can be told from one that does nothing.
+    const clicked = raw.startsWith('payload=') ? safeJSON(new URLSearchParams(raw).get('payload') ?? '') : undefined;
+    if (clicked?.type === 'block_actions') {
+      const action = clicked.actions?.[0]?.action_id;
+      log(
+        `click ${String(action).slice(0, 40)} by ${clicked.user?.id} on message ${clicked.container?.message_ts}${clicked.container?.thread_ts ? ' (in a thread)' : ''}`,
+      );
+      note({ kind: 'click', action: String(action).slice(0, 40), user: clicked.user?.id });
+    }
+    const started = Date.now();
     const response = await handle(request);
+    const text = await response.text();
+    if (toolCall !== undefined) {
+      // Where it arrived too: a call anywhere but the tools URL connect set would mean the model chose the address.
+      const at = `${req.url.split('?')[0]}${req.url.includes('?') ? '?(query)' : ''}`;
+      const ms = Date.now() - started;
+      log(`tool call ${String(toolCall).slice(0, 64)} at ${at} -> ${response.status} in ${ms} ms${safeJSON(text)?.ok === false ? ' (refused)' : ''}`);
+      note({ kind: 'tool', tool: String(toolCall).slice(0, 64), at, status: response.status, ok: safeJSON(text)?.ok === true, ms });
+    }
     res.writeHead(response.status, Object.fromEntries(response.headers));
-    res.end(await response.text());
+    res.end(text);
   } catch (error) {
     log('webhook error:', error?.message ?? error);
     res.writeHead(500);
@@ -237,6 +266,8 @@ const channels = await createChannels({
   channels: [slack({ adapter: { botToken, signingSecret, botUserId: connected.botUserId } })],
   state: createMemoryState(),
   userName,
+  // A person may take a while to get to Slack: a request can wait for them.
+  ...(args['approval-minutes'] ? { approvalTimeoutMs: Number(args['approval-minutes']) * 60_000 } : {}),
   chat: { logger: 'warn' },
   onTurn: (t) => {
     log(

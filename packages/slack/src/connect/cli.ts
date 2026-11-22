@@ -5,7 +5,7 @@
 // Secrets never reach the screen or the command line: the Voiceflow API key is
 // read from VOICEFLOW_API_KEY, a file (--key-file) or a hidden prompt; the
 // Slack login is the Slack CLI's; the app's credentials go only to a file you
-// name (--env-file), written readable by you alone.
+// name (--env-file), written readable by you alone, and never to Voiceflow.
 import { randomUUID } from 'node:crypto';
 import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
@@ -22,8 +22,9 @@ const USAGE = `Usage:
 
 Connect makes a Slack app for your Voiceflow agent (or adds what's missing to
 one you have), installs it in your workspace, and installs Slack's tools on the
-agent, with the app's bot token as the slack_bot_token secret. It shows the plan
-and asks before changing anything. It never publishes the agent.
+agent. The tools run on your server, so the app's bot token never goes to
+Voiceflow. It shows the plan and asks before changing anything. It never
+publishes the agent.
 
 Options:
   --project <id>          the Voiceflow project (agent)
@@ -33,6 +34,8 @@ Options:
                           Voiceflow workspace
   --public-url <url>      your server's public address; Slack sends to <url>/api/slack
   --request-url <url>     or the whole webhook URL, if it isn't <url>/api/slack
+  --tools-url <url>       where the agent's Slack tools call your server
+                          (default: the webhook URL, which answers them too)
   --team <id>             the Slack workspace (from \`slack login\`); default: the only one
   --app <id>              use this app, adding what's missing, instead of making one
   --name <name>           a new app's name (default: the agent's name in Voiceflow)
@@ -41,7 +44,8 @@ Options:
                           it has none; an existing app keeps its icon)
   --command </name|none>  the slash command (default /ask)
   --no-tools              make the app, but install no tools
-  --no-workspace-tools    install only the presentation tools
+  --no-workspace-tools    install only the presentation tools (then pass
+                          workspaceTools: false to slack() on your server)
   --restore <a,b>         add these tools again, although they were removed
   --env-file <path>       write SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET to this file
   --port <n>              while the app is made, answer Slack's URL check on
@@ -64,6 +68,7 @@ export async function cli(argv: string[]): Promise<number> {
       workspace: { type: 'string' },
       'public-url': { type: 'string' },
       'request-url': { type: 'string' },
+      'tools-url': { type: 'string' },
       team: { type: 'string' },
       app: { type: 'string' },
       name: { type: 'string' },
@@ -141,6 +146,7 @@ export async function cli(argv: string[]): Promise<number> {
       slack,
       voiceflow,
       requestUrl: requestUrl!,
+      ...(o['tools-url'] ? { toolsUrl: o['tools-url'] } : {}),
       ...(o.app ? { appId: o.app } : {}),
       app: { ...app, ...(icon !== undefined ? { icon } : {}) },
       tools,
@@ -162,6 +168,7 @@ export async function cli(argv: string[]): Promise<number> {
   if (!result.applied) return 0;
   printSettings(result, { envFile: o['env-file'], requestUrl: requestUrl!, projectID: o.project!, environment: o.environment! });
   for (const problem of result.install?.problems ?? []) console.warn(`! ${problem}`);
+  for (const note of result.install?.notes ?? []) console.warn(`! ${note}`);
   return 0;
 }
 
@@ -189,7 +196,8 @@ Your server needs:
 Slack sends to ${s.requestUrl}.${
     r.install
       ? `
-The tools are on the ${s.environment} environment's draft: try them in Voiceflow's test chat.
+The agent's Slack tools call your server at ${r.toolsUrl}: it runs them, with its own SLACK_BOT_TOKEN.
+The tools are on the ${s.environment} environment's draft. Those that act in Slack answer only in Slack: in Voiceflow's test chat they say so.
 Your bot runs ${s.environment}'s published version, so the agent in Slack has them only once you publish ${s.environment} in Voiceflow.`
       : ''
   }`);
