@@ -37,7 +37,13 @@ packages support.
   fails when a tool's code changes and its version doesn't. Raise the tool's
   `version` and add the new hash the failure prints to
   `packages/slack/test/tool-versions.json`. For the same reason, the formatter
-  leaves `packages/slack/src/tools/` as it is.
+  leaves `packages/slack/src/tools/` and `packages/core/src/sandbox/` as they
+  are. A server tool's code on the agent is the same for every tool, so its
+  `version` rises when its name, description, inputs or outputs change; what
+  its `run` does ships with the package and needs no new version.
+- **A tool that acts for someone runs on the server.** It takes the person and
+  the conversation from the turn (`turn.userId`, `turn.thread`), never from an
+  input, and asks first (`askFirst`) before it writes outside the conversation.
 - **Secrets are never printed.** Tests check plans, progress lines and saved
   records for token values. Keep it that way in anything new.
 - **A change comes with a test**, and a test that can't fail isn't one: break

@@ -39,9 +39,8 @@ stays compatible as upstream ships.
 2. `loadAdapter` dynamically imports `packageName` and calls `factoryExport`
    (`packages/core/src/loader.ts`). With no options the adapter reads its own env vars. A missing
    package is refused with the `npm install` line that fixes it.
-3. Credential names come from `listEnvVars`. Each catalog key maps to a Voiceflow
-   secret by one rule (`secretName`: `SLACK_BOT_TOKEN` → `slack_bot_token`), so no list
-   is kept by hand.
+3. Credential names come from `listEnvVars`. A platform's credentials stay in
+   your server's environment: none is ever a Voiceflow secret.
 4. Rendering reads `features` (`packages/core/src/render.ts`). Only a full `yes` counts; `partial`
    gets the fallback:
    - no `buttons`: a numbered list, and a typed number or label picks the choice;
@@ -149,6 +148,14 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
     nothing, so "Ask the agent about this message" can't be built without verifying
     Slack's signature ourselves, which this package never does. Ask for an
     `onShortcut` handler (`callbackId`, the message, `triggerId`, the user).
+- **Chat SDK's own agent tools** (`createChatTools`, in `chat/ai`). They run in
+  the app with the bot's access, are confined to the conversation being handled
+  (`scope`), and ask for approval before writes. Our server tools follow the same
+  model: they run in the app, act for the conversation the turn's pass names, and
+  ask before leaving it. Slack's are our own, written against Slack's Web API, and
+  add a per-person membership check, which `scope` doesn't make. Open: build the
+  channel-neutral ones (post, read, react) on Chat SDK's operations, or on
+  `createChatTools` itself, which needs `ai` and `zod` as dependencies.
 - **Goal:** a Voiceflow guide or template on chat-sdk.dev / vercel.com/kb/chat-sdk.
 
 ## 6. Keeping the Voiceflow side current
@@ -163,6 +170,17 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
   then `POST /v4/interact`, or `POST /v4/interact/stream` with `config.completionEvents`
   (server-sent `trace` events, then `end`), written from Voiceflow's public v4 runtime API.
   Planned: types generated from its published spec, plus a spec diff in CI.
+- **Server tools use only what Voiceflow documents today**: a function tool's
+  `fetch`, an input filled from a variable or a secret, and variables set on a
+  turn. Two things the platform could add would make them simpler. Neither is
+  needed, and a tool's `run` would stay the same with either:
+  - **An agent tool that pauses for a result from the app**, as a workflow's
+    function step can (`next: { listen: true }`). The tool's call would come back
+    in the turn's own stream, so the tools URL and the pass would go.
+  - **A per-conversation value in an MCP tool's headers.** Voiceflow's MCP tool
+    takes a URL and fixed headers, so a call can't say whose turn it is. With
+    one, the server could offer its tools over MCP, and nothing would be
+    installed on the agent.
 - **Live check:** a nightly conversation against a Voiceflow test agent.
 - **Transcripts:** tag every conversation with `vf-sdk` = `@voiceflow/channels-sdk@<version>`.
 
@@ -174,11 +192,30 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 - [ ] Upstream tracking (section 3) running
 - [ ] Docs: the Channels page (native vs Channels SDK) and one page per channel
 - [x] Security review of credential handling (2026-11-20): the API-key
-      prompt, the bot token's secret, the env file, and what the workspace
-      tools show and to whom were fixed with tests
-- [ ] Sign the identity variables the workspace tools trust (an HMAC keyed by
-      a second restricted secret), so a session variable set outside Slack
-      can't act for someone
+      prompt, the env file, and what the workspace tools show and to whom
+      were fixed with tests
+- [x] The workspace tools run on the server (2026-11-20), so no platform
+      credential goes to Voiceflow, and a tool's call acts only with the
+      turn's signed pass. This replaces signing the identity variables: there
+      are none to sign. What leaves the conversation waits for approval.
+- [x] Server tools run against real Slack and a real agent (2026-11-22): a
+      Voiceflow function reached the server through a tunnel in about 0.3
+      seconds a call, against the function's 20-second default; a pin in the
+      thread happened at once; a post to another channel waited for an
+      Approve click in a direct message with no thread, then posted once; and
+      the model, asked to, couldn't set an input wired to a variable or a
+      secret (it is offered only the tool's own inputs). The run also found
+      that a session ended while a conversation sat idle answers 404, which
+      the client now recovers from
+- [ ] Slack's tools with a bot token the adapter resolves per workspace (an
+      app installed in many): outside a webhook the adapter has no client, so
+      they answer that the server has no token. Needs `withBotToken`, and the
+      workspace in the pass
+- [ ] Tell the agent how an approved call ended. Today the request shows it in
+      the thread, and the agent learns it only if the person says so
+- [ ] A tool that outlives its time limit keeps running (Slack's client waits
+      out a rate limit), so a write can land after the agent was told it
+      timed out. Posts and messages are checked for a repeat; the others aren't
 - [ ] Strip known secret values from every error the CLI prints
 - [ ] Remove `"private": true`
 

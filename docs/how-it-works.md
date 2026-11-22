@@ -52,6 +52,29 @@ and are not part of this package.
 - **A failed turn posts an error message** (`errorMessage`, or `null` for none) and
   calls `onError`.
 
+## How a tool call works
+
+Some tools need a credential, or need to know who is asking: posting in a
+Slack channel for someone, say. Those run on your server, and are called
+server tools.
+
+1. Each turn, your server makes a **pass**: the thread and the person, from the
+   platform's verified event, signed with a key only your server holds. It sets
+   the pass as a variable on the Voiceflow session.
+2. The agent decides to call a tool. The tool's function in Voiceflow holds no
+   logic and no credential: it sends the model's inputs and the pass to your
+   server, at the same address the platform's webhook uses.
+3. Your server checks the pass, looks the tool up among those it offers on
+   that channel, and runs it for the conversation the pass names. A call
+   without a pass it made, or with one whose turn has ended, does nothing.
+4. A tool that reaches outside the conversation asks first. The server posts a
+   request in the thread, and acts once the person who asked approves it.
+
+The agent's own reply still streams while this happens: a tool's call is a
+second request, answered in the middle of the turn. Presentation tools (a
+table, a chart, a reaction) need none of this: they return a trace in the
+turn's own stream, and your server shows it.
+
 ## Any Chat SDK adapter
 
 A channel package such as `@voiceflow/channels-slack` brings everything its

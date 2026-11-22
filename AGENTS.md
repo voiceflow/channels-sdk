@@ -34,9 +34,12 @@ a tool's code is its functions' text, so restyling it would change the tool.
 | `packages/core/src/render.ts`, `deliver.ts`, `translate.ts` | Voiceflow traces become Chat SDK posts, fitted to what the channel can show; streaming |
 | `packages/core/src/extension.ts` | `ChannelExtension`: what a channel package can add |
 | `packages/core/src/install.ts`, `tools.ts` | Puts a channel's tools (Voiceflow functions) on an agent, versioned |
+| `packages/core/src/server-tools.ts`, `tool-server.ts`, `pass.ts` | Server tools: tools that run in the developer's app. The turn's signed pass, the endpoint that answers a tool's call, approvals |
+| `packages/core/src/sandbox/` | `callServerTool`: the one Voiceflow function behind every server tool |
 | `packages/core/src/testing.ts` | `fakeVoiceflow`, `fakeVoiceflowApi`, `runFunction` (runs a tool as Voiceflow's sandbox does) |
 | `packages/slack` | `@voiceflow/channels-slack`: `slack()`, Slack's extension, its tools, `connect slack` |
-| `packages/slack/src/tools/` | The tools: `presentation.ts` (show native Slack UI), `workspace.ts` (act in Slack with the bot token) |
+| `packages/slack/src/tools/` | What goes on the agent: `presentation.ts` (functions that show native Slack UI) and the install set |
+| `packages/slack/src/workspace.ts` | The workspace tools (act in Slack): server tools, run with the adapter's own client |
 | `packages/slack/src/connect/` | `connect slack`: manifest, Slack CLI login, app creation, the Voiceflow install |
 | `packages/slack/test/helpers/fake-slack.mjs` | A fake of Slack's Web API and events |
 | `packages/slack/scripts/live/` | The live harness: real Slack, real Voiceflow (see below) |
@@ -62,6 +65,11 @@ a tool's code is its functions' text, so restyling it would change the tool.
   self-contained function. They run in Voiceflow's sandbox, not Node: no
   imports, no `Buffer`, no `URL`; `fetch` answers `.json` as a property.
   `runFunction` in tests enforces the same limits.
+- **A tool that needs a credential or an identity is a server tool.** Its
+  function on the agent (`callServerTool`, the same for every one) only sends
+  the model's inputs to the developer's server with the turn's pass. The
+  server (`tool-server.ts`) reads the thread and the person from the pass and
+  runs the tool's `run`. No platform credential is ever a Voiceflow secret.
 
 ## Rules
 
@@ -72,9 +80,13 @@ a tool's code is its functions' text, so restyling it would change the tool.
   progress lines, plans, errors, logs, saved files or test snapshots. Tests
   assert this; extend them when you add output.
 - **The person comes from the verified event, never from the model.** A tool
-  that acts for someone reads them from a variable the channel sets
-  (`slack_user_id`), wired so the model can't fill it, and acts only where that
-  person could.
+  that acts for someone is a server tool: it reads them from `turn.userId`,
+  which the server took from the turn's pass, and acts only where that person
+  could. Never from an input, and never from a variable.
+- **What leaves the conversation asks first.** A server tool that writes
+  outside the thread it was called from returns `askFirst(…)` until
+  `turn.approved`, after its own checks, so nobody is asked to approve what
+  would be refused.
 - **A tool's code changes only with a higher version.** `slack.versions.test.mjs`
   fails when a tool's code changes and its `version` doesn't: raise the
   `version` and record the hash the failure prints in

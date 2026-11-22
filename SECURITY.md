@@ -27,12 +27,24 @@ Each of these failing is a vulnerability worth reporting:
   Slack's bot and user tokens, and the app's signing secret. `connect` writes the
   app's credentials only to the file you name with `--env-file`, readable by
   you alone.
-- **The bot token reaches Voiceflow only as a restricted secret**, never as a
-  plain variable.
-- **A Slack tool acts only for the person talking to the agent.** It takes their
-  identity from the verified Slack event, never from the model, and reads or
-  posts only where that person can. What it reads, it shows only where
-  everyone could read it.
+- **No platform credential goes to Voiceflow.** The tools that act in Slack
+  run on your server, with the server's own bot token. The agent holds only
+  the address it calls them at.
+- **A tool's call acts only for the conversation it came from.** The server
+  takes the thread and the person from a pass it made for that turn from the
+  verified Slack event, signed with a key only the server holds. A call
+  without that pass, with a changed one, or with one whose turn has ended does
+  nothing. Nothing the model or the call says can name another person or
+  conversation.
+- **A Slack tool acts only where that person could.** It reads or posts only in
+  channels they are a member of. What it reads, it shows only where everyone
+  could read it.
+- **What leaves the conversation waits for approval.** A post in a channel or
+  a message to someone else happens only after the person who asked approves
+  it, with a click the platform signs, and then only once.
+- **What is approved is what was shown.** A request shows where the action
+  goes and all of what it says. What runs is that, and nothing longer or
+  aimed elsewhere.
 
 ## Supported versions
 
