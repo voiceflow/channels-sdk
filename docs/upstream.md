@@ -203,6 +203,15 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       Slack's installer. With nobody at the terminal it stops (exit 3) with
       what a person has to do. `--manual` connects an app made by hand, with
       no Slack CLI
+- [x] Connect offers to publish, and a new app says hello (2026-11-23):
+      it shows what the environment's draft holds that isn't live and
+      publishes on a yes or `--publish`, never for a script that didn't ask.
+      The new app's bot then messages whoever connected it. A changed tools
+      address is written to the published version's secret as well as the
+      draft's, so it should need no publish; that hasn't been tested alone
+- [ ] Uninstall with a key that can't delete functions stops after detaching
+      the tool (seen live 2026-11-23, a 401 on the delete): check the key
+      first, or finish the step and say what was left
 - [ ] Voiceflow sign-in instead of a pasted key. The `vf` CLI signs in through
       the browser but can't hand its session to another program, and a key
       for the server can only be issued in a signed-in browser. Both are

@@ -3,7 +3,8 @@
 // an app you have), installs it in the workspace, and installs Slack's default
 // tools on the agent, pointed at your server, which runs them. The app's bot
 // token is for your server alone: it never goes to Voiceflow. Connect shows its
-// whole plan before it changes anything, and never publishes the agent.
+// whole plan before it changes anything. These functions never publish the
+// agent: the command asks, once the tools are on the draft (cli.ts).
 //
 // After that the app and the tools are yours: change them in Slack and in
 // Voiceflow. Running connect again only adds what's missing.
@@ -176,6 +177,8 @@ export interface ConnectSlackOptions {
 
 export interface ConnectPlan {
   team: { id: string; name: string };
+  /** Who is connecting: the Slack user the login is for. */
+  me?: { id: string };
   project: { id: string; name: string; workspaceID: string; image?: string };
   environment: string;
   app: {
@@ -321,6 +324,44 @@ export async function connectSlack(options: ConnectSlackOptions): Promise<Connec
 }
 
 /** Where the agent's tools call your server: the address you gave, or the webhook's own. */
+// ── The app's first message ─────────────────────────────────────────────────
+
+/** What a new app says to whoever connected it: that it's there, and what's left before it answers. */
+export function greetingText(app: { name: string; team: string; environment: string; tools: boolean; published: boolean }): string {
+  return [
+    `${app.name} is connected to ${app.team}.`,
+    'Once your server is running, message me here or mention me in a channel.',
+    ...(app.tools && !app.published ? [`I get my Slack tools when the ${app.environment} environment is published in Voiceflow.`] : []),
+  ].join(' ');
+}
+
+/**
+ * Has a new app message the person who connected it, with its own bot token:
+ * proof, in Slack, that the app is installed and can speak. Returns why it
+ * couldn't, when it couldn't: a greeting that fails is no reason to fail a
+ * connect that worked.
+ */
+export async function sendGreeting(options: {
+  botToken: string;
+  userId: string;
+  text: string;
+  apiURL?: string;
+  fetch?: typeof fetch;
+}): Promise<string | undefined> {
+  const slack = createSlackApi({
+    token: options.botToken,
+    ...(options.apiURL ? { apiURL: options.apiURL } : {}),
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
+  try {
+    // A user's ID as the channel is the app's own conversation with them.
+    await slack('chat.postMessage', { channel: options.userId, text: options.text });
+    return undefined;
+  } catch (error) {
+    return error instanceof SlackApiError ? error.error : error instanceof Error ? error.message : String(error);
+  }
+}
+
 // ── An app you made by hand ─────────────────────────────────────────────────
 
 export interface ConnectOwnAppOptions {
@@ -522,7 +563,7 @@ export async function planConnect(slack: SlackApi, options: ConnectSlackOptions)
   if (!voiceflow.environment) throw new TypeError('connectSlack: `voiceflow.environment` is required');
   // The workspace check comes first: nothing else is read or written for a project in the wrong one.
   const project = await checkProject(voiceflow);
-  const auth = await slack<{ team_id: string; team: string }>('auth.test');
+  const auth = await slack<{ team_id: string; team: string; user_id?: string }>('auth.test');
   if (options.slack.teamId && auth.team_id !== options.slack.teamId) {
     throw new Error(`The Slack login is for workspace ${auth.team_id}, not ${options.slack.teamId}. Nothing was changed.`);
   }
@@ -575,7 +616,15 @@ export async function planConnect(slack: SlackApi, options: ConnectSlackOptions)
       dryRun: true,
     });
   }
-  const plan: ConnectPlan = { team, project, environment: voiceflow.environment, app, ...(install ? { voiceflow: install } : {}), lines: [] };
+  const plan: ConnectPlan = {
+    team,
+    ...(auth.user_id ? { me: { id: auth.user_id } } : {}),
+    project,
+    environment: voiceflow.environment,
+    app,
+    ...(install ? { voiceflow: install } : {}),
+    lines: [],
+  };
   plan.lines = planLines(plan, options);
   return plan;
 }
@@ -635,7 +684,7 @@ function voiceflowLines(
   options: Pick<ConnectSlackOptions, 'toolsUrl' | 'requestUrl'>,
 ): string[] {
   const lines = [
-    `Voiceflow: project "${plan.project.name}" (${plan.project.id}) in workspace ${plan.project.workspaceID}, environment ${plan.environment} (nothing is published)`,
+    `Voiceflow: project "${plan.project.name}" (${plan.project.id}) in workspace ${plan.project.workspaceID}, environment ${plan.environment}${plan.voiceflow ? ': the tools go on its draft' : ''}`,
   ];
   if (plan.voiceflow) {
     lines.push(...plan.voiceflow.steps.map((s) => `  ${connectStepLine(s)}`));
@@ -652,6 +701,8 @@ export function connectStepLine(step: Step): string {
   if (step.kind === 'secret' && step.name === TOOLS_URL_SECRET && step.value === 'set') {
     return `${step.action === 'create' ? '+' : '='} secret ${step.name} (${secretState(step)}; value: where your server runs the tools)`;
   }
+  // The install publishes nothing; whether the command publishes afterwards is said after the plan.
+  if (step.kind === 'compile' && step.action === 'compile') return "~ compile the environment's draft";
   return formatStep(step);
 }
 

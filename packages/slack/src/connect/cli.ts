@@ -18,6 +18,7 @@ import readline from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
 import { parseArgs } from 'node:util';
 import { createRedactor } from '@voiceflow/channels-sdk';
+import { type DraftChanges, draftChanges, formatDraftChanges, publishEnvironment } from '@voiceflow/channels-sdk/install';
 import { slackCliLogins } from './api.js';
 import {
   type ConnectResult,
@@ -25,8 +26,10 @@ import {
   connectSlack,
   createSlackApi,
   disconnectSlack,
+  greetingText,
   type OwnAppResult,
   type SlackCliLogin,
+  sendGreeting,
   slackManifest,
 } from './index.js';
 import { NeedsYou, type SlackCliHost, slackSignIn } from './sign-in.js';
@@ -40,8 +43,14 @@ const USAGE = `Usage:
 Connect makes a Slack app for your Voiceflow agent (or adds what's missing to
 one you have), installs it in your workspace, and installs Slack's tools on the
 agent. The tools run on your server, so the app's bot token never goes to
-Voiceflow. It shows the plan and asks before changing anything. It never
-publishes the agent.
+Voiceflow. It shows the plan and asks before changing anything.
+
+The tools go on the environment's draft, and your bot runs its published
+version. So connect then shows what the draft holds that isn't live, and asks
+whether to publish it: the whole draft goes live, not only these tools. It
+publishes only on your yes, or with --publish; a script without --publish is
+never published for. A new app's bot then messages you in Slack to say it's
+connected.
 
 Your Voiceflow API key, project and environment come from the flags below,
 then VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID and VOICEFLOW_ENVIRONMENT in the
@@ -65,7 +74,8 @@ when it's waiting on you: do what it says, then run it again.
 Options:
   --project <id>          the Voiceflow project (agent)
   --environment <alias>   the environment to install the tools into: its draft is
-                          changed and compiled, nothing is published
+                          changed and compiled (publishing is --publish, or
+                          your yes)
   --workspace <id>        stop, changing nothing, unless the project is in this
                           Voiceflow workspace
   --public-url <url>      your server's public address; Slack sends to <url>/api/slack
@@ -97,8 +107,13 @@ Options:
                           127.0.0.1:<n>, where your tunnel points (default 3000;
                           skipped if your server already holds the port)
   --key-file <path>       a file holding only the Voiceflow API key
+  --publish               publish the environment once the tools are on its draft,
+                          without asking: its whole draft goes live
+  --no-publish            don't publish, and don't ask
+  --no-greeting           don't have a new app's bot message you in Slack
   --dry-run               show the plan and stop
-  --yes                   don't ask before going ahead
+  --yes                   don't ask before going ahead (publishing is still yours to
+                          answer: see --publish and --no-publish)
   --remove-tools          disconnect: also take Slack's tools off the agent
   --print-manifest        print the app's manifest and stop`;
 
@@ -139,6 +154,9 @@ export async function cli(argv: string[], io: CliIO = {}): Promise<number> {
 }
 
 type Say = (line: string) => void;
+/** The release a publish by connect makes in Voiceflow. */
+const RELEASE_NAME = 'Slack tools (Channels SDK)';
+const RELEASE_DESCRIPTION = 'Published by `voiceflow-channels connect slack`, on a yes.';
 /** A value that reads the same in every env file parser with no quotes around it. */
 const BARE = /^[\w.:/@+=,-]+$/;
 
@@ -175,6 +193,9 @@ async function run(
       'key-file': { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
       yes: { type: 'boolean', default: false },
+      publish: { type: 'boolean', default: false },
+      'no-publish': { type: 'boolean', default: false },
+      'no-greeting': { type: 'boolean', default: false },
       'remove-tools': { type: 'boolean', default: false },
       'print-manifest': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
@@ -196,6 +217,10 @@ async function run(
     return 0;
   }
 
+  if (o.publish && o['no-publish']) {
+    err('--publish and --no-publish say opposite things: pass one.');
+    return 2;
+  }
   if (o.manual && action !== 'connect') {
     err('--manual is for connect: an app you made by hand is yours to delete in Slack.');
     return 2;
@@ -302,6 +327,61 @@ async function run(
     }
     return /^y(es)?$/i.test((await ask('\nGo ahead? [y/N] ')).trim());
   };
+  /** What happens once the plan is done, said with it: publishing, and a new app's first message. */
+  const after = (greets: boolean): string[] => [
+    'Then:',
+    tools === false && !o.publish
+      ? `  · ${environment} is left as it is: no tools were installed for a publish to carry`
+      : o['no-publish']
+        ? `  · you're shown what ${environment}'s draft holds; it is not published (--no-publish)`
+        : o.publish
+          ? `  + publish ${environment}: its whole draft goes live (--publish)`
+          : interactive
+            ? `  ? you're shown what ${environment}'s draft holds, and asked whether to publish it`
+            : `  · you're shown what ${environment}'s draft holds; it is published only with --publish`,
+    ...(greets ? ["  + the bot messages you in Slack to say it's connected"] : []),
+  ];
+  /**
+   * Says what the environment's draft holds that isn't live, and publishes it
+   * when that's wanted: by --publish, or by a person's yes. Publishing makes
+   * the whole draft live, so nothing is published for a script that didn't ask.
+   * The draft is read either way: whether the agent in Slack has the tools is
+   * said from what's there, never assumed.
+   */
+  const publish = async (installed: boolean): Promise<'published' | 'not' | 'failed'> => {
+    if (!installed && !o.publish) return 'not';
+    let waiting: DraftChanges | undefined;
+    try {
+      waiting = await draftChanges(voiceflow);
+    } catch (error) {
+      err(`! Couldn't read what ${environment}'s draft holds: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (waiting && waiting.created + waiting.updated + waiting.deleted === 0) {
+      out(`\n= ${environment} is published: nothing in its draft is waiting`);
+      return 'published';
+    }
+    out(`\n${waiting ? formatDraftChanges(environment, waiting).join('\n') : `${environment}'s draft may hold changes that aren't live.`}`);
+    if (o['no-publish']) {
+      out(`${environment} is not published (--no-publish).`);
+      return 'not';
+    }
+    if (!o.publish && !interactive) {
+      out(`${environment} is not published: run this again with --publish, or publish it in Voiceflow.`);
+      return 'not';
+    }
+    if (!o.publish && !/^y(es)?$/i.test((await ask(`\nPublish ${environment} now? Its whole draft goes live, not only these tools. [y/N] `)).trim())) {
+      out(`${environment} is not published.`);
+      return 'not';
+    }
+    try {
+      const { release } = await publishEnvironment({ ...voiceflow, name: RELEASE_NAME, description: RELEASE_DESCRIPTION });
+      out(`+ published ${environment} (release "${release}")`);
+      return 'published';
+    } catch (error) {
+      err(`! Voiceflow didn't publish ${environment}: ${error instanceof Error ? error.message : String(error)}. Publish it in Voiceflow.`);
+      return 'failed';
+    }
+  };
 
   if (own) {
     const result = await connectOwnApp({
@@ -312,11 +392,12 @@ async function run(
       ...(command !== undefined ? { command } : {}),
       tools,
       ...restore,
-      confirm: (plan) => confirm(plan.lines),
+      confirm: (plan) => confirm([...plan.lines, ...after(false)]),
       onProgress: out,
     });
     if (!result.applied) return 0;
     const saved = await save([...own.typed, ...agent]);
+    const published = await publish(Boolean(result.install));
     const inPlace = (name: string) => Boolean(envFile && (inFile[name] || saved.includes(name)));
     printSettings(
       {
@@ -327,12 +408,13 @@ async function run(
         sends: `Slack sends to ${requestUrl}, once the app's settings say so.`,
         projectID: project,
         environment,
+        published: published === 'published',
         ...(result.install ? { toolsUrl: result.toolsUrl! } : {}),
       },
       out,
     );
     report(result.install, err);
-    return 0;
+    return published === 'failed' ? 1 : 0;
   }
   if (!login) throw new Error('No Slack login.');
   const slack = { token: login.token, teamId: login.teamId, ...withFetch };
@@ -363,7 +445,7 @@ async function run(
       app: { ...app, ...(icon !== undefined ? { icon } : {}) },
       tools,
       ...restore,
-      confirm: (plan) => confirm(plan.lines),
+      confirm: (plan) => confirm([...plan.lines, ...after(plan.app.action === 'create' && !o['no-greeting'] && Boolean(plan.me))]),
       onProgress: out,
       // Each credential is one to hide from the moment it exists, before anything after it can fail.
       onCredentials: async (c) => {
@@ -377,6 +459,20 @@ async function run(
   secrets.add(result.botToken, result.signingSecret, result.userToken);
   if (!result.applied) return 0;
   const saved = await save(agent);
+  const published = await publish(Boolean(result.install));
+  // A new app says so itself, in Slack: the proof that it's installed and can speak.
+  if (result.created && !o['no-greeting'] && result.plan.me && result.botToken) {
+    const text = greetingText({
+      name: result.plan.app.name,
+      team: result.plan.team.name,
+      environment,
+      tools: Boolean(result.install),
+      published: published === 'published',
+    });
+    const why = await sendGreeting({ botToken: result.botToken, userId: result.plan.me.id, text, ...withFetch });
+    if (why) err(`! The bot couldn't message you in Slack (${why}). Message it yourself once your server is running.`);
+    else out(`+ ${result.plan.app.name} messaged you in Slack: look for it under Apps`);
+  }
   const page = (tab: string) => `https://api.slack.com/apps/${result.appId}/${tab}`;
   printSettings(
     {
@@ -391,12 +487,13 @@ async function run(
       sends: `Slack sends to ${requestUrl}.`,
       projectID: project,
       environment,
+      published: published === 'published',
       ...(result.install ? { toolsUrl: result.toolsUrl! } : {}),
     },
     out,
   );
   report(result.install, err);
-  return 0;
+  return published === 'failed' ? 1 : 0;
 }
 
 /** What the tools' install couldn't do, or wants you to know. */
@@ -406,7 +503,17 @@ function report(install: ConnectResult['install'] | OwnAppResult['install'], err
 }
 
 function printSettings(
-  s: { heading: string; token: string; secret: string; key: string; sends: string; projectID: string; environment: string; toolsUrl?: string },
+  s: {
+    heading: string;
+    token: string;
+    secret: string;
+    key: string;
+    sends: string;
+    projectID: string;
+    environment: string;
+    published: boolean;
+    toolsUrl?: string;
+  },
   out: Say,
 ) {
   out(`
@@ -426,8 +533,12 @@ ${s.sends}${
   s.toolsUrl
     ? `
 The agent's Slack tools call your server at ${s.toolsUrl}: it runs them, with its own SLACK_BOT_TOKEN.
-The tools are on the ${s.environment} environment's draft. Those that act in Slack answer only in Slack: in Voiceflow's test chat they say so.
-Your bot runs ${s.environment}'s published version, so the agent in Slack has them only once you publish ${s.environment} in Voiceflow.`
+Those that act in Slack answer only in Slack: in Voiceflow's test chat they say so.
+${
+  s.published
+    ? `${s.environment} is published: the agent in Slack has the tools now.`
+    : `The tools are on the ${s.environment} environment's draft. Your bot runs its published version, so the agent in Slack has them only once you publish ${s.environment}: in Voiceflow, or with --publish.`
+}`
     : ''
 }`);
 }

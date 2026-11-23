@@ -96,7 +96,8 @@ a tool's code is its functions' text, so restyling it would change the tool.
   `packages/slack/test/tool-versions.json`.
 - **Installs never take away.** Re-running connect or `installTools` only adds
   what's missing or upgrades a tool whose version rose; a person's edits on the
-  agent stay. `connect` never publishes a Voiceflow environment.
+  agent stay. An install never publishes a Voiceflow environment; `connect`
+  does only on a person's yes or `--publish`, after showing what the draft holds.
 - **A test that can't fail isn't one.** Break the code once and watch the new
   test go red before relying on it.
 - **Add a changeset** for any change a package's users would notice
