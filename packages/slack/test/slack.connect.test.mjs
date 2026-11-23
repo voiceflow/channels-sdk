@@ -35,7 +35,7 @@ const SIGNING = 'signing-secret-never-printed';
 const USER_TOKEN = 'xoxp-user-token-never-printed';
 
 /** Slack's app API as a `fetch`: apps made from manifests, installs, and every call recorded. */
-function fakeSlack({ team = 'T1', invalid, apps: existing = {}, images = {}, iconError, botScopes } = {}) {
+function fakeSlack({ team = 'T1', invalid, apps: existing = {}, images = {}, iconError, botScopes, greetError } = {}) {
   const apps = new Map(Object.entries(existing).map(([id, manifest]) => [id, structuredClone(manifest)]));
   const calls = [];
   const downloads = [];
@@ -67,6 +67,11 @@ function fakeSlack({ team = 'T1', invalid, apps: existing = {}, images = {}, ico
       }
       if (auth === `Bearer ${USER_TOKEN}`) return ok({ team_id: team, team: 'Example', user_id: 'UME2' });
       return no('invalid_auth');
+    }
+    // The bot's own message, with the bot's own token.
+    if (method === 'chat.postMessage') {
+      if (auth !== `Bearer ${BOT_TOKEN}`) return no('invalid_auth');
+      return greetError ? no(greetError) : ok({ channel: 'D1', ts: '1.000001' });
     }
     if (auth !== `Bearer ${CLI_TOKEN}`) return no('invalid_auth');
     switch (method) {
@@ -213,7 +218,9 @@ test('the plan comes first, and saying no changes nothing anywhere', async () =>
   const text = shown.lines.join('\n');
   assert.match(text, /\+ create app "Spike" from the manifest: \d+ bot scopes, 10 events/, 'named after the agent');
   assert.match(text, /\+ install it in Example/);
-  assert.match(text, /environment sdk-test \(nothing is published\)/);
+  assert.match(text, /environment sdk-test: the tools go on its draft/);
+  assert.match(text, /~ compile the environment's draft/);
+  assert.doesNotMatch(text, /nothing is published/, 'whether it publishes is said after the plan, once');
   assert.match(text, /\+ install it in Example \(its bot token is for your server alone: it never goes to Voiceflow\)/);
   assert.match(text, /\+ secret channels_tools_url \(new, restricted; value: where your server runs the tools\)/);
   assert.match(text, /Slack's tools run on your server: the agent calls them at https:\/\/bot\.example\.com\/api\/slack/);
@@ -719,8 +726,14 @@ test("the URL checker answers Slack's challenge and nothing else", async () => {
  * there first; `answers` are what a person types, by question, and with none
  * the command runs as a script does, where a question is a failure.
  */
-async function runCli(t, argv, { slack = fakeSlack(), voiceflow, env = { VOICEFLOW_API_KEY: VF_KEY }, files = {}, answers, slackCli } = {}) {
-  const vf = fakeVoiceflowApi({ project: PROJECT, apiKey: VF_KEY });
+async function runCli(
+  t,
+  argv,
+  { slack = fakeSlack(), voiceflow, env = { VOICEFLOW_API_KEY: VF_KEY }, files = {}, answers, slackCli, draft = [], vf: given } = {},
+) {
+  // `draft`: what the environment's draft holds already, that nobody published. `vf`: an agent from an earlier run.
+  const vf = given ?? fakeVoiceflowApi({ project: PROJECT, apiKey: VF_KEY });
+  vf.state.draft.push(...draft);
   const dir = await mkdtemp(join(tmpdir(), 'vf-cli-'));
   for (const [name, text] of Object.entries(files)) await writeFile(join(dir, name), text, { mode: 0o644 });
   const before = process.cwd();
@@ -864,7 +877,7 @@ test("connect takes the agent from the server's env file, so nothing is typed tw
 });
 
 test("what the env file doesn't say is asked for, the key unseen, and saved there; what it says is never changed", async (t) => {
-  const { code, out, err, dir, asked } = await runCli(t, FROM_FILE, {
+  const { code, out, err, dir, asked } = await runCli(t, [...FROM_FILE, '--no-publish'], {
     env: {},
     files: { '.env.local': 'VOICEFLOW_API_KEY=\nVOICEFLOW_PROJECT_ID=\nVOICEFLOW_ENVIRONMENT=sdk-test\n' },
     answers: { 'API key': VF_KEY, 'project ID': 'proj1' },
@@ -973,7 +986,7 @@ test('a person is asked only once the command can go ahead, and their answer to 
   assert.deepEqual(noUrl.asked, []);
 
   const files = { '.env.local': `VOICEFLOW_API_KEY=${VF_KEY}\nVOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n` };
-  const ask = FROM_FILE.filter((arg) => arg !== '--yes');
+  const ask = [...FROM_FILE.filter((arg) => arg !== '--yes'), '--no-publish'];
   const no = await runCli(t, ask, { env: {}, files, answers: { 'Go ahead': 'n' } });
   assert.equal(no.code, 0);
   assert.deepEqual(no.asked, ['asked: \nGo ahead? [y/N] ']);
@@ -1148,7 +1161,7 @@ test("--manual names the scopes the app wasn't granted, and still connects", asy
 
 test("--manual asks for the app's two credentials, unseen, and saves them; a script is told to set them", async (t) => {
   const agent = `VOICEFLOW_API_KEY=${VF_KEY}\nVOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n`;
-  const asked = await runCli(t, MANUAL, {
+  const asked = await runCli(t, [...MANUAL, '--no-publish'], {
     env: {},
     files: { '.env.local': agent },
     slack: fakeSlack({ botScopes: NEEDED }),
@@ -1199,4 +1212,163 @@ test('--manual refuses a token that is no bot, and one Slack refuses, without ch
   const disconnect = await runCli(t, ['disconnect', '--manual', '--project', 'proj1', '--environment', 'sdk-test'], { slackCli: NO_CLI });
   assert.equal(disconnect.code, 2);
   assert.match(disconnect.err, /--manual is for connect/);
+});
+
+// ── Publishing, and the app's first message ─────────────────────────────────
+
+/** The command as a person runs it: no --yes, so the plan and the publish are theirs to answer. */
+const ASKED = CONNECT.filter((arg) => arg !== '--yes');
+const greetings = (slack) => slack.of('chat.postMessage');
+const AGENTS_OWN = { type: 'agent', id: 'agent1', name: 'Support', change: 'updated' };
+
+test("connect shows what the draft holds, publishes on your yes, and the new app's bot tells you in Slack", async (t) => {
+  const { code, out, err, vf, slack, asked } = await runCli(t, ASKED, { answers: { 'Go ahead': 'y', 'Publish sdk-test now': 'y' }, draft: [AGENTS_OWN] });
+  assert.equal(code, 0, err);
+  // The plan says what comes after it.
+  assert.match(
+    out,
+    /Then:\n {2}\? you're shown what sdk-test's draft holds, and asked whether to publish it\n {2}\+ the bot messages you in Slack to say it's connected/,
+  );
+  // What else would go live is shown before the question: a change of your own, not only connect's.
+  const shown = out.indexOf("sdk-test's draft holds");
+  assert.ok(shown > 0 && shown < out.indexOf('+ published sdk-test'), 'the draft is shown before anything is published');
+  assert.match(out, /sdk-test's draft holds \d+ changes that aren't live \(\d+ created, 1 updated\):\n {2}~ agent Support/);
+  assert.equal(asked.at(-1), 'asked: \nPublish sdk-test now? Its whole draft goes live, not only these tools. [y/N] ');
+  assert.deepEqual(
+    vf.state.publishes.map((p) => `${p.environment}: ${p.name}`),
+    ['sdk-test: Slack tools (Channels SDK)'],
+  );
+  assert.match(out, /\+ published sdk-test \(release "Slack tools \(Channels SDK\)"\)/);
+  assert.match(out, /sdk-test is published: the agent in Slack has the tools now\./);
+  assert.doesNotMatch(out, /only once you publish/);
+
+  // The bot says so itself, to the person who connected it, with its own token.
+  const [greeting] = greetings(slack);
+  assert.equal(greetings(slack).length, 1);
+  assert.equal(greeting.token, BOT_TOKEN);
+  assert.equal(greeting.body.channel, 'UME');
+  assert.equal(greeting.body.text, 'Spike is connected to Example. Once your server is running, message me here or mention me in a channel.');
+  assert.match(out, /\+ Spike messaged you in Slack: look for it under Apps/);
+  noSecrets(out + err);
+});
+
+test('a no leaves the environment unpublished, and the bot says what it is still waiting for', async (t) => {
+  const { code, out, vf, slack } = await runCli(t, ASKED, { answers: { 'Go ahead': 'y', 'Publish sdk-test now': 'n' } });
+  assert.equal(code, 0);
+  assert.deepEqual(vf.state.publishes, []);
+  assert.match(out, /sdk-test is not published\./);
+  assert.match(out, /the agent in Slack has them only once you publish sdk-test: in Voiceflow, or with --publish\./);
+  assert.match(greetings(slack)[0].body.text, /I get my Slack tools when the sdk-test environment is published in Voiceflow\.$/);
+});
+
+test("nothing is published for a script that didn't ask, and --publish is how it asks", async (t) => {
+  const script = await runCli(t, CONNECT, { draft: [AGENTS_OWN] });
+  assert.equal(script.code, 0, script.err);
+  assert.deepEqual(script.vf.state.publishes, []);
+  assert.ok(!script.vf.state.calls.some((c) => c.path.endsWith('/publish')));
+  assert.match(script.out, /Then:\n {2}· you're shown what sdk-test's draft holds; it is published only with --publish/);
+  // It is told what's waiting, to decide with: an agent can pass that on.
+  assert.match(script.out, /sdk-test's draft holds \d+ changes that aren't live[^\n]*\n {2}~ agent Support/);
+  assert.match(script.out, /sdk-test is not published: run this again with --publish, or publish it in Voiceflow\./);
+  assert.match(script.out, /only once you publish sdk-test/);
+  assert.deepEqual(script.asked, []);
+
+  const flagged = await runCli(t, [...CONNECT, '--publish'], { draft: [AGENTS_OWN] });
+  assert.equal(flagged.code, 0, flagged.err);
+  assert.match(flagged.out, /Then:\n {2}\+ publish sdk-test: its whole draft goes live \(--publish\)/);
+  assert.match(flagged.out, /~ agent Support/, 'what goes live is still shown');
+  assert.equal(flagged.vf.state.publishes.length, 1);
+  assert.deepEqual(flagged.asked, []);
+
+  // A plan only shown publishes nothing, whatever the flag.
+  const dry = await runCli(t, [...CONNECT, '--publish', '--dry-run']);
+  assert.equal(dry.code, 0);
+  assert.match(dry.out, /\+ publish sdk-test: its whole draft goes live \(--publish\)/);
+  assert.deepEqual(dry.vf.state.publishes, []);
+  assert.deepEqual(greetings(dry.slack), []);
+
+  const both = await runCli(t, [...CONNECT, '--publish', '--no-publish']);
+  assert.equal(both.code, 2);
+  assert.match(both.err, /--publish and --no-publish say opposite things/);
+  assert.deepEqual(both.slack.calls, []);
+});
+
+test("--no-publish and --no-greeting are taken at their word: you aren't asked, and the bot stays quiet", async (t) => {
+  const { code, out, vf, slack, asked } = await runCli(t, [...ASKED, '--no-publish', '--no-greeting'], { answers: { 'Go ahead': 'y' } });
+  assert.equal(code, 0);
+  assert.deepEqual(asked, ['asked: \nGo ahead? [y/N] ']);
+  assert.deepEqual(vf.state.publishes, []);
+  assert.deepEqual(greetings(slack), []);
+  assert.match(out, /Then:\n {2}· you're shown what sdk-test's draft holds; it is not published \(--no-publish\)/);
+  assert.match(out, /sdk-test's draft holds \d+ changes that aren't live/);
+  assert.match(out, /sdk-test is not published \(--no-publish\)\./);
+  assert.doesNotMatch(out, /the bot messages you/);
+
+  // No tools, nothing of connect's for a publish to carry: it isn't offered.
+  const noTools = await runCli(t, [...ASKED, '--no-tools'], { answers: { 'Go ahead': 'y' }, draft: [AGENTS_OWN] });
+  assert.equal(noTools.code, 0, noTools.err);
+  assert.deepEqual(noTools.asked, ['asked: \nGo ahead? [y/N] '], 'a draft of your own is yours to publish');
+  assert.ok(!noTools.vf.state.calls.some((c) => c.path.endsWith('/diff')));
+  assert.deepEqual(noTools.vf.state.publishes, []);
+  assert.doesNotMatch(greetings(noTools.slack)[0].body.text, /tools/);
+});
+
+test('a second run finds nothing waiting: it publishes nothing, asks nothing about it, and the bot is not sent again', async (t) => {
+  const answers = { 'Go ahead': 'y', 'Publish sdk-test now': 'y' };
+  const first = await runCli(t, ASKED, { answers });
+  assert.equal(first.code, 0, first.err);
+  const again = await runCli(t, [...ASKED, '--app', 'A1'], { answers, slack: first.slack, vf: first.vf });
+  assert.equal(again.code, 0, again.err);
+  assert.match(again.out, /= sdk-test is published: nothing in its draft is waiting/);
+  assert.equal(again.vf.state.publishes.length, 1, 'published once, by the first run');
+  assert.ok(!again.asked.some((question) => question.includes('Publish')));
+  assert.equal(greetings(again.slack).length, 1, 'only a new app introduces itself');
+  assert.doesNotMatch(again.out, /the bot messages you/);
+
+  // A script is told the same, from what's there: it isn't warned of a publish that's already done.
+  const script = await runCli(t, [...CONNECT, '--app', 'A1'], { slack: first.slack, vf: first.vf });
+  assert.equal(script.code, 0, script.err);
+  assert.match(script.out, /= sdk-test is published: nothing in its draft is waiting/);
+  assert.match(script.out, /sdk-test is published: the agent in Slack has the tools now\./);
+  assert.doesNotMatch(script.out, /only once you publish/);
+  assert.equal(script.vf.state.publishes.length, 1);
+});
+
+test('a publish Voiceflow refuses is a failure that says so, after everything connect did is reported', async (t) => {
+  const refuse = (url) => (url.includes('/publish') ? new Response(JSON.stringify({ message: `not allowed for ${VF_KEY}` }), { status: 403 }) : undefined);
+  const { code, out, err, vf } = await runCli(t, [...CONNECT, '--publish'], { voiceflow: refuse });
+  assert.equal(code, 1);
+  assert.match(
+    err,
+    /! Voiceflow didn't publish sdk-test: Voiceflow POST \/v1\/stable\/environment\/sdk-test\/publish answered 403: not allowed for \[hidden\]\. Publish it in Voiceflow\./,
+  );
+  assert.match(out, /Connected: Slack app A1, bot user UBOT\./, 'the app is connected all the same');
+  assert.match(out, /only once you publish sdk-test/);
+  assert.deepEqual(vf.state.publishes, []);
+  noSecrets(out + err);
+
+  // A draft that can't be read is said, and --publish still does what it was told.
+  const unreadable = (url) => (url.includes('/diff') ? new Response('{"message":"no"}', { status: 500 }) : undefined);
+  const blind = await runCli(t, [...CONNECT, '--publish'], { voiceflow: unreadable });
+  assert.equal(blind.code, 0, blind.err);
+  assert.match(blind.err, /! Couldn't read what sdk-test's draft holds/);
+  assert.equal(blind.vf.state.publishes.length, 1);
+});
+
+test('a greeting Slack refuses is a note, not a failure', async (t) => {
+  const { code, out, err } = await runCli(t, CONNECT, { slack: fakeSlack({ greetError: 'channel_not_found' }) });
+  assert.equal(code, 0);
+  assert.match(err, /! The bot couldn't message you in Slack \(channel_not_found\)\. Message it yourself once your server is running\./);
+  assert.match(out, /Connected: Slack app A1/);
+  assert.doesNotMatch(out, /messaged you in Slack/);
+});
+
+test('--manual publishes on the same terms, and sends no message: nothing in Slack is its to do', async (t) => {
+  const slack = fakeSlack({ botScopes: NEEDED });
+  const { code, out, err, vf } = await runCli(t, [...MANUAL, '--publish'], { env: {}, files: { '.env.local': OWN }, slack, slackCli: NO_CLI });
+  assert.equal(code, 0, err);
+  assert.equal(vf.state.publishes.length, 1);
+  assert.match(out, /sdk-test is published: the agent in Slack has the tools now\./);
+  assert.deepEqual(greetings(slack), []);
+  assert.doesNotMatch(out, /the bot messages you/);
 });

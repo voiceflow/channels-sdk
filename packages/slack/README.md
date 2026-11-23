@@ -22,14 +22,17 @@ Slack: workspace Acme (T0123)
     requests go to https://<your server>/api/slack (Slack checks it answers while it creates the app)
   + set its icon to the agent's avatar in Voiceflow: https://…/avatar.png
   + install it in Acme (its bot token is for your server alone: it never goes to Voiceflow)
-Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment development (nothing is published)
+Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment development: the tools go on its draft
   + variable slack_user_id
   …
   + secret channels_tools_url (new, restricted; value: where your server runs the tools)
   + tool slack_react: create and attach
   …
-  ~ compile the environment (nothing is published)
+  ~ compile the environment's draft
     Slack's tools run on your server: the agent calls them at https://<your server>/api/slack
+Then:
+  ? you're shown what development's draft holds, and asked whether to publish it
+  + the bot messages you in Slack to say it's connected
 ```
 
 - **Slack sign-in:** connect works in Slack with the
@@ -67,11 +70,17 @@ Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment developme
   on your server, so Voiceflow gets only the address the agent calls them at:
   the webhook URL, or `--tools-url` for a route of their own. When that
   address changes, run connect again.
-- **It never publishes.** The tools land on the environment's draft, compiled.
-  **Your bot runs the environment's published version**, so publish the
-  environment in Voiceflow before you try the tools in Slack: until then the
-  agent there doesn't have them. In Voiceflow's test chat the tools that act
-  in Slack say they only work there.
+- **It publishes only when you say so.** The tools land on the environment's
+  draft, compiled, and **your bot runs the environment's published version**:
+  until that's published, the agent in Slack doesn't have them. So connect
+  shows what the draft holds that isn't live and asks whether to publish it.
+  The whole draft goes live, not only these tools. `--publish` publishes
+  without asking and `--no-publish` doesn't ask; a script that passes neither
+  is never published for, and is told what's waiting. In Voiceflow's test chat the tools that act in
+  Slack say they only work there.
+- **A new app says hello.** Its bot messages you in Slack once it's
+  connected: proof that it's installed, and where to find it. `--no-greeting`
+  keeps it quiet.
 - **`--workspace <id>`** stops connect, changing nothing in Slack or Voiceflow,
   unless the project is in that Voiceflow workspace.
 - **Running it again only adds what's missing.** It reuses the app it made (kept

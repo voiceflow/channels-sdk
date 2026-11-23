@@ -103,8 +103,8 @@ run.
 - **Your own tools, the same way.** A server tool is a function in your app
   that the agent can call, with the conversation and the person it is for.
 - **One command to set up.** Connect makes the Slack app from a manifest,
-  installs it, and wires the tools to your agent. It never publishes your
-  agent, and never prints a secret.
+  installs it, and wires the tools to your agent. It publishes your agent
+  only when you say so, and never prints a secret.
 - **Your edits stay yours.** After connect, edit or delete the tools in
   Voiceflow; running it again only adds what's missing.
 - **Any platform Chat SDK has.** Replies fit what each channel can show:

@@ -50,10 +50,12 @@ the assistant panel, buttons, forms and `/ask` all arrive there.
    this server, so the bot token goes nowhere else: Voiceflow gets only the
    address the agent calls them at, which is the same route.
 
-4. Publish the agent's environment in Voiceflow. The bot runs the
-   environment's published version, and connect never publishes.
+   The bot runs the environment's published version, so connect then shows
+   what the environment's draft holds and asks whether to publish it. The
+   whole draft goes live, not only these tools: say no to publish it in
+   Voiceflow yourself. The new app's bot then messages you in Slack.
 
-5. Start the server:
+4. Start the server:
 
    ```bash
    npm run dev

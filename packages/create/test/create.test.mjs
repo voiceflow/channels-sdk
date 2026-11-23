@@ -109,8 +109,8 @@ test('the env files list what the server needs, hold no secret, and yours is rea
   assert.match(ignored, /^\.env\.\*$/m);
   assert.match(ignored, /^!\.env\.example$/m);
   assert.match(out, /It signs you in to Slack, asks for your Voiceflow API key, and saves it in \.env\.local\./, 'the project is in the env file already');
-  assert.match(out, /Publish the production environment in Voiceflow/);
-  assert.match(await read(app, 'README.md'), /Publish the agent's `production` environment/);
+  assert.match(out, /Then it asks whether to publish the production environment/);
+  assert.match(await read(app, 'README.md'), /the published version of the agent's `production`\s+environment/);
 });
 
 test("it installs with the package manager that ran it, and starts a repository unless it's inside one", async () => {

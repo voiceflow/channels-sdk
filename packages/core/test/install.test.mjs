@@ -4,7 +4,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { functionSource } from '../dist/index.js';
-import { codeHash, formatStep, installTools, memoryRecordStore, uninstallTools } from '../dist/install.js';
+import {
+  codeHash,
+  draftChanges,
+  formatDraftChanges,
+  formatStep,
+  installTools,
+  memoryRecordStore,
+  publishEnvironment,
+  uninstallTools,
+} from '../dist/install.js';
 import { fakeVoiceflowApi, runFunction } from '../dist/testing.js';
 
 const PROJECT = { id: 'proj1', name: 'Spike', workspaceID: 'ws1' };
@@ -349,4 +358,81 @@ test('the sandbox has no Node or browser globals, and fetch carries json as a pr
   }
   const fake = async () => new Response(JSON.stringify({ value: 7 }), { status: 200 });
   assert.deepEqual(await runFunction(functionSource(fetches), {}, { fetch: fake }), { outputVars: { ok: true, value: 7, text: '{"value":7}' } });
+});
+
+// ── Publishing ──────────────────────────────────────────────────────────────
+
+test('an install leaves its work in the draft; publishing is a step of its own, which says what it made live', async () => {
+  const { api, opts } = setup();
+  await installTools(SET(), opts({ secretValues: { demo_token: SECRET } }));
+  assert.deepEqual(api.state.publishes, [], 'the install published nothing');
+
+  const waiting = await draftChanges(opts());
+  assert.deepEqual(
+    { created: waiting.created, updated: waiting.updated, deleted: waiting.deleted, truncated: waiting.truncated },
+    { created: 3, updated: 0, deleted: 0, truncated: false },
+  );
+  assert.deepEqual(waiting.resources.map((r) => `${r.change} ${r.type} ${r.name}`).sort(), [
+    'created function demo_echo',
+    'created tool demo_echo',
+    'created variable demo_user',
+  ]);
+
+  // Each change is read as what it is; one this package doesn't know is an update, never a guess at more.
+  api.state.draft.push({ type: 'variable', id: 'gone', name: 'old_name', change: 'deleted' }, { type: 'agent', id: 'a1', name: 'Support', change: 'moved' });
+  const mixed = await draftChanges(opts());
+  assert.deepEqual(
+    mixed.resources.filter((r) => r.name === 'old_name' || r.name === 'Support').map((r) => `${r.change} ${r.type} ${r.name}`),
+    ['deleted variable old_name', 'updated agent Support'],
+  );
+  assert.equal(mixed.deleted, 1);
+
+  const { release } = await publishEnvironment(opts({ name: 'Demo tools', description: 'From a test.' }));
+  assert.equal(release, 'Demo tools');
+  assert.deepEqual(api.state.publishes, [{ environment: 'sdk-test', name: 'Demo tools', description: 'From a test.' }]);
+  const call = api.state.calls.find((c) => c.method === 'POST' && c.path.endsWith('/publish'));
+  assert.equal(call.path, '/v1/stable/environment/sdk-test/publish');
+  assert.deepEqual(call.query, { projectID: 'proj1' });
+  const after = await draftChanges(opts());
+  assert.equal(after.created + after.updated + after.deleted, 0, 'nothing is left waiting');
+});
+
+test('nothing is read or published for a project in another workspace, and a failure never carries the key', async () => {
+  const { api, opts } = setup();
+  for (const act of [() => draftChanges(opts({ expectWorkspace: 'ws-other' })), () => publishEnvironment(opts({ expectWorkspace: 'ws-other', name: 'x' }))]) {
+    await assert.rejects(act(), (e) => e.code === 'wrong_workspace' && /Nothing was changed/.test(e.message));
+  }
+  assert.ok(!api.state.calls.some((c) => /\/(diff|publish)$/.test(c.path)), 'neither was called');
+  assert.deepEqual(api.state.publishes, []);
+
+  const failing = setup((call) => call.path.endsWith('/publish'));
+  await assert.rejects(
+    publishEnvironment(failing.opts({ name: 'x' })),
+    (e) => /Voiceflow POST \/v1\/stable\/environment\/sdk-test\/publish answered 500/.test(e.message) && !e.message.includes(KEY),
+  );
+  assert.deepEqual(failing.api.state.publishes, []);
+});
+
+test("a draft's changes read as lines: how many, the first of them by name, and how many more", () => {
+  const none = { created: 0, updated: 0, deleted: 0, resources: [], truncated: false };
+  assert.deepEqual(formatDraftChanges('development', none), ["development's draft holds nothing that isn't live."]);
+  const one = { ...none, updated: 1, resources: [{ type: 'agent', name: 'Support', change: 'updated' }] };
+  assert.deepEqual(formatDraftChanges('development', one), ["development's draft holds a change that isn't live (1 updated):", '  ~ agent Support']);
+  const many = {
+    created: 3,
+    updated: 1,
+    deleted: 1,
+    resources: [
+      { type: 'function', name: 'a', change: 'created' },
+      { type: 'tool', name: 'a', change: 'created' },
+      { type: 'variable', name: 'old', change: 'deleted' },
+    ],
+    truncated: true,
+  };
+  assert.deepEqual(formatDraftChanges('main', many, 2), [
+    "main's draft holds 5 changes that aren't live (3 created, 1 updated, 1 deleted):",
+    '  + function a',
+    '  + tool a',
+    '  … and 3 more',
+  ]);
 });

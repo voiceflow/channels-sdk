@@ -152,10 +152,13 @@ when you don't have it.
    and what it asked you for. The bot token stays on this server: it never
    goes to Voiceflow.
 
-3. Publish the agent's \`${environment}\` environment in Voiceflow. The bot runs
-   the environment's published version, and connect never publishes.
+   The bot runs the published version of the agent's \`${environment}\`
+   environment, so connect then shows what that environment's draft holds and
+   asks whether to publish it. The whole draft goes live, not only these
+   tools: say no to publish it in Voiceflow yourself. The new app's bot then
+   messages you in Slack.
 
-4. Start the server:
+3. Start the server:
 
    \`\`\`bash
    ${pm} run dev
@@ -334,8 +337,8 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
       '  2. Make the Slack app:',
       `       ${runScript(pm, 'connect', '--public-url https://<your tunnel>')}`,
       `     It signs you in to Slack, asks for your Voiceflow API key${o.project ? '' : ' and project ID'}, and saves ${o.project ? 'it' : 'them'} in .env.local.`,
-      `  3. Publish the ${environment} environment in Voiceflow.`,
-      `  4. ${pm} run dev`,
+      `     Then it asks whether to publish the ${environment} environment, and the bot messages you in Slack.`,
+      `  3. ${pm} run dev`,
       '',
       'README.md has each step in full.',
     ].join('\n'),

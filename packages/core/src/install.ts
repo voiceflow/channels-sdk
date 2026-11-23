@@ -1,5 +1,5 @@
 // Installs a channel's tools on a Voiceflow agent through Voiceflow's public
-// API (`realtime-api.voiceflow.com`). It never publishes: it writes the
+// API (`realtime-api.voiceflow.com`). An install never publishes: it writes the
 // environment's draft and compiles it, so the tools can be tried before anyone
 // publishes them.
 //
@@ -603,4 +603,75 @@ export function formatStep(step: Step): string {
     case 'compile':
       return step.action === 'compile' ? '~ compile the environment (nothing is published)' : '= nothing to compile';
   }
+}
+
+// ── Publishing ──────────────────────────────────────────────────────────────
+// An install never publishes. Publishing is its own step, and a person's to
+// decide: an environment's whole draft goes live, not only what an install put
+// there. So there is a way to see what the draft holds, and a way to publish it.
+
+/** What an environment's draft holds that its published version doesn't. */
+export interface DraftChanges {
+  created: number;
+  updated: number;
+  deleted: number;
+  /** The changed resources. Voiceflow caps the list, and `truncated` says when it was cut; the three counts are exact. */
+  resources: { type: string; name: string; change: 'created' | 'updated' | 'deleted' }[];
+  truncated: boolean;
+}
+
+export type EnvironmentOptions = ApiOptions & Pick<InstallOptions, 'projectID' | 'expectWorkspace'> & { environment: string };
+
+/** Compares an environment's draft with its last publish: what publishing it now would make live. */
+export async function draftChanges(options: EnvironmentOptions): Promise<DraftChanges> {
+  const api = createVoiceflowApi(options);
+  const project = await readProject(api, options);
+  const { diff } = await api<{ diff?: Partial<DraftChanges> }>('GET', `/v1/stable/environment/${encodeURIComponent(options.environment)}/diff`, {
+    projectID: project.id,
+  });
+  const change = (value: unknown) => (value === 'created' || value === 'deleted' ? value : 'updated');
+  return {
+    created: Number(diff?.created ?? 0),
+    updated: Number(diff?.updated ?? 0),
+    deleted: Number(diff?.deleted ?? 0),
+    resources: (diff?.resources ?? []).map((r) => ({ type: String(r.type), name: String(r.name), change: change(r.change) })),
+    truncated: Boolean(diff?.truncated),
+  };
+}
+
+/**
+ * Publishes an environment: its whole draft becomes the version conversations
+ * run, whoever made the changes in it. Show `draftChanges` and ask first.
+ * Stops, publishing nothing, when the project isn't in `expectWorkspace`.
+ * Returns the name of the release it made.
+ */
+export async function publishEnvironment(options: EnvironmentOptions & { name: string; description?: string }): Promise<{ release: string }> {
+  const api = createVoiceflowApi(options);
+  const project = await readProject(api, options);
+  const published = await api<{ release?: { name?: string } }>(
+    'POST',
+    `/v1/stable/environment/${encodeURIComponent(options.environment)}/publish`,
+    { projectID: project.id },
+    { name: options.name, ...(options.description ? { description: options.description } : {}) },
+  );
+  return { release: published.release?.name ?? options.name };
+}
+
+/** A draft's changes as lines for a person: how many, and the first of them by name. */
+export function formatDraftChanges(environment: string, changes: DraftChanges, show = 12): string[] {
+  const total = changes.created + changes.updated + changes.deleted;
+  if (!total) return [`${environment}'s draft holds nothing that isn't live.`];
+  const counts = [
+    changes.created ? `${changes.created} created` : '',
+    changes.updated ? `${changes.updated} updated` : '',
+    changes.deleted ? `${changes.deleted} deleted` : '',
+  ].filter(Boolean);
+  const mark = { created: '+', updated: '~', deleted: '-' } as const;
+  const listed = changes.resources.slice(0, show);
+  const rest = total - listed.length;
+  return [
+    `${environment}'s draft holds ${total === 1 ? "a change that isn't" : `${total} changes that aren't`} live (${counts.join(', ')}):`,
+    ...listed.map((r) => `  ${mark[r.change]} ${r.type} ${r.name}`),
+    ...(rest > 0 ? [`  … and ${rest} more`] : []),
+  ];
 }

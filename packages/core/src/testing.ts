@@ -100,7 +100,13 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
     secrets: [] as { id: string; name: string; visibility: string; hasValue: boolean }[],
     secretValues: [] as { secretID: string; value: string; environmentAlias?: string; versionVariant?: string }[],
     compiles: [] as string[],
+    /** What the draft holds that isn't published: filled as things are made and changed, emptied by a publish. */
+    draft: [] as { type: string; id: string; name: string; change: 'created' | 'updated' | 'deleted' }[],
+    publishes: [] as { environment: string; name: string; description: string | null }[],
     calls: [] as FakeApiCall[],
+  };
+  const drafted = (type: string, id: string, name: string, change: 'created' | 'updated' | 'deleted' = 'created') => {
+    if (!state.draft.some((r) => r.type === type && r.id === id)) state.draft.push({ type, id, name, change });
   };
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const refused = (status: number, message: string) => json(status, { message });
@@ -125,7 +131,7 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
       return m[1] === options.project.id ? json(200, { project: options.project }) : refused(404, 'Project not found');
     }
     if (query.projectID !== options.project.id) return refused(404, 'Project not found');
-    const needsEnv = !p.startsWith('/v2/stable/secret') && !p.startsWith('/v1/stable/secret') && !p.includes('/compile');
+    const needsEnv = !p.startsWith('/v2/stable/secret') && !p.startsWith('/v1/stable/secret') && !p.startsWith('/v1/stable/environment/');
     if (needsEnv && !env) return refused(400, 'environmentAlias is required');
 
     // Functions
@@ -134,6 +140,7 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
       if (!body.name || !body.code) return refused(400, 'name and code are required');
       const fn = { id: id('fn'), name: body.name, code: body.code, description: body.description ?? null, settings: body.settings ?? null };
       state.functions.push(fn);
+      drafted('function', fn.id, fn.name);
       return json(201, { function: fn });
     }
     if ((m = p.match(/^\/v1\/stable\/function\/([^/]+)$/))) {
@@ -141,6 +148,7 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
       if (!fn) return refused(404, 'Function not found');
       if (method === 'PATCH') {
         Object.assign(fn, body);
+        drafted('function', fn.id, fn.name, 'updated');
         return json(200, { message: 'Updated' });
       }
       if (method === 'DELETE') {
@@ -206,6 +214,7 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
         target: body.target,
       };
       state.tools.push(tool);
+      drafted('tool', tool.id, state.functions.find((f) => f.id === tool.functionID)?.name ?? tool.id);
       return json(201, { tool, unresolvedReferences: checked.unresolvedReferences });
     }
     if ((m = p.match(/^\/v2\/stable\/tool\/([^/]+)$/))) {
@@ -232,6 +241,7 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
       names.add(body.name);
       const v = { id: id('var'), name: body.name, color: body.color, description: body.description ?? null, isSystem: false };
       state.variables.push(v);
+      drafted('variable', v.id, v.name);
       return json(201, { variable: v });
     }
     if (p === '/v2/stable/secret' && method === 'GET') return json(200, { secrets: state.secrets });
@@ -255,6 +265,21 @@ export function fakeVoiceflowApi(options: { project: FakeApiProject; apiKey?: st
     if ((m = p.match(/^\/v1\/stable\/environment\/([^/]+)\/compile$/)) && method === 'PUT') {
       state.compiles.push(decodeURIComponent(m[1]!));
       return json(200, { message: 'Compiled', durationMs: 1 });
+    }
+    if ((m = p.match(/^\/v1\/stable\/environment\/([^/]+)\/diff$/)) && method === 'GET') {
+      const count = (change: string) => state.draft.filter((r) => r.change === change).length;
+      // The list is capped, as the API's is; the counts are exact.
+      const resources = state.draft.slice(0, 20);
+      return json(200, {
+        diff: { created: count('created'), updated: count('updated'), deleted: count('deleted'), resources, truncated: resources.length < state.draft.length },
+      });
+    }
+    if ((m = p.match(/^\/v1\/stable\/environment\/([^/]+)\/publish$/)) && method === 'POST') {
+      if (!body?.name) return refused(400, 'name is required');
+      const environment = decodeURIComponent(m[1]!);
+      state.publishes.push({ environment, name: body.name, description: body.description ?? null });
+      state.draft.length = 0;
+      return json(201, { environment: { alias: environment }, release: { name: body.name, backupID: state.publishes.length } });
     }
     return refused(404, `No fake for ${method} ${p}`);
   };

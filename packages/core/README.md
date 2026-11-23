@@ -120,6 +120,8 @@ with your server.
 public API:
 
 - **It never publishes.** It writes the environment's draft and compiles it.
+  Publishing is a step of its own: `draftChanges` reads what the draft holds
+  that isn't live, and `publishEnvironment` makes the whole draft live.
 - **The plan comes first.** `dryRun: true` reads the project and returns the
   steps; `formatStep` turns each into a line for a person.
 - **`expectWorkspace`** stops it, changing nothing, unless the project is in that
