@@ -82,7 +82,9 @@ and changes nothing else: \`voiceflow-channels dev\` runs it on each start.
 Slack checks the address as it takes it, so your server has to be answering.
 
 It exits 0 when done, 1 on a failure, 2 on a mistake in the command, and 3
-when it's waiting on you: do what it says, then run it again.
+when it's waiting on you: do what it says, then run it again. With nobody at
+the terminal, everything it's waiting on is said in the one stop: which agent,
+its key, the Slack sign-in.
 
 Options:
   --project <id>          the Voiceflow project (agent)
@@ -129,7 +131,8 @@ Options:
                           without asking: its whole draft goes live
   --no-publish            don't publish, and don't ask
   --no-greeting           don't have a new app's bot message you in Slack
-  --dry-run               show the plan and stop
+  --dry-run               show the plan and stop: what would be made in Slack and put
+                          on the agent, and what a publish would carry
   --yes                   don't ask before going ahead (publishing is still yours to
                           answer: see --publish and --no-publish)
   --remove-tools          disconnect: also take Slack's tools off the agent
@@ -271,7 +274,8 @@ async function run(
   if (!project && interactive) project = (await ask('Voiceflow project ID: ')).trim();
   if (!environment && interactive) environment = (await ask('Voiceflow environment to install the tools into (development, say): ')).trim();
   const missing = [...(project ? [] : ['--project (or VOICEFLOW_PROJECT_ID)']), ...(environment ? [] : ['--environment (or VOICEFLOW_ENVIRONMENT)'])];
-  if (missing.length) {
+  // A person who was asked and gave nothing made a mistake in the command. A script wasn't asked: it's waiting on someone.
+  if (missing.length && interactive) {
     err(`Missing ${missing.join(' and ')}${envFile ? `, in the environment or in ${envFile}` : ''}.\n\n${USAGE}`);
     return 2;
   }
@@ -279,6 +283,9 @@ async function run(
   const withFetch = io.fetch ? { fetch: io.fetch } : {};
   // With nobody to ask, everything a person has to do is said in one stop, not one thing per run.
   const waiting: string[] = [];
+  const where = envFile ? `, here or in ${envFile},` : '';
+  if (!project) waiting.push(`No Voiceflow project: set VOICEFLOW_PROJECT_ID${where} or pass --project. It's your agent's project ID in Voiceflow.`);
+  if (!environment) waiting.push(`No Voiceflow environment: set VOICEFLOW_ENVIRONMENT${where} or pass --environment (development, say).`);
   const orWait = async <T>(get: () => T | Promise<T>): Promise<T | undefined> => {
     try {
       return await get();
@@ -417,6 +424,25 @@ async function run(
     }
   };
 
+  /**
+   * For a plan that is only shown: what the environment's draft holds already,
+   * so whoever decides can say "go ahead" and "publish" (or not) in one answer.
+   */
+  const preview = async (installs: boolean): Promise<void> => {
+    if (!o['dry-run'] || o['no-publish'] || (!installs && !o.publish)) return;
+    try {
+      const waiting = await draftChanges(voiceflow);
+      const nothing = waiting.created + waiting.updated + waiting.deleted === 0;
+      out(
+        nothing
+          ? `\n${environment}'s draft holds nothing else that isn't live: a publish would carry only what's above.`
+          : `\n${formatDraftChanges(environment, waiting).join('\n')}\nA publish would carry these too, with what's above: its whole draft goes live.`,
+      );
+    } catch (error) {
+      err(`! Couldn't read what ${environment}'s draft holds: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   if (own) {
     const result = await connectOwnApp({
       slack: { botToken: own.botToken, ...withFetch },
@@ -429,7 +455,10 @@ async function run(
       confirm: (plan) => confirm([...plan.lines, ...after(false)]),
       onProgress: out,
     });
-    if (!result.applied) return 0;
+    if (!result.applied) {
+      await preview(tools !== false);
+      return 0;
+    }
     const saved = await save([...own.typed, ...agent]);
     const published = await publish(Boolean(result.install));
     const inPlace = (name: string) => Boolean(envFile && (inFile[name] || saved.includes(name)));
@@ -527,7 +556,10 @@ async function run(
     await tunnel?.close();
   }
   secrets.add(result.botToken, result.signingSecret, result.userToken);
-  if (!result.applied) return 0;
+  if (!result.applied) {
+    await preview(tools !== false);
+    return 0;
+  }
   const saved = await save(agent);
   const published = await publish(Boolean(result.install));
   // A new app says so itself, in Slack: the proof that it's installed and can speak.

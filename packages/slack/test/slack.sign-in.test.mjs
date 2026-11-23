@@ -234,3 +234,16 @@ test('with no Slack CLI and nobody to ask, or on Windows, it says how to install
   const gone = await machine({ cli: false });
   await assert.rejects(slackSignIn(gone.options({ ticket: 'TICKET1', code: 'CODE1' })), NeedsYou);
 });
+
+test('a ticket that was used already is no failure while its sign-in stands', async () => {
+  // The same command run twice: the CLI refuses the ticket the second time, and the login it made is there.
+  const again = await machine({ logins: { T1: { token: 'tok-1' } } });
+  assert.equal((await slackSignIn(again.options({ ticket: 'TICKET1', code: 'USED' }))).token, 'tok-1');
+  assert.match(again.said.join('\n'), /You're signed in to Slack already: that ticket and code aren't needed again\./);
+
+  // With that login expired, or two to choose from and none named, the refusal stands.
+  const expired = await machine({ logins: { T1: { token: 'old' } }, expired: ['old'] });
+  await assert.rejects(slackSignIn(expired.options({ ticket: 'TICKET1', code: 'USED' })), /Slack didn't take that code/);
+  const two = await machine({ logins: { T1: { token: 'tok-1' }, T2: { token: 'tok-2' } } });
+  await assert.rejects(slackSignIn(two.options({ ticket: 'TICKET1', code: 'USED' })), /Slack didn't take that code/);
+});

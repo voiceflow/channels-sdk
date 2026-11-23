@@ -54,6 +54,8 @@ test('one command makes the app: its route, its env files, and nothing else', as
     '.env.example',
     '.env.local',
     '.gitignore',
+    'AGENTS.md',
+    'CLAUDE.md',
     'README.md',
     'app/api/slack/route.ts',
     'app/layout.tsx',
@@ -241,4 +243,41 @@ test('--quiet prints only what to do next', async () => {
   const { out } = await start(['my-bot', '--quiet']);
   assert.doesNotMatch(out, /Created|Installing/);
   assert.match(out, /Next:/);
+});
+
+test('the app carries notes for a coding agent: the two commands, how to read what they answer, and what never to do', async () => {
+  const { app, out } = await start(['my-bot', '--environment', 'staging']);
+  const notes = await read(app, 'AGENTS.md');
+  assert.match(notes, /^# my-bot: notes for coding agents\n/);
+  // The plan first, which changes nothing; the person's answer; then the two commands as this app runs them.
+  assert.match(notes, /1\. \*\*See the plan:\*\* `npm run connect -- --dry-run`\. It changes nothing\./);
+  assert.match(notes, /2\. \*\*Show the person the plan, and ask two things in one message:\*\* whether\s+to go ahead, and whether to publish\./);
+  assert.match(notes, /3\. \*\*Make the Slack app, on their go-ahead:\*\* `npm run connect -- --yes`\. Add\s+`--publish` only if they said to publish\./);
+  assert.match(notes, /4\. \*\*Start it:\*\* `npm run dev`, as a background process/);
+  assert.match(notes, /The\s+sign-in is kept: leave the ticket and code off every run after that\./);
+  // Each exit code, and that a wait is the person's to answer.
+  for (const row of [/\| 0 \| Done/, /\| 3 \| It's waiting on the person/, /\| 2 \| The command was wrong/, /\| 1 \| It failed/]) assert.match(notes, row);
+  assert.match(notes, /--slack-ticket <ticket> --slack-code <code>/);
+  assert.match(notes, /Ask them to put it in `\.env\.local` themselves[^.]*\. Don't ask them to paste it to you\./);
+  // Publishing names this app's environment, and is never the agent's to decide.
+  assert.match(notes, /published version of the agent's `staging`\s+environment/);
+  assert.match(notes, /Never pass `--publish` without their yes to publishing itself\. A yes to\s+the plan isn't one\./);
+  assert.match(notes, /ask you later: `npm run connect -- --yes --publish`/);
+  assert.match(notes, /\*\*Never show a secret\.\*\*/);
+  assert.match(notes, /\*\*Don't publish, disconnect or remove tools\*\*/);
+  assert.doesNotMatch(notes, /--public-url/, 'no address for an agent to find');
+  // Claude Code reads CLAUDE.md: it is sent to the same notes, not given a second copy.
+  assert.equal(await read(app, 'CLAUDE.md'), '@AGENTS.md\n');
+  assert.match(out, /AGENTS\.md has them for a coding agent: ask yours to set this up\./);
+
+  // Each package manager's own way to pass a flag.
+  const pnpm = await start(['my-bot', '--pm', 'pnpm']);
+  const pnpmNotes = await read(pnpm.app, 'AGENTS.md');
+  for (const command of ['`pnpm connect --dry-run`', '`pnpm connect --yes`', '`pnpm dev`, as a background process', '`pnpm connect --yes --publish`'])
+    assert.ok(pnpmNotes.includes(command), command);
+
+  // Notes that are already there are yours.
+  const mine = await start(['my-bot', '--force'], { files: { 'my-bot/AGENTS.md': '# Mine\n', 'my-bot/CLAUDE.md': 'Mine too.\n' } });
+  assert.equal(await read(mine.app, 'AGENTS.md'), '# Mine\n');
+  assert.equal(await read(mine.app, 'CLAUDE.md'), 'Mine too.\n');
 });

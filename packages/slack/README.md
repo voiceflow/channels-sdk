@@ -42,10 +42,15 @@ Then:
   there is none, and offers Slack's installer when there is no Slack CLI: it
   shows the command and runs it only on a yes.
 - **With nobody at the terminal** (a script, a coding agent) connect asks
-  nothing. It stops with exit code 3 and says everything a person has to do:
-  the slash command to paste into Slack, say, and the `--slack-ticket` and
-  `--slack-code` to run it again with. Exit 0 is done, 1 a failure, 2 a
-  mistake in the command.
+  nothing. It stops with exit code 3 and says, in the one stop, everything a
+  person has to do: which agent, its key, and the slash command to paste into
+  Slack, with the `--slack-ticket` and `--slack-code` to run it again with.
+  The sign-in is kept, and a ticket passed again later is no failure. Exit 0
+  is done, 1 a failure, 2 a mistake in the command.
+- **`--dry-run` shows the whole plan and changes nothing:** what would be made
+  in Slack, what would go on the agent, and what the environment's draft
+  holds already, which a publish would carry too. It is what a coding agent
+  shows you before it goes ahead.
 - **An app you made by hand:** `--manual` leaves Slack to you and needs no
   Slack CLI. Connect reads `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` from
   the environment or the `--env-file` (or asks for them, unseen), names any

@@ -53,7 +53,14 @@ export interface SlackSignInOptions {
 export async function slackSignIn(options: SlackSignInOptions): Promise<SlackCliLogin> {
   const host: SlackCliHost = { ...defaultHost(), ...options.host };
   const before = tokens(host);
-  if (options.ticket || options.code) await finishLogin(options, host);
+  if (options.ticket || options.code) {
+    const refused = await finishLogin(options, host);
+    if (refused) {
+      // The same command run twice gives a ticket that was used the first time. That's no failure while its sign-in stands.
+      if (!(await signedIn(options, host, before))) throw new Error(refused);
+      options.say("You're signed in to Slack already: that ticket and code aren't needed again.");
+    }
+  }
 
   let login = await pick(options, host, before);
   if (login && !(await accepted(login, options))) {
@@ -98,17 +105,27 @@ async function pick(options: SlackSignInOptions, host: SlackCliHost, before: Map
   return chosen;
 }
 
-/** Signs in with the ticket an earlier run gave and the code Slack showed for it. */
-async function finishLogin(options: SlackSignInOptions, host: SlackCliHost): Promise<void> {
+/** Whether there's a login to use right now, without asking anyone. */
+async function signedIn(options: SlackSignInOptions, host: SlackCliHost, before: Map<string, string>): Promise<boolean> {
+  try {
+    const login = await pick({ ...options, interactive: false }, host, before);
+    return Boolean(login && (await accepted(login, options)));
+  } catch {
+    return false;
+  }
+}
+
+/** Signs in with the ticket an earlier run gave and the code Slack showed for it. Returns what to say when Slack refuses them. */
+async function finishLogin(options: SlackSignInOptions, host: SlackCliHost): Promise<string | undefined> {
   const { ticket, code } = options;
   if (!ticket || !code) throw new Error('--slack-ticket and --slack-code go together: the ticket this command gave you, and the code Slack showed for it.');
   if (ticket.startsWith('-') || code.startsWith('-')) throw new Error("That isn't a ticket and a code from Slack.");
   const cli = host.find();
   if (!cli) throw new NeedsYou(installFirst(host));
   const done = await host.run(cli, ['--skip-update', 'login', '--no-prompt', '--ticket', ticket, '--challenge', code], { show: false });
-  if (done.code !== 0) {
-    throw new Error(`Slack didn't take that code${said(done.output)}. Run this again without --slack-ticket and --slack-code for a new ticket.`);
-  }
+  return done.code === 0
+    ? undefined
+    : `Slack didn't take that code${said(done.output)}. Run this again without --slack-ticket and --slack-code for a new ticket.`;
 }
 
 /** No login to use: installs the CLI if a person agrees to, then signs in, or says how. */

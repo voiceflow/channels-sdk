@@ -110,6 +110,106 @@ async function exists(path: string): Promise<boolean> {
   );
 }
 
+/**
+ * The app's notes for a coding agent: how to set it up without a person at the
+ * terminal, and what never to do. The commands are the source of truth (they
+ * stop and say what they need), so this says how to run them and how to read
+ * what they answer. Next.js adds a block of its own to the same file when it
+ * runs; the two share it.
+ */
+function agentsMd(name: string, pm: PackageManager, environment: string): string {
+  return `# ${name}: notes for coding agents
+
+This app puts a Voiceflow agent in Slack. One route,
+\`app/api/slack/route.ts\`, takes everything Slack sends and every call the
+agent's Slack tools make. \`README.md\` covers the same ground for a person.
+
+## Setting it up
+
+When you're asked to set this up, connect it to Slack or get it running, do
+these in order. No command here asks you anything: each stops when it needs
+something, and says what.
+
+1. **See the plan:** \`${runScript(pm, 'connect', '--dry-run')}\`. It changes nothing. It
+   prints what connect would make in Slack, what it would put on the agent,
+   and what publishing would carry.
+2. **Show the person the plan, and ask two things in one message:** whether
+   to go ahead, and whether to publish. Give them, as the plan prints them,
+   the Slack workspace, the Voiceflow project with its workspace and
+   environment, and what a publish would carry.
+3. **Make the Slack app, on their go-ahead:** \`${runScript(pm, 'connect', '--yes')}\`. Add
+   \`--publish\` only if they said to publish.
+4. **Start it:** \`${runScript(pm, 'dev')}\`, as a background process. It keeps
+   running, and it's ready when it prints \`pointed at\`.
+
+Then tell the person the app's bot has messaged them in Slack, and to reply
+to it there.
+
+### Read the exit code
+
+| Code | Means | Do |
+|---|---|---|
+| 0 | Done | Go on |
+| 3 | It's waiting on the person | Give them its message as it is, wait for them, then run the same command again with what the message says to add |
+| 2 | The command was wrong | Fix what its message names |
+| 1 | It failed | Read its message. Running it again finishes what it started |
+
+What a code 3 asks for is the person's to do, not yours:
+
+- **A Voiceflow API key.** Ask them to put it in \`.env.local\` themselves, as
+  \`VOICEFLOW_API_KEY\`. Don't ask them to paste it to you.
+- **Signing in to Slack.** The message has a \`/slackauthticket …\` command for
+  them to paste into Slack. Slack gives them a code. Run the same command
+  again with \`--slack-ticket <ticket> --slack-code <code>\` added. The
+  sign-in is kept: leave the ticket and code off every run after that.
+- **The Voiceflow project's ID.** Ask them for it, or look it up with
+  Voiceflow's CLI or MCP server if you have one connected. It isn't a secret:
+  put it in \`.env.local\` as \`VOICEFLOW_PROJECT_ID\` yourself.
+- **A tool that isn't installed** (the Slack CLI, cloudflared). Give them the
+  install command the message prints. Run an installer only if they say to.
+
+One stop can ask for several of these: hand them all over together.
+
+### Publishing is the person's decision
+
+The bot runs the published version of the agent's \`${environment}\`
+environment, so the agent in Slack has its Slack tools only once that
+environment is published. Publishing makes the whole draft live, including
+changes that have nothing to do with this app. That is why the plan lists
+what the draft holds, and why you ask.
+
+- Never pass \`--publish\` without their yes to publishing itself. A yes to
+  the plan isn't one.
+- If they said no, or didn't say: leave it. They can publish in Voiceflow, or
+  ask you later: \`${runScript(pm, 'connect', '--yes --publish')}\`.
+- If connect says the environment is published, there's nothing to do.
+
+## Rules
+
+- **Never show a secret.** Don't print, echo, log or commit anything from
+  \`.env.local\`, or any token or key. To see whether a value is set, count
+  it: \`grep -c '^VOICEFLOW_API_KEY=.' .env.local\`.
+- **Don't publish, disconnect or remove tools** unless the person asked for
+  exactly that.
+- **Don't fix it by hand.** Don't change the app in Slack's settings or the
+  tools in Voiceflow to make something work. Run connect again: it only adds
+  what's missing.
+- **Keep \`.voiceflow/\`.** It records which Slack app and tools are this
+  app's.
+
+## Where things are
+
+- \`app/api/slack/route.ts\`: the route, and \`createChannels\`, where the
+  agent and its channels are set.
+- \`.env.local\`: the server's settings. \`.env.example\` names each one.
+- A server that has an address of its own: \`README.md\`, "Deploy it".
+- Every option: \`npx voiceflow-channels connect slack --help\` and
+  \`npx voiceflow-channels dev --help\`.
+- Tools of your own, and the rest:
+  [Voiceflow Channels](https://github.com/voiceflow/channels-sdk).
+`;
+}
+
 function readme(name: string, pm: PackageManager, environment: string): string {
   const connect = runScript(pm, 'connect');
   const deployed = runScript(pm, 'connect', '--public-url https://<your deployment>');
@@ -123,6 +223,9 @@ calls the agent's Slack tools make.
 Made with [\`create-voiceflow-channels\`](https://github.com/voiceflow/channels-sdk).
 
 ## Run it
+
+With a coding agent, ask it to set this up: [\`AGENTS.md\`](AGENTS.md) tells it
+how, and what to hand back to you. By hand, it's two commands.
 
 You need Node.js 22 or later, a Voiceflow agent with an API key, and a Slack
 workspace where you can create apps. Two tools are used on the way, and each
@@ -301,6 +404,15 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
   await writeFile(join(target, 'package.json'), `${JSON.stringify(pkg, null, 2)}\n`);
   await writeFile(join(target, '.gitignore'), GITIGNORE);
   await writeFile(join(target, 'README.md'), readme(name, pm, environment));
+  // For a coding agent asked to set the app up. Ones that are already there are yours, and are left as they are.
+  const forAgents: [file: string, text: string][] = [
+    ['AGENTS.md', agentsMd(name, pm, environment)],
+    // Claude Code reads CLAUDE.md: this sends it to the same notes.
+    ['CLAUDE.md', '@AGENTS.md\n'],
+  ];
+  for (const [file, text] of forAgents) {
+    if (!(await exists(join(target, file)))) await writeFile(join(target, file), text);
+  }
 
   let envExample = await readFile(new URL('env.example', TEMPLATE), 'utf8');
   envExample = setEnv(envExample, 'VOICEFLOW_ENVIRONMENT', environment);
@@ -343,7 +455,7 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
       `       ${runScript(pm, 'dev')}`,
       '     It opens a tunnel, starts the server, and points Slack at it.',
       '',
-      'README.md has each step in full.',
+      'README.md has each step in full. AGENTS.md has them for a coding agent: ask yours to set this up.',
     ].join('\n'),
   );
   // The app was made either way; a failed install is the one thing left to do, and the exit code says so.

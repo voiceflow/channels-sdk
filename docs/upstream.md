@@ -216,6 +216,11 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       asks the server the platform's signed check first. A new tunnel's name
       is asked of a public resolver before this machine's own, which remembers
       a miss: found live, where asking too soon cost the whole wait
+- [x] The starter's app carries notes for a coding agent (2026-11-23):
+      `AGENTS.md`, and a `CLAUDE.md` that points to it. They say to show the
+      plan first (`--dry-run`), ask the person to go ahead and whether to
+      publish in one message, and never to show a secret. Tried with fresh
+      agents against a stand-in for the commands that replays their output
 - [ ] Uninstall with a key that can't delete functions stops after detaching
       the tool (seen live 2026-11-23, a 401 on the delete): check the key
       first, or finish the step and say what was left

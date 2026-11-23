@@ -32,6 +32,10 @@ which this repository builds on every change.
 
 ## After it runs
 
+The app has an `AGENTS.md`, so a coding agent asked to "set this up" knows
+the two commands, how to read what they answer, and what to hand back to you:
+your Voiceflow key, the Slack sign-in, and whether to publish. By hand:
+
 1. Make the Slack app: `npm run connect`. It signs you in to Slack, asks for
    your Voiceflow API key and project ID, and saves them in `.env.local`.
    Then it asks whether to publish the environment, and the bot messages you
