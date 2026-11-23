@@ -124,9 +124,10 @@ Made with [\`create-voiceflow-channels\`](https://github.com/voiceflow/channels-
 ## Run it
 
 You need Node.js 22 or later, a Voiceflow agent with an API key, a Slack
-workspace where you can create apps, the
-[Slack CLI](https://tools.slack.dev/slack-cli) logged in to it (\`slack login\`),
-and a tunnel such as [ngrok](https://ngrok.com).
+workspace where you can create apps, and a tunnel such as
+[ngrok](https://ngrok.com). Connect signs you in to Slack through the
+[Slack CLI](https://tools.slack.dev/slack-cli), and offers to install it
+when you don't have it.
 
 1. Start a tunnel to port 3000, and keep it running:
 
@@ -141,9 +142,11 @@ and a tunnel such as [ngrok](https://ngrok.com).
    ${connect}
    \`\`\`
 
-   It reads your agent's details from \`.env.local\` and asks for what isn't
-   there: your Voiceflow API key, in a hidden prompt, and your project's ID.
-   It shows its plan and asks before it changes anything. Then it makes and
+   It signs you in to Slack (it runs \`slack login\` for you, and offers to
+   install the Slack CLI first when you don't have it). It reads your agent's
+   details from \`.env.local\` and asks for what isn't there: your Voiceflow
+   API key, in a hidden prompt, and your project's ID. It shows its plan and
+   asks before it changes anything. Then it makes and
    installs the app, installs Slack's tools on the agent, and fills in
    \`.env.local\`: the app's \`SLACK_BOT_TOKEN\` and \`SLACK_SIGNING_SECRET\`,
    and what it asked you for. The bot token stays on this server: it never
@@ -327,10 +330,10 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
       'Next:',
       ...(where === '.' ? [] : [`  cd ${where}`]),
       ...(installed ? [] : [`  ${pm} install`]),
-      '  1. Start a tunnel to port 3000 (ngrok http 3000), and log the Slack CLI in (slack login).',
+      '  1. Start a tunnel to port 3000 (ngrok http 3000).',
       '  2. Make the Slack app:',
       `       ${runScript(pm, 'connect', '--public-url https://<your tunnel>')}`,
-      `     It asks for your Voiceflow API key${o.project ? '' : ' and project ID'}, and saves ${o.project ? 'it' : 'them'} in .env.local.`,
+      `     It signs you in to Slack, asks for your Voiceflow API key${o.project ? '' : ' and project ID'}, and saves ${o.project ? 'it' : 'them'} in .env.local.`,
       `  3. Publish the ${environment} environment in Voiceflow.`,
       `  4. ${pm} run dev`,
       '',

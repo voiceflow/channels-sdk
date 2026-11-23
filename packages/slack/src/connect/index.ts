@@ -12,7 +12,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TOOLS_URL_SECRET } from '@voiceflow/channels-sdk';
+import { redact, TOOLS_URL_SECRET } from '@voiceflow/channels-sdk';
 import {
   type ApiOptions,
   checkProject,
@@ -28,7 +28,16 @@ import { type SlackToolsOptions, slackTools } from '../tools/index.js';
 import { createSlackApi, type SlackApi, SlackApiError } from './api.js';
 import { appNameOf, type ManifestChanges, type ManifestOptions, mergeManifest, type SlackManifest, slackManifest } from './manifest.js';
 
-export { createSlackApi, type SlackApi, SlackApiError, type SlackApiOptions, type SlackCliLogin, slackCliLogin } from './api.js';
+export {
+  createSlackApi,
+  SLACK_CLI_CREDENTIALS,
+  type SlackApi,
+  SlackApiError,
+  type SlackApiOptions,
+  type SlackCliLogin,
+  slackCliLogin,
+  slackCliLogins,
+} from './api.js';
 export {
   appNameOf,
   BOT_EVENTS,
@@ -312,6 +321,132 @@ export async function connectSlack(options: ConnectSlackOptions): Promise<Connec
 }
 
 /** Where the agent's tools call your server: the address you gave, or the webhook's own. */
+// ── An app you made by hand ─────────────────────────────────────────────────
+
+export interface ConnectOwnAppOptions {
+  /** Your app's bot token. Connect reads with it who the app is and what it was granted, and changes nothing in Slack. */
+  slack: { botToken: string; apiURL?: string; fetch?: typeof fetch };
+  voiceflow: ConnectSlackOptions['voiceflow'];
+  /** Where your server takes Slack's requests: the address the app's settings point at. */
+  requestUrl: string;
+  /** Where the agent's Slack tools call your server. Default: `requestUrl`. */
+  toolsUrl?: string;
+  /** The slash command your app has (default `/ask`), or `false` for none. */
+  command?: string | false;
+  tools?: SlackToolsOptions | false;
+  restore?: readonly string[];
+  /** Called with the plan before anything changes; return false to stop. */
+  confirm?: (plan: OwnAppPlan) => boolean | Promise<boolean>;
+  onProgress?: (line: string) => void;
+}
+
+export interface OwnAppPlan {
+  team: { id: string; name: string };
+  botUserId: string;
+  project: ConnectPlan['project'];
+  environment: string;
+  /** Scopes this package uses that the app wasn't granted. Undefined when Slack didn't say what it was granted. */
+  missingScopes?: string[];
+  /** What would change on the agent. */
+  voiceflow?: InstallResult;
+  /** The plan, as lines for a person. */
+  lines: string[];
+}
+
+export interface OwnAppResult {
+  applied: boolean;
+  plan: OwnAppPlan;
+  toolsUrl?: string;
+  install?: InstallResult;
+}
+
+/**
+ * Connect for a Slack app you made and installed yourself: the Voiceflow half
+ * alone. It checks the app against what this package uses and installs
+ * Slack's tools on the agent. Nothing in Slack is changed, and it needs no
+ * Slack CLI: the app's settings stay yours to keep.
+ */
+export async function connectOwnApp(options: ConnectOwnAppOptions): Promise<OwnAppResult> {
+  const { voiceflow } = options;
+  if (!voiceflow.environment) throw new TypeError('connectOwnApp: `voiceflow.environment` is required');
+  // The workspace check comes first, as it does for an app connect makes.
+  const project = await checkProject(voiceflow);
+  const app = await ownApp(options.slack);
+  const wanted = slackManifest({
+    requestUrl: options.requestUrl,
+    ...(options.command !== undefined ? { command: options.command } : {}),
+    ...(options.tools === false ? {} : { tools: options.tools ?? {} }),
+  });
+  const granted = app.scopes;
+  const install = (dryRun: boolean, onStep?: (step: Step) => void) =>
+    installTools(slackTools(options.tools || undefined), {
+      ...voiceflow,
+      ...(options.restore ? { restore: options.restore } : {}),
+      secretValues: { [TOOLS_URL_SECRET]: toolsUrlOf(options) },
+      ...(dryRun ? { dryRun } : {}),
+      ...(onStep ? { onStep } : {}),
+    });
+  const plan: OwnAppPlan = {
+    team: app.team,
+    botUserId: app.botUserId,
+    project,
+    environment: voiceflow.environment,
+    ...(granted ? { missingScopes: wanted.oauth_config.scopes.bot.filter((scope) => !granted.includes(scope)) } : {}),
+    ...(options.tools !== false ? { voiceflow: await install(true) } : {}),
+    lines: [],
+  };
+  plan.lines = ownAppLines(plan, wanted, options);
+  if (options.confirm && !(await options.confirm(plan))) return { applied: false, plan };
+
+  const say = options.onProgress ?? (() => {});
+  const installed = options.tools === false ? undefined : await install(false, (step) => say(connectStepLine(step)));
+  return { applied: true, plan, ...(installed ? { toolsUrl: toolsUrlOf(options), install: installed } : {}) };
+}
+
+/** Who a bot token is and what it was granted: `auth.test`, whose answer carries the token's scopes in a header. */
+async function ownApp(slack: ConnectOwnAppOptions['slack']): Promise<{ team: { id: string; name: string }; botUserId: string; scopes?: string[] }> {
+  const base = (slack.apiURL ?? 'https://slack.com/api').replace(/\/$/, '');
+  const res = await (slack.fetch ?? fetch)(`${base}/auth.test`, { method: 'POST', headers: { authorization: `Bearer ${slack.botToken}` } });
+  const json = (await res.json().catch(() => ({ ok: false, error: `http_${res.status}` }))) as any;
+  const where = "your app's OAuth & Permissions page (https://api.slack.com/apps)";
+  if (!json.ok) {
+    const error = redact(String(json.error ?? 'unknown_error'), [slack.botToken]).slice(0, 200);
+    throw new Error(`Slack doesn't take SLACK_BOT_TOKEN (${error}). Copy the Bot User OAuth Token from ${where}. Nothing was changed.`);
+  }
+  if (!json.bot_id) throw new Error(`SLACK_BOT_TOKEN isn't a bot's token. Use the Bot User OAuth Token (it starts xoxb-) from ${where}. Nothing was changed.`);
+  const header = res.headers.get('x-oauth-scopes');
+  const scopes =
+    header === null
+      ? undefined
+      : header
+          .split(',')
+          .map((scope) => scope.trim())
+          .filter(Boolean);
+  return { team: { id: String(json.team_id), name: String(json.team) }, botUserId: String(json.user_id), ...(scopes ? { scopes } : {}) };
+}
+
+function ownAppLines(plan: OwnAppPlan, wanted: SlackManifest, options: ConnectOwnAppOptions): string[] {
+  const commands = (wanted.features.slash_commands as { command: string }[] | undefined)?.map((c) => c.command) ?? [];
+  const lines = [`Slack: your own app in workspace ${plan.team.name} (${plan.team.id}), bot user ${plan.botUserId} (connect changes nothing in it)`];
+  const missing = plan.missingScopes;
+  if (!missing) lines.push("  · Slack didn't say which scopes the app has: compare them with the manifest yourself");
+  else if (missing.length) {
+    lines.push(
+      `  ! it wasn't granted ${missing.length === 1 ? 'a scope' : `${missing.length} scopes`} this package uses: ${missing.join(', ')}`,
+      '    add them under OAuth & Permissions, then reinstall the app',
+    );
+  } else lines.push(`  = it has every scope this package uses (${wanted.oauth_config.scopes.bot.length})`);
+  lines.push(
+    `  · these settings are yours to keep, each pointed at ${options.requestUrl}:`,
+    '      Event Subscriptions > Request URL',
+    '      Interactivity & Shortcuts > Request URL',
+    ...commands.map((command) => `      Slash Commands > ${command} > Request URL`),
+    '    the whole manifest, to compare with: connect slack --print-manifest --public-url <your address>',
+  );
+  lines.push(...voiceflowLines(plan, options));
+  return lines;
+}
+
 function toolsUrlOf(options: Pick<ConnectSlackOptions, 'toolsUrl' | 'requestUrl'>): string {
   const url = options.toolsUrl ?? options.requestUrl;
   // A turn's pass travels with every call, so the address is https.
@@ -490,9 +625,18 @@ function planLines(plan: ConnectPlan, options: ConnectSlackOptions): string[] {
   else if (app.icon?.from === 'option') lines.push(`  + set its icon to the image: ${app.icon.url}`);
   else if (app.icon) lines.push(`  + set its icon to ${DEFAULT_ICON_NAME} (the agent has no avatar in Voiceflow)`);
   lines.push(`  + install it in ${plan.team.name} (its bot token is for your server alone: it never goes to Voiceflow)`);
-  lines.push(
+  lines.push(...voiceflowLines(plan, options));
+  return lines;
+}
+
+/** The Voiceflow half of a plan: the agent, and each step of installing the tools on it. */
+function voiceflowLines(
+  plan: Pick<ConnectPlan, 'project' | 'environment' | 'voiceflow'>,
+  options: Pick<ConnectSlackOptions, 'toolsUrl' | 'requestUrl'>,
+): string[] {
+  const lines = [
     `Voiceflow: project "${plan.project.name}" (${plan.project.id}) in workspace ${plan.project.workspaceID}, environment ${plan.environment} (nothing is published)`,
-  );
+  ];
   if (plan.voiceflow) {
     lines.push(...plan.voiceflow.steps.map((s) => `  ${connectStepLine(s)}`));
     if (plan.voiceflow.steps.some((s) => s.kind === 'secret' && s.name === TOOLS_URL_SECRET)) {
@@ -562,3 +706,11 @@ export async function disconnectSlack(options: DisconnectSlackOptions): Promise<
 }
 
 export { cli } from './cli.js';
+export {
+  NeedsYou,
+  SLACK_CLI_INSTALL,
+  SLACK_CLI_INSTALL_WINDOWS,
+  type SlackCliHost,
+  type SlackSignInOptions,
+  slackSignIn,
+} from './sign-in.js';

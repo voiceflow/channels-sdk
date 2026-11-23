@@ -32,9 +32,10 @@ which this repository builds on every change.
 
 ## After it runs
 
-1. Start a tunnel to port 3000, and log the Slack CLI in (`slack login`).
+1. Start a tunnel to port 3000.
 2. Make the Slack app: `npm run connect -- --public-url https://<your tunnel>`.
-   It asks for your Voiceflow API key and project ID, and saves them in `.env.local`.
+   It signs you in to Slack, asks for your Voiceflow API key and project ID,
+   and saves them in `.env.local`.
 3. Publish the environment in Voiceflow.
 4. `npm run dev`.
 

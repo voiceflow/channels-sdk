@@ -198,6 +198,15 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       project and environment come from `--env-file`, a person is asked for
       what's missing, and what was asked for is saved there. Setup is the
       starter, then one command with the server's address
+- [x] Connect does the Slack sign-in (2026-11-23): it refreshes an expired
+      Slack CLI login, asks which workspace, runs `slack login`, and offers
+      Slack's installer. With nobody at the terminal it stops (exit 3) with
+      what a person has to do. `--manual` connects an app made by hand, with
+      no Slack CLI
+- [ ] Voiceflow sign-in instead of a pasted key. The `vf` CLI signs in through
+      the browser but can't hand its session to another program, and a key
+      for the server can only be issued in a signed-in browser. Both are
+      Voiceflow's to change; until then connect takes a key
 - [ ] Contract tests passing for Phase 1: Slack (done), WhatsApp, Messenger, Instagram, Teams, Resend, Gmail
 - [ ] Upstream tracking (section 3) running
 - [ ] Docs: the Channels page (native vs Channels SDK) and one page per channel

@@ -32,8 +32,23 @@ Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment developme
     Slack's tools run on your server: the agent calls them at https://<your server>/api/slack
 ```
 
-- **Slack login:** the [Slack CLI](https://tools.slack.dev/slack-cli)'s
-  (`slack login`). Pick a workspace with `--team` when it's logged in to several.
+- **Slack sign-in:** connect works in Slack with the
+  [Slack CLI](https://tools.slack.dev/slack-cli)'s login, and does the work
+  around it. It refreshes a login that has expired, asks which workspace when
+  the CLI is logged in to several (or take `--team`), runs `slack login` when
+  there is none, and offers Slack's installer when there is no Slack CLI: it
+  shows the command and runs it only on a yes.
+- **With nobody at the terminal** (a script, a coding agent) connect asks
+  nothing. It stops with exit code 3 and says everything a person has to do:
+  the slash command to paste into Slack, say, and the `--slack-ticket` and
+  `--slack-code` to run it again with. Exit 0 is done, 1 a failure, 2 a
+  mistake in the command.
+- **An app you made by hand:** `--manual` leaves Slack to you and needs no
+  Slack CLI. Connect reads `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` from
+  the environment or the `--env-file` (or asks for them, unseen), names any
+  scope the app wasn't granted, lists the settings that must point at your
+  server, and installs the tools on the agent. `--print-manifest` prints the
+  manifest to make the app from.
 - **Which agent:** `--project` and `--environment`, or `VOICEFLOW_PROJECT_ID`
   and `VOICEFLOW_ENVIRONMENT` in the environment or in the `--env-file`. With
   neither, connect asks.
