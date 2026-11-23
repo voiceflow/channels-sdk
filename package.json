@@ -19,6 +19,7 @@
   "workspaces": [
     "packages/core",
     "packages/slack",
+    "packages/create",
     "examples/*"
   ],
   "scripts": {

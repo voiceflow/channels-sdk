@@ -1,0 +1,57 @@
+{
+  "name": "create-voiceflow-channels",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Start a Voiceflow agent in Slack with one command: a Next.js app with its route and its env file.",
+  "keywords": [
+    "voiceflow",
+    "create",
+    "starter",
+    "slack",
+    "slack-bot",
+    "chat-sdk",
+    "vercel-chat",
+    "chatbot",
+    "ai-agent",
+    "nextjs"
+  ],
+  "author": "Braden Ream",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voiceflow/channels-sdk.git",
+    "directory": "packages/create"
+  },
+  "homepage": "https://github.com/voiceflow/channels-sdk/tree/main/packages/create#readme",
+  "bugs": {
+    "url": "https://github.com/voiceflow/channels-sdk/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "create-voiceflow-channels": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "template",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/template.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

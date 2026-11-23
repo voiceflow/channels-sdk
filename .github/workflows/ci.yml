@@ -1,8 +1,10 @@
 # Build, typecheck and test every package on each supported Node version and
-# against the oldest Chat SDK the packages support; lint; and check that a pull
-# request changing a package says how in a changeset. The tests run against
-# fakes of Slack and Voiceflow: no secrets, no network. "all checks" passes only
-# when every job does: it's the one check branch protection requires.
+# against the oldest Chat SDK the packages support; lint; make an app with the
+# starter from the packed packages and run it; and check that a pull request
+# changing a package says how in a changeset. The tests run against fakes of
+# Slack and Voiceflow: no secrets, no network beyond npm's registry. "all
+# checks" passes only when every job does: it's the one check branch
+# protection requires.
 name: ci
 
 on:
@@ -93,10 +95,26 @@ jobs:
       - run: npm run typecheck -w @voiceflow/channels-sdk -w @voiceflow/channels-slack
       - run: npm test -w @voiceflow/channels-sdk -w @voiceflow/channels-slack
 
+  starter:
+    name: starter
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w create-voiceflow-channels
+      # The app installs the packages as npm would deliver them, builds, and answers a signed Slack request.
+      - name: The starter makes an app that installs, builds and answers Slack
+        run: node packages/create/scripts/smoke.mjs
+
   all-checks:
     name: all checks
     if: ${{ always() }}
-    needs: [test, changeset, lint, oldest-chat]
+    needs: [test, changeset, lint, oldest-chat, starter]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
