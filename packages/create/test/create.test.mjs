@@ -65,7 +65,7 @@ test('one command makes the app: its route, its env files, and nothing else', as
   assert.match(out, /Created my-bot: a Voiceflow agent in Slack/);
   assert.match(out, /cd my-bot/);
   assert.match(out, /npm run connect -- --public-url https:\/\/<your tunnel>/);
-  assert.match(out, /It asks for your Voiceflow API key and project ID, and saves them in \.env\.local\./);
+  assert.match(out, /It signs you in to Slack, asks for your Voiceflow API key and project ID, and saves them in \.env\.local\./);
   assert.doesNotMatch(out, /--project|--environment/, 'the env file says which agent: nothing to repeat on the command line');
   assert.match(await read(app, 'README.md'), /^# my-bot\n/);
 });
@@ -108,7 +108,7 @@ test('the env files list what the server needs, hold no secret, and yours is rea
   const ignored = await read(app, '.gitignore');
   assert.match(ignored, /^\.env\.\*$/m);
   assert.match(ignored, /^!\.env\.example$/m);
-  assert.match(out, /It asks for your Voiceflow API key, and saves it in \.env\.local\./, 'the project is in the env file already');
+  assert.match(out, /It signs you in to Slack, asks for your Voiceflow API key, and saves it in \.env\.local\./, 'the project is in the env file already');
   assert.match(out, /Publish the production environment in Voiceflow/);
   assert.match(await read(app, 'README.md'), /Publish the agent's `production` environment/);
 });

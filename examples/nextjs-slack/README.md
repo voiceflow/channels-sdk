@@ -8,8 +8,9 @@ the assistant panel, buttons, forms and `/ask` all arrive there.
 
 - Node.js 22 or later
 - A Voiceflow agent, its project ID and an API key
-- A Slack workspace where you can create apps, and the
-  [Slack CLI](https://tools.slack.dev/slack-cli) logged in to it (`slack login`)
+- A Slack workspace where you can create apps. Connect signs you in to it
+  through the [Slack CLI](https://tools.slack.dev/slack-cli), and offers to
+  install that when you don't have it
 - A public URL for your machine, from a tunnel such as
   [ngrok](https://ngrok.com) or
   [cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/)
@@ -38,8 +39,10 @@ the assistant panel, buttons, forms and `/ask` all arrive there.
    npm run connect -- --public-url https://<your tunnel>
    ```
 
-   It asks for your Voiceflow API key (in a hidden prompt), your project's ID
-   and the environment, then shows its plan and asks first. It makes and
+   It signs you in to Slack (it runs `slack login` for you, and offers to
+   install the Slack CLI first when you don't have it). It asks for your
+   Voiceflow API key (in a hidden prompt), your project's ID and the
+   environment, then shows its plan and asks first. It makes and
    installs the app, installs Slack's tools on the agent, and writes
    `.env.local`: the app's `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`, and
    what it asked you for. To skip the questions, copy `.env.example` to

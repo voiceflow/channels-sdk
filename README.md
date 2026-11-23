@@ -57,11 +57,12 @@ export async function POST(request: Request) {
 }
 ```
 
-Make the Slack app. You need the [Slack CLI](https://tools.slack.dev/slack-cli),
-logged in to your workspace (`slack login`). Point a tunnel at port 3000 first: connect answers
-Slack's check of the URL while it runs. It installs the app in your workspace,
-installs Slack's tools on your agent, and writes the app's credentials to your
-env file. It shows its plan and asks before it changes anything:
+Make the Slack app. Point a tunnel at port 3000 first: connect answers Slack's
+check of the URL while it runs. It signs you in to Slack through the
+[Slack CLI](https://tools.slack.dev/slack-cli), offering to install it when
+you don't have it. It installs the app in your workspace, installs Slack's
+tools on your agent, and writes the app's credentials to your env file. It
+shows its plan and asks before it changes anything:
 
 ```bash
 npx voiceflow-channels connect slack --public-url https://<your tunnel> --env-file .env.local

@@ -4,9 +4,10 @@
 //
 // Secrets never reach the screen or the command line: the Voiceflow API key is
 // read from a file (--key-file), VOICEFLOW_API_KEY, your server's env file
-// (--env-file) or a hidden prompt; the Slack login is the Slack CLI's; the
-// app's credentials go only to that env file, written readable by you alone,
-// and never to Voiceflow.
+// (--env-file) or a hidden prompt; the Slack login is the Slack CLI's, which
+// connect refreshes, or makes with `slack login`, when it has to (sign-in.ts);
+// the app's credentials go only to that env file, written readable by you
+// alone, and never to Voiceflow.
 // Every line this prints, an error's included, is first cleaned of the secrets
 // it holds: a server that repeats one back in an error can't put it on screen.
 import { randomUUID } from 'node:crypto';
@@ -17,10 +18,22 @@ import readline from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
 import { parseArgs } from 'node:util';
 import { createRedactor } from '@voiceflow/channels-sdk';
-import { type ConnectResult, connectSlack, disconnectSlack, type SlackCliLogin, slackCliLogin, slackManifest } from './index.js';
+import { slackCliLogins } from './api.js';
+import {
+  type ConnectResult,
+  connectOwnApp,
+  connectSlack,
+  createSlackApi,
+  disconnectSlack,
+  type OwnAppResult,
+  type SlackCliLogin,
+  slackManifest,
+} from './index.js';
+import { NeedsYou, type SlackCliHost, slackSignIn } from './sign-in.js';
 
 const USAGE = `Usage:
   voiceflow-channels connect slack --public-url <https://host> [--env-file <path>] [options]
+  voiceflow-channels connect slack --manual --public-url <https://host> [--env-file <path>]
   voiceflow-channels disconnect slack [--env-file <path>] [--remove-tools] [--yes]
   voiceflow-channels connect slack --print-manifest --public-url <https://host>
 
@@ -35,6 +48,20 @@ then VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID and VOICEFLOW_ENVIRONMENT in the
 environment, then the same names in --env-file. What's still missing is asked
 for, the key in a hidden prompt.
 
+Connect works in Slack with the Slack CLI's login. It refreshes a login that
+has expired, asks which workspace when there are several, runs \`slack login\`
+when there is none, and offers Slack's installer when there is no Slack CLI.
+With nobody at the terminal it stops instead, saying what to do and how to
+carry on.
+
+With --manual, connect leaves Slack to you: for an app you made and installed
+by hand, it checks the app's scopes and installs the tools on the agent, and
+needs no Slack CLI. It reads SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET from the
+environment or --env-file, or asks for them.
+
+It exits 0 when done, 1 on a failure, 2 on a mistake in the command, and 3
+when it's waiting on you: do what it says, then run it again.
+
 Options:
   --project <id>          the Voiceflow project (agent)
   --environment <alias>   the environment to install the tools into: its draft is
@@ -45,7 +72,12 @@ Options:
   --request-url <url>     or the whole webhook URL, if it isn't <url>/api/slack
   --tools-url <url>       where the agent's Slack tools call your server
                           (default: the webhook URL, which answers them too)
-  --team <id>             the Slack workspace (from \`slack login\`); default: the only one
+  --team <id>             the Slack workspace (from \`slack login\`); default: the only
+                          one, or the one you pick
+  --slack-ticket <ticket> finish a sign-in an earlier run started: the ticket it
+  --slack-code <code>     gave you, and the code Slack showed for it
+  --manual                the Slack app is one you made by hand: change nothing in
+                          Slack, check the app and install the tools on the agent
   --app <id>              use this app, adding what's missing, instead of making one
   --name <name>           a new app's name (default: the agent's name in Voiceflow)
   --icon <url|none>       the app's icon, an image's URL (default: a new app gets
@@ -76,8 +108,10 @@ export interface CliIO {
   out?: (line: string) => void;
   /** Takes each line of an error or a warning. */
   err?: (line: string) => void;
-  /** The Slack CLI's login for a workspace. */
+  /** The Slack CLI's login for a workspace, in place of signing in. */
   login?: (teamId?: string) => SlackCliLogin;
+  /** The Slack CLI on this machine: where its logins are kept, how it's found and run. */
+  slackCli?: Partial<SlackCliHost>;
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
   /** Whether a person is there to answer a question. */
@@ -99,7 +133,8 @@ export async function cli(argv: string[], io: CliIO = {}): Promise<number> {
     return await run(argv, { ...io, env }, secrets, out, err);
   } catch (error) {
     err(error instanceof Error ? error.message : String(error));
-    return 1;
+    // Waiting on a person is its own answer: whoever ran this knows to hand it over, then run it again.
+    return error instanceof NeedsYou ? 3 : 1;
   }
 }
 
@@ -125,6 +160,9 @@ async function run(
       'request-url': { type: 'string' },
       'tools-url': { type: 'string' },
       team: { type: 'string' },
+      'slack-ticket': { type: 'string' },
+      'slack-code': { type: 'string' },
+      manual: { type: 'boolean', default: false },
       app: { type: 'string' },
       name: { type: 'string' },
       icon: { type: 'string' },
@@ -158,6 +196,11 @@ async function run(
     return 0;
   }
 
+  if (o.manual && action !== 'connect') {
+    err('--manual is for connect: an app you made by hand is yours to delete in Slack.');
+    return 2;
+  }
+
   // The server's env file, when there is one: what it already says isn't asked for again.
   const envFile = o['env-file'];
   const inFile = envFile ? await readEnvFile(envFile) : {};
@@ -179,21 +222,76 @@ async function run(
     return 2;
   }
 
-  const login = (io.login ?? slackCliLogin)(o.team);
-  secrets.add(login.token);
-  const key = await voiceflowKey({ file: o['key-file'], env: io.env, inFile, envFile, interactive, secret: io.secret ?? hidden });
+  const withFetch = io.fetch ? { fetch: io.fetch } : {};
+  // With nobody to ask, everything a person has to do is said in one stop, not one thing per run.
+  const waiting: string[] = [];
+  const orWait = async <T>(get: () => T | Promise<T>): Promise<T | undefined> => {
+    try {
+      return await get();
+    } catch (error) {
+      if (interactive || !(error instanceof NeedsYou)) throw error;
+      waiting.push(error.message);
+      return undefined;
+    }
+  };
+  // Slack: the CLI's login, or (--manual) the credentials of an app you made.
+  if (!io.login && !o.manual) secrets.add(...slackCliLogins(io.slackCli?.credentialsFile).map((l) => l.token));
+  const login = o.manual
+    ? undefined
+    : await orWait(() =>
+        io.login
+          ? io.login(o.team)
+          : slackSignIn({
+              ...(o.team ? { team: o.team } : {}),
+              ...(o['slack-ticket'] ? { ticket: o['slack-ticket'] } : {}),
+              ...(o['slack-code'] ? { code: o['slack-code'] } : {}),
+              interactive,
+              ask,
+              say: out,
+              check: (l) => createSlackApi({ token: l.token, ...withFetch })('auth.test'),
+              ...(io.slackCli ? { host: io.slackCli } : {}),
+            }),
+      );
+  secrets.add(login?.token);
+  const own = o.manual ? await orWait(() => ownCredentials({ env: io.env, inFile, envFile, interactive, secret: io.secret ?? hidden })) : undefined;
+  secrets.add(own?.botToken, own?.signingSecret);
+  const key = await orWait(() => voiceflowKey({ file: o['key-file'], env: io.env, inFile, envFile, interactive, secret: io.secret ?? hidden }));
+  if (waiting.length || !key) throw new NeedsYou(waiting.join('\n\n'));
   const apiKey = key.value;
   secrets.add(apiKey);
-  /** What the server needs and its env file doesn't say yet. Written once connect has done its work, never over a value that's there. */
-  const needed: [name: string, value: string][] = [
+
+  /**
+   * Writes to the env file what the server needs and the file doesn't say yet,
+   * once connect has done its work: never over a value that's there. A value an
+   * env file would read back as something else (a space, a quote, a `#`, a `$`)
+   * is yours to write. Returns the names it wrote.
+   */
+  const save = async (values: [name: string, value: string][]): Promise<string[]> => {
+    const absent = envFile ? values.filter(([name, value]) => value && !inFile[name]) : [];
+    const saved = absent.filter(([, value]) => BARE.test(value));
+    if (envFile && saved.length) {
+      await writeEnvFile(envFile, Object.fromEntries(saved));
+      out(`+ saved ${saved.map(([name]) => name).join(', ')} to ${envFile}`);
+    }
+    for (const [name, value] of absent) {
+      if (!BARE.test(value)) err(`! ${name} wasn't saved to ${envFile}: its value needs quoting there. Add it yourself.`);
+    }
+    return saved.map(([name]) => name);
+  };
+  const agent: [name: string, value: string][] = [
     ['VOICEFLOW_API_KEY', key.typed ? apiKey : ''],
     ['VOICEFLOW_PROJECT_ID', project],
     ['VOICEFLOW_ENVIRONMENT', environment],
   ];
-  const toSave = envFile ? needed.filter(([name, value]) => value && !inFile[name]) : [];
-  const withFetch = io.fetch ? { fetch: io.fetch } : {};
   const voiceflow = { apiKey, projectID: project, environment, ...(o.workspace ? { expectWorkspace: o.workspace } : {}), ...withFetch };
-  const slack = { token: login.token, teamId: login.teamId, ...withFetch };
+  const restore = o.restore
+    ? {
+        restore: o.restore
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }
+    : {};
   const confirm = async (lines: string[]) => {
     out(lines.join('\n'));
     if (o['dry-run']) return false;
@@ -204,6 +302,40 @@ async function run(
     }
     return /^y(es)?$/i.test((await ask('\nGo ahead? [y/N] ')).trim());
   };
+
+  if (own) {
+    const result = await connectOwnApp({
+      slack: { botToken: own.botToken, ...withFetch },
+      voiceflow,
+      requestUrl: requestUrl!,
+      ...(o['tools-url'] ? { toolsUrl: o['tools-url'] } : {}),
+      ...(command !== undefined ? { command } : {}),
+      tools,
+      ...restore,
+      confirm: (plan) => confirm(plan.lines),
+      onProgress: out,
+    });
+    if (!result.applied) return 0;
+    const saved = await save([...own.typed, ...agent]);
+    const inPlace = (name: string) => Boolean(envFile && (inFile[name] || saved.includes(name)));
+    printSettings(
+      {
+        heading: `Connected the agent to your Slack app: bot user ${result.plan.botUserId} in ${result.plan.team.name}.`,
+        token: inPlace('SLACK_BOT_TOKEN') ? `in ${envFile}` : 'the Bot User OAuth Token you gave',
+        secret: inPlace('SLACK_SIGNING_SECRET') ? `in ${envFile}` : 'the Signing Secret you gave',
+        key: inPlace('VOICEFLOW_API_KEY') ? `in ${envFile}` : 'your Voiceflow API key',
+        sends: `Slack sends to ${requestUrl}, once the app's settings say so.`,
+        projectID: project,
+        environment,
+        ...(result.install ? { toolsUrl: result.toolsUrl! } : {}),
+      },
+      out,
+    );
+    report(result.install, err);
+    return 0;
+  }
+  if (!login) throw new Error('No Slack login.');
+  const slack = { token: login.token, teamId: login.teamId, ...withFetch };
 
   if (action === 'disconnect') {
     const result = await disconnectSlack({
@@ -230,14 +362,7 @@ async function run(
       ...(o.app ? { appId: o.app } : {}),
       app: { ...app, ...(icon !== undefined ? { icon } : {}) },
       tools,
-      ...(o.restore
-        ? {
-            restore: o.restore
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean),
-          }
-        : {}),
+      ...restore,
       confirm: (plan) => confirm(plan.lines),
       onProgress: out,
       // Each credential is one to hide from the moment it exists, before anything after it can fail.
@@ -251,50 +376,60 @@ async function run(
   }
   secrets.add(result.botToken, result.signingSecret, result.userToken);
   if (!result.applied) return 0;
-  // A value an env file would read back as something else (a space, a quote, a `#`, a `$`) is yours to write.
-  const saved = toSave.filter(([, value]) => BARE.test(value));
-  const unsaved = toSave.filter(([, value]) => !BARE.test(value));
-  if (envFile && saved.length) {
-    await writeEnvFile(envFile, Object.fromEntries(saved));
-    out(`+ saved ${saved.map(([name]) => name).join(', ')} to ${envFile}`);
-  }
-  for (const [name] of unsaved) err(`! ${name} wasn't saved to ${envFile}: its value needs quoting there. Add it yourself.`);
-  const keyIsSaved = Boolean(envFile && (inFile.VOICEFLOW_API_KEY || saved.some(([name]) => name === 'VOICEFLOW_API_KEY')));
-  printSettings(result, { envFile, requestUrl: requestUrl!, projectID: project, environment, keyIsSaved }, out);
-  for (const problem of result.install?.problems ?? []) err(`! ${problem}`);
-  for (const note of result.install?.notes ?? []) err(`! ${note}`);
+  const saved = await save(agent);
+  const page = (tab: string) => `https://api.slack.com/apps/${result.appId}/${tab}`;
+  printSettings(
+    {
+      heading: `Connected: Slack app ${result.appId}, bot user ${result.botUserId}.`,
+      token: envFile ? `in ${envFile}` : `not saved: copy it from OAuth & Permissions, ${page('oauth')}`,
+      secret: result.signingSecret
+        ? envFile
+          ? `in ${envFile}`
+          : `not saved: copy it from Basic Information, ${page('general')}`
+        : `unchanged (the app already existed): Basic Information, ${page('general')}`,
+      key: envFile && (inFile.VOICEFLOW_API_KEY || saved.includes('VOICEFLOW_API_KEY')) ? `in ${envFile}` : 'your Voiceflow API key',
+      sends: `Slack sends to ${requestUrl}.`,
+      projectID: project,
+      environment,
+      ...(result.install ? { toolsUrl: result.toolsUrl! } : {}),
+    },
+    out,
+  );
+  report(result.install, err);
   return 0;
 }
 
-function printSettings(r: ConnectResult, s: { envFile?: string; requestUrl: string; projectID: string; environment: string; keyIsSaved: boolean }, out: Say) {
-  const page = (tab: string) => `https://api.slack.com/apps/${r.appId}/${tab}`;
-  const token = s.envFile ? `in ${s.envFile}` : `not saved: copy it from OAuth & Permissions, ${page('oauth')}`;
-  const secret = r.signingSecret
-    ? s.envFile
-      ? `in ${s.envFile}`
-      : `not saved: copy it from Basic Information, ${page('general')}`
-    : `unchanged (the app already existed): Basic Information, ${page('general')}`;
+/** What the tools' install couldn't do, or wants you to know. */
+function report(install: ConnectResult['install'] | OwnAppResult['install'], err: Say) {
+  for (const problem of install?.problems ?? []) err(`! ${problem}`);
+  for (const note of install?.notes ?? []) err(`! ${note}`);
+}
+
+function printSettings(
+  s: { heading: string; token: string; secret: string; key: string; sends: string; projectID: string; environment: string; toolsUrl?: string },
+  out: Say,
+) {
   out(`
-Connected: Slack app ${r.appId}, bot user ${r.botUserId}.
+${s.heading}
 
 Your server needs:
-  SLACK_BOT_TOKEN       ${token}
-  SLACK_SIGNING_SECRET  ${secret}
-  VOICEFLOW_API_KEY     ${s.keyIsSaved ? `in ${s.envFile}` : 'your Voiceflow API key'}
+  SLACK_BOT_TOKEN       ${s.token}
+  SLACK_SIGNING_SECRET  ${s.secret}
+  VOICEFLOW_API_KEY     ${s.key}
 
   createChannels({
     voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY, projectID: '${s.projectID}', environment: '${s.environment}' },
     channels: [slack()],
   })
 
-Slack sends to ${s.requestUrl}.${
-    r.install
-      ? `
-The agent's Slack tools call your server at ${r.toolsUrl}: it runs them, with its own SLACK_BOT_TOKEN.
+${s.sends}${
+  s.toolsUrl
+    ? `
+The agent's Slack tools call your server at ${s.toolsUrl}: it runs them, with its own SLACK_BOT_TOKEN.
 The tools are on the ${s.environment} environment's draft. Those that act in Slack answer only in Slack: in Voiceflow's test chat they say so.
 Your bot runs ${s.environment}'s published version, so the agent in Slack has them only once you publish ${s.environment} in Voiceflow.`
-      : ''
-  }`);
+    : ''
+}`);
 }
 
 /** Answers Slack's URL check (and nothing else) on a local port, unless something already listens there. */
@@ -399,11 +534,46 @@ async function voiceflowKey(from: {
   if (from.env.VOICEFLOW_API_KEY) return { value: from.env.VOICEFLOW_API_KEY, typed: false };
   if (from.inFile.VOICEFLOW_API_KEY) return { value: from.inFile.VOICEFLOW_API_KEY, typed: false };
   if (!from.interactive) {
-    throw new Error(`No Voiceflow API key: set VOICEFLOW_API_KEY${from.envFile ? `, here or in ${from.envFile},` : ''} or pass --key-file.`);
+    throw new NeedsYou(`No Voiceflow API key: set VOICEFLOW_API_KEY${from.envFile ? `, here or in ${from.envFile},` : ''} or pass --key-file.`);
   }
   const key = await from.secret('Voiceflow API key (hidden): ');
   if (!key) throw new Error('No Voiceflow API key entered.');
   return { value: key, typed: true };
+}
+
+/**
+ * The credentials of a Slack app you made by hand: from the environment, the
+ * env file, or (asked of a person) hidden prompts. `typed` are the ones that
+ * were asked for, to save for the server.
+ */
+async function ownCredentials(from: {
+  env: Record<string, string | undefined>;
+  inFile: Record<string, string>;
+  envFile?: string;
+  interactive: boolean;
+  secret: (question: string) => Promise<string>;
+}): Promise<{ botToken: string; signingSecret: string; typed: [name: string, value: string][] }> {
+  const typed: [name: string, value: string][] = [];
+  const get = async (name: 'SLACK_BOT_TOKEN' | 'SLACK_SIGNING_SECRET', label: string): Promise<string> => {
+    const value = from.env[name] || from.inFile[name];
+    if (value || !from.interactive) return value ?? '';
+    const answer = (await from.secret(`${label} (hidden): `)).trim();
+    if (!answer) throw new Error(`No ${name} entered.`);
+    typed.push([name, answer]);
+    return answer;
+  };
+  const botToken = await get('SLACK_BOT_TOKEN', "Your Slack app's Bot User OAuth Token, from its OAuth & Permissions page");
+  const signingSecret = await get('SLACK_SIGNING_SECRET', "Your Slack app's Signing Secret, from its Basic Information page");
+  const absent = [
+    ...(botToken ? [] : ['SLACK_BOT_TOKEN (OAuth & Permissions > Bot User OAuth Token)']),
+    ...(signingSecret ? [] : ['SLACK_SIGNING_SECRET (Basic Information > Signing Secret)']),
+  ];
+  if (absent.length) {
+    throw new NeedsYou(
+      `--manual works with the Slack app you made. Set ${absent.join(' and ')}${from.envFile ? `, here or in ${from.envFile}` : ''}, from the app's settings at https://api.slack.com/apps. Then run this again.`,
+    );
+  }
+  return { botToken, signingSecret, typed };
 }
 
 /**

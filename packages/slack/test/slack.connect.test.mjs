@@ -35,7 +35,7 @@ const SIGNING = 'signing-secret-never-printed';
 const USER_TOKEN = 'xoxp-user-token-never-printed';
 
 /** Slack's app API as a `fetch`: apps made from manifests, installs, and every call recorded. */
-function fakeSlack({ team = 'T1', invalid, apps: existing = {}, images = {}, iconError } = {}) {
+function fakeSlack({ team = 'T1', invalid, apps: existing = {}, images = {}, iconError, botScopes } = {}) {
   const apps = new Map(Object.entries(existing).map(([id, manifest]) => [id, structuredClone(manifest)]));
   const calls = [];
   const downloads = [];
@@ -61,7 +61,11 @@ function fakeSlack({ team = 'T1', invalid, apps: existing = {}, images = {}, ico
     const no = (error, more = {}) => Response.json({ ok: false, error, ...more });
     if (method === 'auth.test') {
       if (auth === `Bearer ${CLI_TOKEN}`) return ok({ team_id: team, team: 'Example', user_id: 'UME' });
-      if (auth === `Bearer ${BOT_TOKEN}`) return ok({ team_id: team, team: 'Example', user_id: 'UBOT', bot_id: 'B1' });
+      if (auth === `Bearer ${BOT_TOKEN}`) {
+        const granted = botScopes ? { headers: { 'x-oauth-scopes': botScopes.join(',') } } : {};
+        return Response.json({ ok: true, team_id: team, team: 'Example', user_id: 'UBOT', bot_id: 'B1' }, granted);
+      }
+      if (auth === `Bearer ${USER_TOKEN}`) return ok({ team_id: team, team: 'Example', user_id: 'UME2' });
       return no('invalid_auth');
     }
     if (auth !== `Bearer ${CLI_TOKEN}`) return no('invalid_auth');
@@ -715,7 +719,7 @@ test("the URL checker answers Slack's challenge and nothing else", async () => {
  * there first; `answers` are what a person types, by question, and with none
  * the command runs as a script does, where a question is a failure.
  */
-async function runCli(t, argv, { slack = fakeSlack(), voiceflow, env = { VOICEFLOW_API_KEY: VF_KEY }, files = {}, answers } = {}) {
+async function runCli(t, argv, { slack = fakeSlack(), voiceflow, env = { VOICEFLOW_API_KEY: VF_KEY }, files = {}, answers, slackCli } = {}) {
   const vf = fakeVoiceflowApi({ project: PROJECT, apiKey: VF_KEY });
   const dir = await mkdtemp(join(tmpdir(), 'vf-cli-'));
   for (const [name, text] of Object.entries(files)) await writeFile(join(dir, name), text, { mode: 0o644 });
@@ -738,7 +742,7 @@ async function runCli(t, argv, { slack = fakeSlack(), voiceflow, env = { VOICEFL
   const code = await cli(argv, {
     out: (line) => out.push(line),
     err: (line) => err.push(line),
-    login: () => ({ teamId: 'T1', token: CLI_TOKEN }),
+    ...(slackCli ? { slackCli } : { login: () => ({ teamId: 'T1', token: CLI_TOKEN }) }),
     env,
     fetch,
     interactive: Boolean(answers),
@@ -925,7 +929,7 @@ test("a script with nothing to go on is told what's missing, by name, and is ask
   assert.deepEqual(nothing.slack.calls, [], 'and nothing was called');
 
   const noKey = await runCli(t, FROM_FILE, { env: { VOICEFLOW_PROJECT_ID: 'proj1', VOICEFLOW_ENVIRONMENT: 'sdk-test' } });
-  assert.equal(noKey.code, 1);
+  assert.equal(noKey.code, 3, 'waiting on a person, not a failure');
   assert.match(noKey.err, /No Voiceflow API key: set VOICEFLOW_API_KEY, here or in \.env\.local, or pass --key-file\./);
   assert.deepEqual(noKey.asked, []);
 });
@@ -998,4 +1002,201 @@ test('a value an env file would read back differently is left for you to write',
   const saved = await readEnvFile(join(dir, '.env.local'));
   assert.equal(saved.VOICEFLOW_ENVIRONMENT, undefined);
   assert.equal(saved.VOICEFLOW_PROJECT_ID, 'proj1');
+});
+
+// ── Signing in to Slack ─────────────────────────────────────────────────────
+
+/** A machine's Slack CLI for the command: no login until the ticket's code is given, then one. */
+async function slackCliOf({ cli = true } = {}) {
+  const dir = await mkdtemp(join(tmpdir(), 'vf-slackcli-'));
+  const credentialsFile = join(dir, 'credentials.json');
+  const ran = [];
+  return {
+    ran,
+    host: {
+      credentialsFile,
+      platform: 'linux',
+      find: () => (cli ? '/fake/bin/slack' : undefined),
+      run: async (_command, args, { show }) => {
+        const line = args.filter((arg) => arg !== '--skip-update').join(' ');
+        ran.push({ line, show });
+        if (line === 'login --no-prompt') return { code: 0, output: 'Run the following slash command\n\n/slackauthticket TICKET1\n' };
+        if (line === 'login --no-prompt --ticket TICKET1 --challenge CODE1') {
+          await writeFile(credentialsFile, JSON.stringify({ T1: { token: CLI_TOKEN, team_domain: 'example' } }));
+          return { code: 0, output: '' };
+        }
+        return { code: 1, output: 'Error: invalid challenge code' };
+      },
+    },
+  };
+}
+
+test('with nobody at the terminal, one stop says everything a person has to do, and the ticket and code carry it on', async (t) => {
+  const cli = await slackCliOf();
+  const files = { '.env.local': 'VOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n' };
+  const stopped = await runCli(t, FROM_FILE, { env: {}, files, slackCli: cli.host });
+  assert.equal(stopped.code, 3, 'waiting on a person');
+  assert.match(stopped.err, /\/slackauthticket TICKET1/);
+  assert.match(stopped.err, /--slack-ticket TICKET1 --slack-code <the code>/);
+  assert.match(stopped.err, /No Voiceflow API key: set VOICEFLOW_API_KEY, here or in \.env\.local/, 'the key too, in the same stop');
+  assert.deepEqual(stopped.asked, []);
+  assert.deepEqual(stopped.slack.calls, [], 'and Slack was not called');
+  assert.deepEqual(cli.ran, [{ line: 'login --no-prompt', show: false }]);
+
+  const done = await runCli(t, [...FROM_FILE, '--slack-ticket', 'TICKET1', '--slack-code', 'CODE1'], {
+    env: { VOICEFLOW_API_KEY: VF_KEY },
+    files,
+    slackCli: cli.host,
+  });
+  assert.equal(done.code, 0, done.err);
+  assert.match(done.out, /Connected: Slack app A1, bot user UBOT\./);
+  noSecrets(done.out + done.err);
+
+  const wrong = await runCli(t, [...FROM_FILE, '--slack-ticket', 'TICKET1', '--slack-code', 'NOPE'], {
+    env: { VOICEFLOW_API_KEY: VF_KEY },
+    files,
+    slackCli: (await slackCliOf()).host,
+  });
+  assert.equal(wrong.code, 1, 'a code Slack refuses is a failure, not a wait');
+  assert.match(wrong.err, /Slack didn't take that code/);
+});
+
+test('without the Slack CLI, a script is told how to get it, and how to go on without it', async (t) => {
+  const { code, err, slack } = await runCli(t, FROM_FILE, {
+    files: { '.env.local': 'VOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n' },
+    slackCli: (await slackCliOf({ cli: false })).host,
+  });
+  assert.equal(code, 3);
+  assert.match(err, /curl -fsSL https:\/\/downloads\.slack-edge\.com\/slack-cli\/install\.sh \| bash/);
+  assert.match(err, /For a Slack app you made by hand, run this with --manual instead\./);
+  assert.deepEqual(slack.calls, []);
+});
+
+// ── An app you made by hand ─────────────────────────────────────────────────
+
+/** A machine with no Slack CLI, where running anything is a failure of the test. */
+const NO_CLI = {
+  credentialsFile: '/nonexistent/credentials.json',
+  platform: 'linux',
+  find: () => undefined,
+  run: async () => {
+    throw new Error('--manual ran a command');
+  },
+};
+const MANUAL = [...FROM_FILE, '--manual'];
+const NEEDED = slackManifest({ requestUrl: 'https://bot.example.com/api/slack', tools: {} }).oauth_config.scopes.bot;
+const OWN = `VOICEFLOW_API_KEY=${VF_KEY}\nVOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\nSLACK_BOT_TOKEN=${BOT_TOKEN}\nSLACK_SIGNING_SECRET=${SIGNING}\n`;
+
+test('--manual connects an app you made by hand: the tools go on the agent, and nothing in Slack is changed', async (t) => {
+  const slack = fakeSlack({ botScopes: NEEDED });
+  const { code, out, err, vf, dir } = await runCli(t, MANUAL, { env: {}, files: { '.env.local': OWN }, slack, slackCli: NO_CLI });
+  assert.equal(code, 0, err);
+  assert.match(out, /Slack: your own app in workspace Example \(T1\), bot user UBOT \(connect changes nothing in it\)/);
+  assert.match(out, new RegExp(`= it has every scope this package uses \\(${NEEDED.length}\\)`));
+  assert.match(
+    out,
+    /each pointed at https:\/\/bot\.example\.com\/api\/slack:\n {6}Event Subscriptions > Request URL\n {6}Interactivity & Shortcuts > Request URL\n {6}Slash Commands > \/ask > Request URL/,
+  );
+  assert.match(out, /Voiceflow: project "Spike" \(proj1\) in workspace ws1, environment sdk-test/);
+  assert.match(out, /Connected the agent to your Slack app: bot user UBOT in Example\./);
+  assert.match(out, /SLACK_BOT_TOKEN {7}in \.env\.local\n {2}SLACK_SIGNING_SECRET {2}in \.env\.local\n {2}VOICEFLOW_API_KEY {5}in \.env\.local/);
+  assert.match(out, /Slack sends to https:\/\/bot\.example\.com\/api\/slack, once the app's settings say so\./);
+  noSecrets(out + err);
+
+  assert.deepEqual(vf.state.compiles, ['sdk-test'], 'the tools were installed');
+  assert.deepEqual(
+    slack.calls.map((c) => c.method),
+    ['auth.test'],
+    'Slack was asked who the bot is, and nothing else',
+  );
+  assert.equal(slack.calls[0].token, BOT_TOKEN, 'with the bot token: no Slack CLI login is used');
+  assert.equal(await readFile(join(dir, '.env.local'), 'utf8'), OWN, 'the env file is as it was');
+
+  // Credentials given in the environment stay there: they aren't copied to the file, or said to be in it.
+  const agent = `VOICEFLOW_API_KEY=${VF_KEY}\nVOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n`;
+  const given = await runCli(t, MANUAL, {
+    env: { SLACK_BOT_TOKEN: BOT_TOKEN, SLACK_SIGNING_SECRET: SIGNING },
+    files: { '.env.local': agent },
+    slack: fakeSlack({ botScopes: NEEDED }),
+    slackCli: NO_CLI,
+  });
+  assert.equal(given.code, 0, given.err);
+  assert.match(
+    given.out,
+    /SLACK_BOT_TOKEN {7}the Bot User OAuth Token you gave\n {2}SLACK_SIGNING_SECRET {2}the Signing Secret you gave\n {2}VOICEFLOW_API_KEY {5}in \.env\.local/,
+  );
+  assert.equal(await readFile(join(given.dir, '.env.local'), 'utf8'), agent);
+  noSecrets(given.out + given.err);
+});
+
+test("--manual names the scopes the app wasn't granted, and still connects", async (t) => {
+  const granted = NEEDED.filter((scope) => !['reactions:write', 'pins:write'].includes(scope));
+  const { code, out, err } = await runCli(t, MANUAL, { env: {}, files: { '.env.local': OWN }, slack: fakeSlack({ botScopes: granted }), slackCli: NO_CLI });
+  assert.equal(code, 0, err);
+  assert.match(
+    out,
+    /! it wasn't granted 2 scopes this package uses: (reactions:write, pins:write|pins:write, reactions:write)\n {4}add them under OAuth & Permissions, then reinstall the app/,
+  );
+  assert.doesNotMatch(out, /it has every scope/);
+
+  // Slack saying nothing of the scopes isn't read as the app having none.
+  const silent = await runCli(t, MANUAL, { env: {}, files: { '.env.local': OWN }, slackCli: NO_CLI });
+  assert.equal(silent.code, 0, silent.err);
+  assert.match(silent.out, /Slack didn't say which scopes the app has/);
+  assert.doesNotMatch(silent.out, /wasn't granted/);
+});
+
+test("--manual asks for the app's two credentials, unseen, and saves them; a script is told to set them", async (t) => {
+  const agent = `VOICEFLOW_API_KEY=${VF_KEY}\nVOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n`;
+  const asked = await runCli(t, MANUAL, {
+    env: {},
+    files: { '.env.local': agent },
+    slack: fakeSlack({ botScopes: NEEDED }),
+    slackCli: NO_CLI,
+    answers: { 'Bot User OAuth Token': BOT_TOKEN, 'Signing Secret': SIGNING },
+  });
+  assert.equal(asked.code, 0, asked.err);
+  assert.equal(asked.asked.length, 2);
+  assert.ok(
+    asked.asked.every((question) => question.startsWith('asked unseen: ')),
+    'both in hidden prompts',
+  );
+  assert.match(asked.out, /\+ saved SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET to \.env\.local/);
+  noSecrets(asked.out + asked.err);
+  const saved = await readEnvFile(join(asked.dir, '.env.local'));
+  assert.deepEqual({ bot: saved.SLACK_BOT_TOKEN, secret: saved.SLACK_SIGNING_SECRET }, { bot: BOT_TOKEN, secret: SIGNING });
+
+  const script = await runCli(t, MANUAL, { env: {}, files: { '.env.local': `${agent}SLACK_BOT_TOKEN=${BOT_TOKEN}\n` }, slackCli: NO_CLI });
+  assert.equal(script.code, 3);
+  assert.match(
+    script.err,
+    /--manual works with the Slack app you made\. Set SLACK_SIGNING_SECRET \(Basic Information > Signing Secret\), here or in \.env\.local/,
+  );
+  assert.doesNotMatch(script.err, /SLACK_BOT_TOKEN/, "what's there isn't asked for");
+  assert.deepEqual(script.slack.calls, []);
+  assert.deepEqual(script.vf.state.compiles, []);
+});
+
+test('--manual refuses a token that is no bot, and one Slack refuses, without changing the agent or showing the token', async (t) => {
+  const asUser = OWN.replace(BOT_TOKEN, USER_TOKEN);
+  const user = await runCli(t, MANUAL, { env: {}, files: { '.env.local': asUser }, slackCli: NO_CLI });
+  assert.equal(user.code, 1);
+  assert.match(user.err, /SLACK_BOT_TOKEN isn't a bot's token\. Use the Bot User OAuth Token/);
+  assert.deepEqual(user.vf.state.compiles, []);
+  noSecrets(user.out + user.err);
+
+  const dead = await runCli(t, MANUAL, { env: {}, files: { '.env.local': OWN.replace(BOT_TOKEN, 'xoxb-a-revoked-token-0000') }, slackCli: NO_CLI });
+  assert.equal(dead.code, 1);
+  assert.match(dead.err, /Slack doesn't take SLACK_BOT_TOKEN \(invalid_auth\)/);
+  assert.doesNotMatch(dead.out + dead.err, /xoxb-a-revoked-token-0000/);
+  assert.deepEqual(dead.vf.state.compiles, []);
+
+  // A dry run shows the plan and installs nothing; disconnect has no --manual.
+  const dry = await runCli(t, [...MANUAL, '--dry-run'], { env: {}, files: { '.env.local': OWN }, slack: fakeSlack({ botScopes: NEEDED }), slackCli: NO_CLI });
+  assert.equal(dry.code, 0);
+  assert.match(dry.out, /Slack: your own app/);
+  assert.deepEqual(dry.vf.state.compiles, []);
+  const disconnect = await runCli(t, ['disconnect', '--manual', '--project', 'proj1', '--environment', 'sdk-test'], { slackCli: NO_CLI });
+  assert.equal(disconnect.code, 2);
+  assert.match(disconnect.err, /--manual is for connect/);
 });

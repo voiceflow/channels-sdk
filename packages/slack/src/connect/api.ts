@@ -73,11 +73,28 @@ export interface SlackCliLogin {
   token: string;
 }
 
+/** Where the Slack CLI keeps its logins. */
+export const SLACK_CLI_CREDENTIALS = path.join(os.homedir(), '.slack', 'credentials.json');
+
+/** Every workspace the Slack CLI is logged in to. A file that isn't there, or can't be read, is no logins. */
+export function slackCliLogins(file = SLACK_CLI_CREDENTIALS): SlackCliLogin[] {
+  let all: Record<string, { token?: string; team_domain?: string } | null>;
+  try {
+    all = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return [];
+  }
+  if (!all || typeof all !== 'object') return [];
+  return Object.entries(all).flatMap(([teamId, login]) =>
+    login?.token ? [{ teamId, token: login.token, ...(login.team_domain ? { teamDomain: login.team_domain } : {}) }] : [],
+  );
+}
+
 /**
  * The Slack CLI's login for a workspace (`slack login`), read from
  * ~/.slack/credentials.json. Its token can create and install apps there.
  */
-export function slackCliLogin(teamId?: string, file = path.join(os.homedir(), '.slack', 'credentials.json')): SlackCliLogin {
+export function slackCliLogin(teamId?: string, file = SLACK_CLI_CREDENTIALS): SlackCliLogin {
   let all: Record<string, { token?: string; team_domain?: string; team_id?: string }>;
   try {
     all = JSON.parse(fs.readFileSync(file, 'utf8'));
