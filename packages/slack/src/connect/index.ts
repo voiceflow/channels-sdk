@@ -10,6 +10,7 @@
 // Voiceflow. Running connect again only adds what's missing.
 //
 // Node only: import it from `@voiceflow/channels-slack/connect`.
+import { createHmac, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,11 +24,12 @@ import {
   type RecordStore,
   type Step,
   secretState,
+  setSecretValues,
   uninstallTools,
 } from '@voiceflow/channels-sdk/install';
 import { type SlackToolsOptions, slackTools } from '../tools/index.js';
 import { createSlackApi, type SlackApi, SlackApiError } from './api.js';
-import { appNameOf, type ManifestChanges, type ManifestOptions, mergeManifest, type SlackManifest, slackManifest } from './manifest.js';
+import { appNameOf, type ManifestChanges, type ManifestOptions, mergeManifest, repointManifest, type SlackManifest, slackManifest } from './manifest.js';
 
 export {
   createSlackApi,
@@ -47,6 +49,7 @@ export {
   type ManifestChanges,
   type ManifestOptions,
   mergeManifest,
+  repointManifest,
   requiredScopes,
   type SlackManifest,
   slackManifest,
@@ -324,6 +327,124 @@ export async function connectSlack(options: ConnectSlackOptions): Promise<Connec
 }
 
 /** Where the agent's tools call your server: the address you gave, or the webhook's own. */
+// ── Another address ─────────────────────────────────────────────────────────
+// A server's address changes: a tunnel's is new each time it starts. Pointing
+// moves the app's request URL and the agent's tools to it, and nothing else:
+// no scope, no tool, no install. `voiceflow-channels dev` does it on each start.
+
+export interface PointSlackOptions {
+  /** The Slack CLI's login. Leave it out for an app you made by hand: only the agent's tools are pointed, and Slack's settings stay yours. */
+  slack?: ConnectSlackOptions['slack'];
+  voiceflow: ConnectSlackOptions['voiceflow'];
+  /** Where your server takes Slack's requests now. */
+  requestUrl: string;
+  /** Where the agent's Slack tools call your server now. Default: `requestUrl`. */
+  toolsUrl?: string;
+  /** The app to point, instead of the one connect recorded. */
+  appId?: string;
+  appRecords?: AppRecordStore;
+  onProgress?: (line: string) => void;
+}
+
+export interface PointResult {
+  /** The app whose request URL was read, when Slack was pointed. */
+  appId?: string;
+  /** Whether the app's manifest changed: false when it sent there already. */
+  moved: boolean;
+  /** Whether the agent had the tools' address to set. */
+  tools: boolean;
+}
+
+/**
+ * Points a connected Slack app, and the agent's Slack tools, at a new address.
+ * Slack checks the address as it takes it, so your server has to be answering
+ * there. The tools' address is set in the environment's draft and its
+ * published version, so it takes effect without a publish.
+ */
+export async function pointSlack(options: PointSlackOptions): Promise<PointResult> {
+  const { voiceflow } = options;
+  if (!voiceflow.environment) throw new TypeError('pointSlack: `voiceflow.environment` is required');
+  const say = options.onProgress ?? (() => {});
+  const project = await checkProject(voiceflow);
+  let appId: string | undefined;
+  let moved = false;
+  if (options.slack) {
+    const slack = createSlackApi(options.slack);
+    const auth = await slack<{ team_id: string; team: string }>('auth.test');
+    if (options.slack.teamId && auth.team_id !== options.slack.teamId) {
+      throw new Error(`The Slack login is for workspace ${auth.team_id}, not ${options.slack.teamId}. Nothing was changed.`);
+    }
+    const records = options.appRecords ?? fileAppRecordStore();
+    const key = appRecordKey(auth.team_id, project.id, voiceflow.environment);
+    const recorded = await records.get(key);
+    appId = options.appId ?? recorded?.appId;
+    if (!appId) {
+      throw new Error(`No Slack app is connected to ${project.name}'s ${voiceflow.environment} environment from here. Run connect first. Nothing was changed.`);
+    }
+    const previous = (await slack<{ manifest: SlackManifest }>('apps.manifest.export', { app_id: appId })).manifest;
+    const { manifest, from } = repointManifest(previous, options.requestUrl);
+    moved = JSON.stringify(manifest) !== JSON.stringify(previous);
+    if (moved) {
+      await slack('apps.manifest.update', { app_id: appId, manifest: JSON.stringify(manifest) });
+      say(`~ Slack app ${appId} sends to ${options.requestUrl}${from ? ` (it sent to ${from})` : ''}`);
+    } else say(`= Slack app ${appId} sends to ${options.requestUrl} already`);
+    await records.set(key, {
+      ...recorded,
+      appId,
+      teamId: auth.team_id,
+      projectID: project.id,
+      environment: voiceflow.environment,
+      requestUrl: options.requestUrl,
+      updatedAt: new Date().toISOString(),
+    });
+  } else {
+    say(`· your Slack app's settings are yours to keep: point Event Subscriptions, Interactivity & Shortcuts and your slash command at ${options.requestUrl}`);
+  }
+  const toolsUrl = toolsUrlOf(options);
+  const tools = (await setSecretValues(voiceflow, { [TOOLS_URL_SECRET]: toolsUrl })).length > 0;
+  say(
+    tools ? `~ the agent's Slack tools call ${toolsUrl} (no publish needed)` : '= the agent has no Slack tools that run on your server: nothing else to point',
+  );
+  return { ...(appId ? { appId } : {}), moved, tools };
+}
+
+/**
+ * Asks a server what Slack asks when it's given an address: a URL check,
+ * signed with the app's signing secret. A server that answers it is running,
+ * has this route, and holds the right secret. Slack is pointed at an address
+ * only after this, so what's wrong is said here, by name, and not by Slack as
+ * "your URL didn't respond". A dev server compiles a route on its first
+ * request, which this is: the minute it's given covers that.
+ */
+export async function checkServer(options: { url: string; signingSecret: string; fetch?: typeof fetch; timeoutMs?: number }): Promise<void> {
+  const challenge = randomUUID();
+  const body = JSON.stringify({ type: 'url_verification', challenge });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = `v0=${createHmac('sha256', options.signingSecret).update(`v0:${timestamp}:${body}`).digest('hex')}`;
+  let res: Response;
+  try {
+    res = await (options.fetch ?? fetch)(options.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-slack-request-timestamp': timestamp, 'x-slack-signature': signature },
+      body,
+      signal: AbortSignal.timeout(options.timeoutMs ?? 60_000),
+    });
+  } catch {
+    throw new Error(`Your server didn't answer at ${options.url}. Is it running, and is that its Slack route? Nothing was changed.`);
+  }
+  const text = await res.text().catch(() => '');
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(
+      `Your server at ${options.url} refused a request signed with SLACK_SIGNING_SECRET. Is the secret it runs with this app's (Basic Information > Signing Secret)? Nothing was changed.`,
+    );
+  }
+  if (!res.ok || !text.includes(challenge)) {
+    throw new Error(
+      `Your server at ${options.url} answered ${res.status} to Slack's URL check, not the check's own value. Is that its Slack route? Nothing was changed.`,
+    );
+  }
+}
+
 // ── The app's first message ─────────────────────────────────────────────────
 
 /** What a new app says to whoever connected it: that it's there, and what's left before it answers. */

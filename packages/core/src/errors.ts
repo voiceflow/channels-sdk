@@ -24,3 +24,16 @@ export class ChannelsError extends Error {
     this.code = code;
   }
 }
+
+/**
+ * A command can't go on until a person does something: sign in, install a
+ * tool, set a key. The message says what, and how to carry on. A command
+ * turns it into exit code 3, so a script or a coding agent that ran it knows
+ * to hand the message over and run the command again.
+ */
+export class NeedsYou extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NeedsYou';
+  }
+}

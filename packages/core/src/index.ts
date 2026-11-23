@@ -17,7 +17,7 @@ export {
   type ShownMessage,
   type TraceIO,
 } from './deliver.js';
-export { ChannelsError, type ChannelsErrorCode } from './errors.js';
+export { ChannelsError, type ChannelsErrorCode, NeedsYou } from './errors.js';
 export type {
   ChannelExtension,
   ExtensionHost,

@@ -205,6 +205,23 @@ export function mergeManifest(existing: SlackManifest, wanted: SlackManifest): {
   };
 }
 
+/**
+ * A manifest with the app's request URL moved to another address: events,
+ * interactivity, and each slash command that was sent to the old one. Nothing
+ * else changes, and a command you sent somewhere else stays there.
+ */
+export function repointManifest(existing: SlackManifest, requestUrl: string): { manifest: SlackManifest; from?: string } {
+  const url = checkUrl(requestUrl);
+  const manifest = structuredClone(existing);
+  const from = existing.settings?.event_subscriptions?.request_url as string | undefined;
+  if (manifest.settings?.event_subscriptions) manifest.settings.event_subscriptions.request_url = url;
+  if (manifest.settings?.interactivity) manifest.settings.interactivity.request_url = url;
+  for (const command of (manifest.features?.slash_commands as { url?: string }[] | undefined) ?? []) {
+    if (!from || command.url === from) command.url = url;
+  }
+  return { manifest, ...(from && from !== url ? { from } : {}) };
+}
+
 function slashCommand(command: string, url: string, name: string) {
   if (!/^\/[a-z0-9_-]{1,31}$/.test(command))
     throw new Error(`"${command}" isn't a slash command Slack accepts: a "/" and up to 31 lowercase letters, digits, "-" or "_".`);

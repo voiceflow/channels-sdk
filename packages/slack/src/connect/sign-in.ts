@@ -12,7 +12,10 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { NeedsYou } from '@voiceflow/channels-sdk';
 import { SLACK_CLI_CREDENTIALS, SlackApiError, type SlackCliLogin, slackCliLogins } from './api.js';
+
+export { NeedsYou };
 
 /** Slack's own installers for its CLI (https://tools.slack.dev/slack-cli). */
 export const SLACK_CLI_INSTALL = 'curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash';
@@ -20,14 +23,6 @@ export const SLACK_CLI_INSTALL_WINDOWS = 'irm https://downloads.slack-edge.com/s
 
 /** For an app made by hand, said wherever the Slack CLI is the obstacle. */
 const OR_BY_HAND = 'For a Slack app you made by hand, run this with --manual instead.';
-
-/** Connect can't go on until a person does something. The message says what, and how to carry on. */
-export class NeedsYou extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'NeedsYou';
-  }
-}
 
 /** The Slack CLI on this machine: where it keeps its logins, how it's found and run. A test stands in for each. */
 export interface SlackCliHost {

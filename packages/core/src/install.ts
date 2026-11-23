@@ -657,6 +657,41 @@ export async function publishEnvironment(options: EnvironmentOptions & { name: s
   return { release: published.release?.name ?? options.name };
 }
 
+/**
+ * Sets the value of secrets the agent already has, in an environment's draft
+ * and in its published version: a value conversations read takes effect
+ * without a publish. For a value that changes on its own (a tunnel's address).
+ * It creates nothing, and writes only into a restricted secret, whose value
+ * nobody can read back. Returns the names it set.
+ */
+export async function setSecretValues(options: EnvironmentOptions, values: Record<string, string>): Promise<string[]> {
+  const api = createVoiceflowApi(options);
+  const project = await readProject(api, options);
+  const { secrets = [] } = await api<{ secrets?: { id: string; name: string; visibility: string }[] }>('GET', '/v2/stable/secret', { projectID: project.id });
+  const set: string[] = [];
+  for (const [name, value] of Object.entries(values)) {
+    const secret = secrets.find((s) => s.name === name);
+    if (!secret || !value) continue;
+    if (secret.visibility !== 'restricted') {
+      throw new ChannelsError(
+        'secret_not_restricted',
+        `The ${name} secret on ${project.name} isn't restricted (it's ${secret.visibility}), so people who can reveal secrets in Voiceflow could read its value. Nothing was changed.`,
+      );
+    }
+    for (const versionVariant of ['draft', 'published'] as const) {
+      await api(
+        'PUT',
+        `/v1/stable/secret/${encodeURIComponent(secret.id)}/value`,
+        { projectID: project.id },
+        { value, environmentAlias: options.environment, versionVariant },
+        [value],
+      );
+    }
+    set.push(name);
+  }
+  return set;
+}
+
 /** A draft's changes as lines for a person: how many, and the first of them by name. */
 export function formatDraftChanges(environment: string, changes: DraftChanges, show = 12): string[] {
   const total = changes.created + changes.updated + changes.deleted;

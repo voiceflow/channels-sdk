@@ -63,7 +63,10 @@ try {
 
   step("the app's own connect command runs from the installed package");
   const help = await run('npm', ['run', '--silent', 'connect', '--', '--help'], { cwd: app });
-  if (!/voiceflow-channels connect slack --public-url/.test(help.stdout)) throw new Error(`connect --help printed:\n${help.stdout}`);
+  if (!/voiceflow-channels connect slack \[--public-url/.test(help.stdout)) throw new Error(`connect --help printed:\n${help.stdout}`);
+  // dev is the same package's command: its help runs without a tunnel or a server.
+  const dev = await run('npx', ['--no-install', 'voiceflow-channels', 'dev', '--help'], { cwd: app });
+  if (!/voiceflow-channels dev \[options\] -- <your server's command>/.test(dev.stdout)) throw new Error(`dev --help printed:\n${dev.stdout}`);
 
   step('typecheck and build');
   const env = { ...process.env, NEXT_TELEMETRY_DISABLED: '1' };

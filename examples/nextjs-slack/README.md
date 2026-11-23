@@ -11,9 +11,10 @@ the assistant panel, buttons, forms and `/ask` all arrive there.
 - A Slack workspace where you can create apps. Connect signs you in to it
   through the [Slack CLI](https://tools.slack.dev/slack-cli), and offers to
   install that when you don't have it
-- A public URL for your machine, from a tunnel such as
-  [ngrok](https://ngrok.com) or
-  [cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/)
+- A public address for your machine. Connect and dev open a tunnel for that
+  with
+  [cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/),
+  which needs no account, and say how to get it when you don't have it
 
 ## Run it
 
@@ -25,19 +26,16 @@ the assistant panel, buttons, forms and `/ask` all arrive there.
    npm run build
    ```
 
-2. Start a tunnel to port 3000, and keep it running:
-
-   ```bash
-   ngrok http 3000
-   ```
-
-3. Make the Slack app, with the tunnel's URL. Run this before the server, so
-   that connect can answer Slack's check of the URL itself:
+2. Make the Slack app. Run this before the server, so that connect can answer
+   Slack's check of the address itself:
 
    ```bash
    cd examples/nextjs-slack
-   npm run connect -- --public-url https://<your tunnel>
+   npm run connect
    ```
+
+   With no address given, connect opens a temporary tunnel so Slack has one
+   while the app is made.
 
    It signs you in to Slack (it runs `slack login` for you, and offers to
    install the Slack CLI first when you don't have it). It asks for your
@@ -55,11 +53,15 @@ the assistant panel, buttons, forms and `/ask` all arrive there.
    whole draft goes live, not only these tools: say no to publish it in
    Voiceflow yourself. The new app's bot then messages you in Slack.
 
-4. Start the server:
+3. Start the server:
 
    ```bash
    npm run dev
    ```
+
+   It opens a tunnel to port 3000, starts the server, and points the Slack app
+   and the agent's tools at the tunnel's address, which is new each time. That
+   needs no publish. Stop it with Ctrl-C.
 
 Mention the app in a channel, send it a direct message, or open it from
 Slack's assistant panel.
@@ -77,6 +79,8 @@ Slack's assistant panel.
   ```bash
   npm run connect -- --public-url https://<your deployment>
   ```
+
+  `npm run start` runs the built server with no tunnel.
 
 ## How it fits together
 

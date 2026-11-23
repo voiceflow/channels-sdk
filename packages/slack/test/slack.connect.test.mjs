@@ -4,6 +4,7 @@
 // a log line).
 
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,6 +22,7 @@ import {
   disconnectSlack,
   memoryAppRecordStore,
   mergeManifest,
+  repointManifest,
   requiredScopes,
   slackManifest,
 } from '../dist/connect/index.js';
@@ -729,7 +731,7 @@ test("the URL checker answers Slack's challenge and nothing else", async () => {
 async function runCli(
   t,
   argv,
-  { slack = fakeSlack(), voiceflow, env = { VOICEFLOW_API_KEY: VF_KEY }, files = {}, answers, slackCli, draft = [], vf: given } = {},
+  { slack = fakeSlack(), voiceflow, env = { VOICEFLOW_API_KEY: VF_KEY }, files = {}, answers, slackCli, draft = [], vf: given, tunnel } = {},
 ) {
   // `draft`: what the environment's draft holds already, that nobody published. `vf`: an agent from an earlier run.
   const vf = given ?? fakeVoiceflowApi({ project: PROJECT, apiKey: VF_KEY });
@@ -756,6 +758,8 @@ async function runCli(
     out: (line) => out.push(line),
     err: (line) => err.push(line),
     ...(slackCli ? { slackCli } : { login: () => ({ teamId: 'T1', token: CLI_TOKEN }) }),
+    // No test opens a real tunnel: a machine without cloudflared, unless the test brings one.
+    tunnel: tunnel ?? { platform: 'linux', find: () => undefined },
     env,
     fetch,
     interactive: Boolean(answers),
@@ -844,7 +848,14 @@ test('an error the command prints never carries a secret it holds, whichever ser
 test('a mistake in the command line is an answer and an exit code, never a stack trace', async (t) => {
   const missing = await runCli(t, ['connect', '--project', 'proj1']);
   assert.equal(missing.code, 2);
-  assert.match(missing.err, /Missing --public-url: your server's public address/);
+  assert.match(missing.err, /Missing --environment \(or VOICEFLOW_ENVIRONMENT\)\./);
+  // An address is connect's to find, with a tunnel. To point, and for an app you made, it's yours to give.
+  const nowhere = await runCli(t, ['point', '--project', 'proj1', '--environment', 'sdk-test']);
+  assert.equal(nowhere.code, 2);
+  assert.match(nowhere.err, /Missing --public-url: your server's public address/);
+  const whose = await runCli(t, ['connect', '--manual', '--project', 'proj1', '--environment', 'sdk-test']);
+  assert.equal(whose.code, 2);
+  assert.match(whose.err, /Missing --public-url: the address your app's settings point at/);
   const unknown = await runCli(t, ['connect', '--no-such-flag']);
   assert.equal(unknown.code, 1);
   assert.match(unknown.err, /no-such-flag/);
@@ -979,8 +990,8 @@ test('an env file is read as servers read one: export, quotes and comments, and 
 });
 
 test('a person is asked only once the command can go ahead, and their answer to the plan decides', async (t) => {
-  // No address for Slack to send to: that's said first, before any question.
-  const noUrl = await runCli(t, ['connect', '--env-file', '.env.local'], { env: {}, answers: {} });
+  // No address to point at: that's said first, before any question.
+  const noUrl = await runCli(t, ['point', '--env-file', '.env.local'], { env: {}, answers: {} });
   assert.equal(noUrl.code, 2);
   assert.match(noUrl.err, /Missing --public-url/);
   assert.deepEqual(noUrl.asked, []);
@@ -1211,7 +1222,7 @@ test('--manual refuses a token that is no bot, and one Slack refuses, without ch
   assert.deepEqual(dry.vf.state.compiles, []);
   const disconnect = await runCli(t, ['disconnect', '--manual', '--project', 'proj1', '--environment', 'sdk-test'], { slackCli: NO_CLI });
   assert.equal(disconnect.code, 2);
-  assert.match(disconnect.err, /--manual is for connect/);
+  assert.match(disconnect.err, /--manual is for connect and point/);
 });
 
 // ── Publishing, and the app's first message ─────────────────────────────────
@@ -1371,4 +1382,245 @@ test('--manual publishes on the same terms, and sends no message: nothing in Sla
   assert.match(out, /sdk-test is published: the agent in Slack has the tools now\./);
   assert.deepEqual(greetings(slack), []);
   assert.doesNotMatch(out, /the bot messages you/);
+});
+
+// ── A server on this machine: connect's tunnel, and pointing ────────────────
+
+const TUNNEL = 'https://quiet-river-test.trycloudflare.com';
+/** A machine a tunnel runs on: cloudflared there or not, each start and stop counted. */
+function tunnelMachine({ installed = true } = {}) {
+  const started = [];
+  const state = { stopped: 0 };
+  return {
+    started,
+    state,
+    host: {
+      platform: 'linux',
+      find: (name) => (name === 'cloudflared' && installed ? '/fake/cloudflared' : undefined),
+      start: (command, args, on) => {
+        started.push([command, ...args].join(' '));
+        queueMicrotask(() => on.line(`2026 INF |  ${TUNNEL}  |`));
+        return {
+          stop: async () => {
+            state.stopped++;
+          },
+        };
+      },
+      run: async () => 0,
+      known: async () => true,
+      fetch: async () => new Response('', { status: 502 }),
+      wait: async () => {},
+    },
+  };
+}
+const LOCAL = CONNECT.filter((arg, i, all) => arg !== '--public-url' && all[i - 1] !== '--public-url');
+const urlsOf = (manifest) => [
+  manifest.settings.event_subscriptions.request_url,
+  manifest.settings.interactivity.request_url,
+  ...manifest.features.slash_commands.map((c) => c.url),
+];
+const toolsAddress = (vf) => vf.state.secretValues.filter((v) => v.environmentAlias === 'sdk-test').map((v) => `${v.versionVariant}: ${v.value}`);
+
+test('without an address, connect opens a tunnel for as long as the app takes to make, and says dev is next', async (t) => {
+  const machine = tunnelMachine();
+  const { code, out, err, slack, vf } = await runCli(t, LOCAL, { tunnel: machine.host });
+  assert.equal(code, 0, err);
+  assert.deepEqual(machine.started, ['/fake/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:0'], "to the port connect answers Slack's check on");
+  assert.match(out, new RegExp(`No --public-url, so Slack gets a temporary address while the app is made: ${TUNNEL}`));
+  assert.deepEqual(urlsOf(slack.apps.get('A1')), [`${TUNNEL}/api/slack`, `${TUNNEL}/api/slack`, `${TUNNEL}/api/slack`]);
+  assert.equal(machine.state.stopped, 1, 'the tunnel is closed when connect is done');
+  assert.match(out, /Slack has a temporary address, which has stopped\. Start your server with `voiceflow-channels dev -- <its command>`/);
+  assert.match(out, /The agent's Slack tools call your server at the address dev gives them/);
+  assert.doesNotMatch(out, /Slack sends to https/);
+  assert.deepEqual(vf.state.compiles, ['sdk-test']);
+});
+
+test('a plan only shown opens no tunnel, and a failure leaves none open', async (t) => {
+  const dry = tunnelMachine();
+  const shown = await runCli(t, [...LOCAL, '--dry-run'], { tunnel: dry.host });
+  assert.equal(shown.code, 0, shown.err);
+  assert.deepEqual(dry.started, []);
+  assert.match(shown.out, /requests go to a temporary tunnel's address/);
+  assert.doesNotMatch(shown.out, /temporary-tunnel\.invalid/);
+  assert.deepEqual(shown.slack.writes(), []);
+
+  const broken = tunnelMachine();
+  const failed = await runCli(t, LOCAL, { tunnel: broken.host, slack: fakeSlack({ invalid: 'no such feature' }) });
+  assert.equal(failed.code, 1);
+  assert.equal(broken.started.length, 1);
+  assert.equal(broken.state.stopped, 1, 'closed although connect failed');
+});
+
+test('without cloudflared, a script is told how to get it, or to give an address, before Slack is touched', async (t) => {
+  const { code, err, slack, vf } = await runCli(t, LOCAL, { tunnel: tunnelMachine({ installed: false }).host });
+  assert.equal(code, 3, 'waiting on a person');
+  assert.match(err, /It needs cloudflared, which isn't installed\. Install it \(https:\/\/developers\.cloudflare\.com\/[^)]+\)\. Then run this again\./);
+  assert.match(err, /Or give connect your server's address: --public-url https:\/\/<host>\.$/);
+  assert.deepEqual(slack.calls, []);
+  assert.deepEqual(vf.writes(), []);
+
+  // With a key to set as well, it's all said in the one stop.
+  const both = await runCli(t, LOCAL, { env: {}, tunnel: tunnelMachine({ installed: false }).host });
+  assert.equal(both.code, 3);
+  assert.match(both.err, /No Voiceflow API key/);
+  assert.match(both.err, /It needs cloudflared, which isn't installed/);
+});
+
+test("point moves a connected app and the agent's tools to another address, and changes nothing else", async (t) => {
+  const first = await runCli(t, CONNECT);
+  assert.equal(first.code, 0, first.err);
+  const before = structuredClone(first.slack.apps.get('A1'));
+  const slackWrites = first.slack.writes().length;
+  const vfWrites = first.vf.writes().length;
+
+  const point = ['point', '--project', 'proj1', '--environment', 'sdk-test', '--app', 'A1', '--public-url', TUNNEL];
+  const moved = await runCli(t, point, { slack: first.slack, vf: first.vf });
+  assert.equal(moved.code, 0, moved.err);
+  assert.match(moved.out, new RegExp(`~ Slack app A1 sends to ${TUNNEL}/api/slack \\(it sent to https://bot\\.example\\.com/api/slack\\)`));
+  assert.match(moved.out, new RegExp(`~ the agent's Slack tools call ${TUNNEL}/api/slack \\(no publish needed\\)`));
+  const after = first.slack.apps.get('A1');
+  assert.deepEqual(urlsOf(after), [`${TUNNEL}/api/slack`, `${TUNNEL}/api/slack`, `${TUNNEL}/api/slack`]);
+  // Put the addresses back, and it is the manifest it was: nothing else moved.
+  const restored = JSON.parse(JSON.stringify(after).replaceAll(TUNNEL, 'https://bot.example.com'));
+  assert.deepEqual(restored, before);
+  assert.deepEqual(
+    first.slack
+      .writes()
+      .slice(slackWrites)
+      .map((c) => c.method),
+    ['apps.manifest.update'],
+    'one write in Slack: no install, no icon',
+  );
+  // The tools' address, in the draft and the published version, and nothing more in Voiceflow.
+  assert.deepEqual(toolsAddress(first.vf).slice(-2), [`draft: ${TUNNEL}/api/slack`, `published: ${TUNNEL}/api/slack`]);
+  assert.deepEqual(
+    first.vf
+      .writes()
+      .slice(vfWrites)
+      .map((c) => `${c.method} ${c.path.replace(/sec\d+/, ':id')}`),
+    ['PUT /v1/stable/secret/:id/value', 'PUT /v1/stable/secret/:id/value'],
+    'no tool, no compile, no publish',
+  );
+  assert.deepEqual(first.vf.state.publishes, []);
+  noSecrets(moved.out + moved.err);
+
+  // Pointed there already: Slack is left alone.
+  const again = await runCli(t, point, { slack: first.slack, vf: first.vf });
+  assert.equal(again.code, 0, again.err);
+  assert.match(again.out, new RegExp(`= Slack app A1 sends to ${TUNNEL}/api/slack already`));
+  assert.equal(first.slack.writes().length, slackWrites + 1, 'no second update');
+});
+
+test('point needs a connected app, the right workspace, and for an app you made leaves Slack to you', async (t) => {
+  const none = await runCli(t, ['point', '--project', 'proj1', '--environment', 'sdk-test', '--public-url', TUNNEL]);
+  assert.equal(none.code, 1);
+  assert.match(none.err, /No Slack app is connected to Spike's sdk-test environment from here\. Run connect first\. Nothing was changed\./);
+  assert.deepEqual(none.slack.writes(), []);
+  assert.deepEqual(none.vf.writes(), []);
+
+  const elsewhere = await runCli(t, [
+    'point',
+    '--project',
+    'proj1',
+    '--environment',
+    'sdk-test',
+    '--workspace',
+    'ws-other',
+    '--app',
+    'A1',
+    '--public-url',
+    TUNNEL,
+  ]);
+  assert.equal(elsewhere.code, 1);
+  assert.match(elsewhere.err, /Project proj1 is in workspace ws1, not ws-other\. Nothing was changed\./);
+  assert.deepEqual(elsewhere.slack.calls, []);
+
+  const first = await runCli(t, CONNECT);
+  const own = await runCli(t, ['point', '--manual', '--project', 'proj1', '--environment', 'sdk-test', '--public-url', TUNNEL], {
+    slack: first.slack,
+    vf: first.vf,
+    slackCli: NO_CLI,
+  });
+  assert.equal(own.code, 0, own.err);
+  assert.match(
+    own.out,
+    new RegExp(
+      `your Slack app's settings are yours to keep: point Event Subscriptions, Interactivity & Shortcuts and your slash command at ${TUNNEL}/api/slack`,
+    ),
+  );
+  assert.deepEqual(toolsAddress(first.vf).slice(-2), [`draft: ${TUNNEL}/api/slack`, `published: ${TUNNEL}/api/slack`]);
+  assert.equal(first.slack.calls.filter((c) => c.method === 'apps.manifest.update').length, 0, 'Slack was not touched');
+});
+
+test('a manifest is moved to another address without touching a command you sent elsewhere', () => {
+  const manifest = slackManifest({ requestUrl: URL_, tools: {} });
+  manifest.features.slash_commands.push({ command: '/other', url: 'https://elsewhere.example.com/hook', description: 'Mine' });
+  const { manifest: moved, from } = repointManifest(manifest, `${TUNNEL}/api/slack`);
+  assert.equal(from, URL_);
+  assert.deepEqual(
+    moved.features.slash_commands.map((c) => `${c.command} ${c.url}`),
+    [`/ask ${TUNNEL}/api/slack`, '/other https://elsewhere.example.com/hook'],
+  );
+  assert.equal(manifest.settings.event_subscriptions.request_url, URL_, 'the manifest given is not changed');
+  assert.throws(() => repointManifest(manifest, 'http://insecure.example.com/api/slack'), /https/);
+  assert.equal(repointManifest(manifest, URL_).from, undefined, 'the same address is no move');
+});
+
+test("point asks your server Slack's signed check first: a server that's down, or holds another secret, is said before Slack is touched", async (t) => {
+  const first = await runCli(t, CONNECT);
+  const point = ['point', '--project', 'proj1', '--environment', 'sdk-test', '--app', 'A1', '--public-url', TUNNEL, '--local-url', 'http://127.0.0.1:3000/'];
+  const env = { VOICEFLOW_API_KEY: VF_KEY, SLACK_SIGNING_SECRET: SIGNING };
+  const updates = () => first.slack.of('apps.manifest.update').length;
+  /** A server on this machine, as the test's: it sees each check, and answers as told. */
+  const server = (answer) => {
+    const seen = [];
+    return {
+      seen,
+      fetch: async (url, init) => {
+        if (!url.startsWith('http://127.0.0.1:')) return undefined;
+        const headers = new Headers(init.headers);
+        const signed = `v0=${createHmac('sha256', SIGNING)
+          .update(`v0:${headers.get('x-slack-request-timestamp')}:${init.body}`)
+          .digest('hex')}`;
+        seen.push({ url, method: init.method, genuine: headers.get('x-slack-signature') === signed, slackTouchedYet: updates() > 0 });
+        return answer(JSON.parse(init.body));
+      },
+    };
+  };
+
+  const up = server((body) => Response.json({ challenge: body.challenge }));
+  const good = await runCli(t, point, { env, slack: first.slack, vf: first.vf, voiceflow: up.fetch });
+  assert.equal(good.code, 0, good.err);
+  assert.deepEqual(up.seen, [{ url: 'http://127.0.0.1:3000/api/slack', method: 'POST', genuine: true, slackTouchedYet: false }]);
+  assert.match(good.out, /= your server answers Slack's signed check at http:\/\/127\.0\.0\.1:3000\/api\/slack\n~ Slack app A1 sends to/);
+  assert.equal(updates(), 1);
+  noSecrets(good.out + good.err);
+
+  const elsewhere = 'https://other-tunnel-test.trycloudflare.com';
+  const moved = point.map((arg) => (arg === TUNNEL ? elsewhere : arg));
+  const writes = first.vf.writes().length;
+  for (const [answer, said] of [
+    [() => new Response('no', { status: 401 }), /refused a request signed with SLACK_SIGNING_SECRET\. Is the secret it runs with this app's/],
+    [() => new Response('<html>not found</html>', { status: 404 }), /answered 404 to Slack's URL check, not the check's own value\. Is that its Slack route\?/],
+    [() => Response.json({ challenge: 'another' }), /answered 200 to Slack's URL check, not the check's own value/],
+    [
+      () => {
+        throw new Error('ECONNREFUSED');
+      },
+      /Your server didn't answer at http:\/\/127\.0\.0\.1:3000\/api\/slack\. Is it running/,
+    ],
+  ]) {
+    const bad = await runCli(t, moved, { env, slack: first.slack, vf: first.vf, voiceflow: server(answer).fetch });
+    assert.equal(bad.code, 1);
+    assert.match(bad.err, said);
+    assert.match(bad.err, /Nothing was changed\.$/);
+  }
+  assert.equal(updates(), 1, 'Slack was pointed nowhere new');
+  assert.equal(first.vf.writes().length, writes, "and neither were the agent's tools");
+
+  // With no signing secret to sign with, it says the server wasn't checked, and goes on.
+  const unsigned = await runCli(t, moved, { slack: first.slack, vf: first.vf });
+  assert.equal(unsigned.code, 0, unsigned.err);
+  assert.match(unsigned.out, /· no SLACK_SIGNING_SECRET here, so your server at http:\/\/127\.0\.0\.1:3000\/api\/slack wasn't checked first/);
+  assert.equal(updates(), 2);
 });

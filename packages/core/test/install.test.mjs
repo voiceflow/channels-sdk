@@ -12,6 +12,7 @@ import {
   installTools,
   memoryRecordStore,
   publishEnvironment,
+  setSecretValues,
   uninstallTools,
 } from '../dist/install.js';
 import { fakeVoiceflowApi, runFunction } from '../dist/testing.js';
@@ -435,4 +436,34 @@ test("a draft's changes read as lines: how many, the first of them by name, and 
     '  + tool a',
     '  … and 3 more',
   ]);
+});
+
+test("a secret's value is set on its own, in the draft and the published version, and nothing else is touched", async () => {
+  const { api, opts } = setup();
+  await installTools(SET(), opts({ secretValues: { demo_token: SECRET } }));
+  const writes = api.writes().length;
+
+  assert.deepEqual(await setSecretValues(opts(), { demo_token: 'https://new.example.com/api', not_there: 'x', empty: '' }), ['demo_token']);
+  assert.deepEqual(
+    api.state.secretValues.slice(-2).map((v) => `${v.environmentAlias} ${v.versionVariant}: ${v.value}`),
+    ['sdk-test draft: https://new.example.com/api', 'sdk-test published: https://new.example.com/api'],
+  );
+  assert.deepEqual(
+    api
+      .writes()
+      .slice(writes)
+      .map((c) => c.method),
+    ['PUT', 'PUT'],
+    'two writes: no secret made, nothing compiled or published',
+  );
+  assert.equal(api.state.secrets.length, 1, 'a secret the agent lacks is not created');
+
+  // Never into a secret people could read back, and never in another workspace.
+  api.state.secrets[0].visibility = 'masked';
+  await assert.rejects(
+    setSecretValues(opts(), { demo_token: 'x'.repeat(40) }),
+    (e) => e.code === 'secret_not_restricted' && !e.message.includes('x'.repeat(40)),
+  );
+  await assert.rejects(setSecretValues(opts({ expectWorkspace: 'ws-other' }), { demo_token: 'y' }), (e) => e.code === 'wrong_workspace');
+  assert.equal(api.writes().length, writes + 2);
 });

@@ -64,7 +64,9 @@ test('one command makes the app: its route, its env files, and nothing else', as
   ]);
   assert.match(out, /Created my-bot: a Voiceflow agent in Slack/);
   assert.match(out, /cd my-bot/);
-  assert.match(out, /npm run connect -- --public-url https:\/\/<your tunnel>/);
+  assert.match(out, /1\. Make the Slack app:\n {7}npm run connect\n/);
+  assert.match(out, /2\. Start it:\n {7}npm run dev\n {5}It opens a tunnel, starts the server, and points Slack at it\./);
+  assert.doesNotMatch(out, /public-url|ngrok/, 'no address to find and no tunnel to start by hand');
   assert.match(out, /It signs you in to Slack, asks for your Voiceflow API key and project ID, and saves them in \.env\.local\./);
   assert.doesNotMatch(out, /--project|--environment/, 'the env file says which agent: nothing to repeat on the command line');
   assert.match(await read(app, 'README.md'), /^# my-bot\n/);
@@ -83,6 +85,8 @@ test('the app it writes is the example app, which CI builds, with the versions t
   assert.equal(pkg.private, true);
   assert.deepEqual(pkg.scripts, example.scripts);
   assert.equal(pkg.scripts.connect, 'voiceflow-channels connect slack --env-file .env.local', "connect runs the app's own copy of the command");
+  assert.equal(pkg.scripts.dev, 'voiceflow-channels dev --env-file .env.local -- next dev', 'and dev is the tunnel, the server and the pointing in one');
+  assert.equal(pkg.scripts.start, 'next start', 'a deployed server runs with no tunnel');
   assert.deepEqual(Object.keys(pkg.dependencies), Object.keys(example.dependencies));
   assert.deepEqual(Object.keys(pkg.devDependencies), Object.keys(example.devDependencies));
   for (const [dep, version] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })) {
@@ -130,11 +134,14 @@ test("it installs with the package manager that ran it, and starts a repository 
 
   const pnpm = await start(['my-bot'], { env: { npm_config_user_agent: 'pnpm/10.4.0 npm/? node/v24.1.0 darwin arm64' } });
   assert.deepEqual(pnpm.ran.at(-1).args.concat(pnpm.ran.at(-1).command), ['install', 'pnpm']);
-  assert.match(pnpm.out, /pnpm connect --public-url https:/);
-  assert.match(pnpm.out, /pnpm run dev/);
+  assert.match(pnpm.out, /\n {7}pnpm connect\n/);
+  assert.match(pnpm.out, /\n {7}pnpm dev\n/);
   const bun = await start(['my-bot', '--pm', 'bun'], { env: { npm_config_user_agent: 'npm/11.0.0' } });
   assert.equal(bun.ran.at(-1).command, 'bun', '--pm says otherwise');
-  assert.match(bun.out, /bun run connect --public-url https:/);
+  assert.match(bun.out, /\n {7}bun run connect\n/);
+  // An address of your own is for a deployment, and each package manager passes it its own way.
+  assert.match(await read(bun.app, 'README.md'), /`bun run connect --public-url https:\/\/<your deployment>`/);
+  assert.match(await read(pnpm.app, 'README.md'), /`pnpm connect --public-url https:\/\/<your deployment>`/);
   assert.equal(packageManagerOf('yarn/4.6.0 npm/? node/v22.11.0'), 'yarn');
   assert.equal(packageManagerOf(undefined), 'npm');
   assert.equal(packageManagerOf('deno/2.0'), 'npm');

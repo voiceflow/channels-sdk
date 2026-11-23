@@ -15,8 +15,9 @@ behaviours, its tools, and the `connect` command that makes its app.
 |---|---|
 | `@voiceflow/channels-sdk` | `createChannels`, the agent, rendering, server tools, the extension API. |
 | `@voiceflow/channels-sdk/install` | `installTools` / `uninstallTools`: puts a channel's tools on an agent. Node only. |
+| `@voiceflow/channels-sdk/dev` | `dev` and `startTunnel`: a tunnel, your server, and each channel pointed at it. Node only. |
 | `@voiceflow/channels-sdk/testing` | Fakes of Voiceflow's API and runtime, and `runFunction`, which runs a tool as Voiceflow's sandbox does. |
-| `voiceflow-channels` (bin) | `voiceflow-channels connect <channel>`: hands off to `@voiceflow/channels-<channel>/connect`. |
+| `voiceflow-channels` (bin) | `voiceflow-channels connect <channel>` (and `point`, `disconnect`): hands off to `@voiceflow/channels-<channel>/connect`. `voiceflow-channels dev` is this package's own. |
 
 ## Bundled servers
 
@@ -114,11 +115,32 @@ Raise a tool's `version` when its name, description, inputs or outputs change,
 and install again. A change to what `run` does needs no install: it ships
 with your server.
 
+## Local development
+
+`voiceflow-channels dev -- <your server's command>` is local development in one
+command, for any channel:
+
+- **It opens a tunnel** to your server's port (a Cloudflare quick tunnel: no
+  account, and an address that's new each time), and says how to get
+  cloudflared when it isn't installed.
+- **It starts your server**, with `PORT` set, and waits until it answers.
+- **It points each channel at the tunnel**: every `@voiceflow/channels-*`
+  package the app depends on is asked to move its platform, and the agent's
+  tools, to the new address. A channel takes part by answering
+  `point --public-url <address> --local-url <the server here>`.
+- **Stopping it stops all of it.** `--public-url` uses an address of your own
+  and starts no tunnel.
+
+`startTunnel` is the tunnel on its own, from `@voiceflow/channels-sdk/dev`.
+
 ## Installing tools
 
 `installTools(set, options)` installs a channel's `ToolSet` through Voiceflow's
 public API:
 
+- **`setSecretValues`** sets the value of secrets the agent already has, in the
+  draft and the published version: for a value that changes on its own, such
+  as a tunnel's address.
 - **It never publishes.** It writes the environment's draft and compiles it.
   Publishing is a step of its own: `draftChanges` reads what the draft holds
   that isn't live, and `publishEnvironment` makes the whole draft live.

@@ -18,16 +18,19 @@ import readline from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
 import { parseArgs } from 'node:util';
 import { createRedactor } from '@voiceflow/channels-sdk';
+import { checkTunnelTool, startTunnel, type Tunnel, type TunnelHost } from '@voiceflow/channels-sdk/dev';
 import { type DraftChanges, draftChanges, formatDraftChanges, publishEnvironment } from '@voiceflow/channels-sdk/install';
 import { slackCliLogins } from './api.js';
 import {
   type ConnectResult,
+  checkServer,
   connectOwnApp,
   connectSlack,
   createSlackApi,
   disconnectSlack,
   greetingText,
   type OwnAppResult,
+  pointSlack,
   type SlackCliLogin,
   sendGreeting,
   slackManifest,
@@ -35,8 +38,9 @@ import {
 import { NeedsYou, type SlackCliHost, slackSignIn } from './sign-in.js';
 
 const USAGE = `Usage:
-  voiceflow-channels connect slack --public-url <https://host> [--env-file <path>] [options]
+  voiceflow-channels connect slack [--public-url <https://host>] [--env-file <path>] [options]
   voiceflow-channels connect slack --manual --public-url <https://host> [--env-file <path>]
+  voiceflow-channels point slack --public-url <https://host> [--env-file <path>]
   voiceflow-channels disconnect slack [--env-file <path>] [--remove-tools] [--yes]
   voiceflow-channels connect slack --print-manifest --public-url <https://host>
 
@@ -68,6 +72,15 @@ by hand, it checks the app's scopes and installs the tools on the agent, and
 needs no Slack CLI. It reads SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET from the
 environment or --env-file, or asks for them.
 
+Without --public-url, connect is for a server on this machine: it opens a
+temporary tunnel so Slack has an address while the app is made, and
+\`voiceflow-channels dev\` gives Slack your server's address each time it
+starts. Pass --public-url for a server that has an address of its own.
+
+Point moves a connected app, and the agent's Slack tools, to another address,
+and changes nothing else: \`voiceflow-channels dev\` runs it on each start.
+Slack checks the address as it takes it, so your server has to be answering.
+
 It exits 0 when done, 1 on a failure, 2 on a mistake in the command, and 3
 when it's waiting on you: do what it says, then run it again.
 
@@ -78,8 +91,13 @@ Options:
                           your yes)
   --workspace <id>        stop, changing nothing, unless the project is in this
                           Voiceflow workspace
-  --public-url <url>      your server's public address; Slack sends to <url>/api/slack
+  --public-url <url>      your server's public address; Slack sends to <url>/api/slack.
+                          Without it, connect opens a temporary tunnel
   --request-url <url>     or the whole webhook URL, if it isn't <url>/api/slack
+  --local-url <url>       point: your server on this machine (http://127.0.0.1:3000).
+                          It is asked Slack's signed URL check first, so a server
+                          that's down, or has the wrong signing secret, is said
+                          here and nothing is changed
   --tools-url <url>       where the agent's Slack tools call your server
                           (default: the webhook URL, which answers them too)
   --team <id>             the Slack workspace (from \`slack login\`); default: the only
@@ -127,6 +145,8 @@ export interface CliIO {
   login?: (teamId?: string) => SlackCliLogin;
   /** The Slack CLI on this machine: where its logins are kept, how it's found and run. */
   slackCli?: Partial<SlackCliHost>;
+  /** The machine a tunnel runs on, when connect opens one. */
+  tunnel?: Partial<TunnelHost>;
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
   /** Whether a person is there to answer a question. */
@@ -154,6 +174,10 @@ export async function cli(argv: string[], io: CliIO = {}): Promise<number> {
 }
 
 type Say = (line: string) => void;
+/** Said wherever a tunnel can't be opened: the way to do without one. */
+const NO_TUNNEL = "Or give connect your server's address: --public-url https://<host>.";
+/** Stands in for a tunnel's address in a plan that is only shown. */
+const NOT_YET = 'https://temporary-tunnel.invalid';
 /** The release a publish by connect makes in Voiceflow. */
 const RELEASE_NAME = 'Slack tools (Channels SDK)';
 const RELEASE_DESCRIPTION = 'Published by `voiceflow-channels connect slack`, on a yes.';
@@ -178,6 +202,7 @@ async function run(
       'request-url': { type: 'string' },
       'tools-url': { type: 'string' },
       team: { type: 'string' },
+      'local-url': { type: 'string' },
       'slack-ticket': { type: 'string' },
       'slack-code': { type: 'string' },
       manual: { type: 'boolean', default: false },
@@ -202,7 +227,7 @@ async function run(
     },
   });
   const action = positionals[0] ?? 'connect';
-  if (o.help || !['connect', 'disconnect'].includes(action)) {
+  if (o.help || !['connect', 'disconnect', 'point'].includes(action)) {
     out(USAGE);
     return o.help ? 0 : 2;
   }
@@ -211,7 +236,9 @@ async function run(
   const app = { ...(o.name ? { name: o.name } : {}), ...(command !== undefined ? { command } : {}) };
   const tools = o['no-tools'] ? (false as const) : { workspace: !o['no-workspace-tools'] };
 
-  const requestUrl = o['request-url'] ?? (o['public-url'] ? `${o['public-url'].replace(/\/+$/, '')}/api/slack` : undefined);
+  let requestUrl = o['request-url'] ?? (o['public-url'] ? `${o['public-url'].replace(/\/+$/, '')}/api/slack` : undefined);
+  // No address given to connect: a server on this machine, reached through a tunnel.
+  const local = action === 'connect' && !requestUrl && !o.manual;
   if (o['print-manifest']) {
     out(JSON.stringify(slackManifest({ ...app, requestUrl: requestUrl ?? 'https://example.com/api/slack', tools }), null, 2));
     return 0;
@@ -221,8 +248,8 @@ async function run(
     err('--publish and --no-publish say opposite things: pass one.');
     return 2;
   }
-  if (o.manual && action !== 'connect') {
-    err('--manual is for connect: an app you made by hand is yours to delete in Slack.');
+  if (o.manual && action === 'disconnect') {
+    err('--manual is for connect and point: an app you made by hand is yours to delete in Slack.');
     return 2;
   }
 
@@ -235,8 +262,10 @@ async function run(
   // A flag wins, then the environment, then the env file. A person is asked for what's left.
   let project = o.project || io.env.VOICEFLOW_PROJECT_ID || inFile.VOICEFLOW_PROJECT_ID || '';
   let environment = o.environment || io.env.VOICEFLOW_ENVIRONMENT || inFile.VOICEFLOW_ENVIRONMENT || '';
-  if (action === 'connect' && !requestUrl) {
-    err(`Missing --public-url: your server's public address, where Slack sends its requests.\n\n${USAGE}`);
+  if (action !== 'disconnect' && !requestUrl && !local) {
+    err(
+      `Missing --public-url: ${o.manual ? "the address your app's settings point at" : "your server's public address, where Slack sends its requests"}.\n\n${USAGE}`,
+    );
     return 2;
   }
   if (!project && interactive) project = (await ask('Voiceflow project ID: ')).trim();
@@ -278,7 +307,12 @@ async function run(
             }),
       );
   secrets.add(login?.token);
-  const own = o.manual ? await orWait(() => ownCredentials({ env: io.env, inFile, envFile, interactive, secret: io.secret ?? hidden })) : undefined;
+  // An app you made is asked for its credentials when it's connected; pointing it needs none.
+  const own =
+    o.manual && action === 'connect'
+      ? await orWait(() => ownCredentials({ env: io.env, inFile, envFile, interactive, secret: io.secret ?? hidden }))
+      : undefined;
+  if (local && !o['dry-run'] && !interactive) await orWait(() => checkTunnelTool({ instead: NO_TUNNEL, ...(io.tunnel ? { host: io.tunnel } : {}) }));
   secrets.add(own?.botToken, own?.signingSecret);
   const key = await orWait(() => voiceflowKey({ file: o['key-file'], env: io.env, inFile, envFile, interactive, secret: io.secret ?? hidden }));
   if (waiting.length || !key) throw new NeedsYou(waiting.join('\n\n'));
@@ -416,8 +450,33 @@ async function run(
     report(result.install, err);
     return published === 'failed' ? 1 : 0;
   }
+  if (action === 'point' && o['local-url']) {
+    // The server is asked what Slack will ask it, before anything is pointed at it.
+    const signingSecret = io.env.SLACK_SIGNING_SECRET || inFile.SLACK_SIGNING_SECRET;
+    const at = `${o['local-url'].replace(/\/+$/, '')}${new URL(requestUrl!).pathname}`;
+    if (signingSecret) {
+      await checkServer({ url: at, signingSecret, ...withFetch });
+      out(`= your server answers Slack's signed check at ${at}`);
+    } else out(`· no SLACK_SIGNING_SECRET here${envFile ? ` or in ${envFile}` : ''}, so your server at ${at} wasn't checked first`);
+  }
+  if (action === 'point' && o.manual) {
+    await pointSlack({ voiceflow, requestUrl: requestUrl!, ...(o['tools-url'] ? { toolsUrl: o['tools-url'] } : {}), onProgress: out });
+    return 0;
+  }
   if (!login) throw new Error('No Slack login.');
   const slack = { token: login.token, teamId: login.teamId, ...withFetch };
+
+  if (action === 'point') {
+    await pointSlack({
+      slack,
+      voiceflow,
+      requestUrl: requestUrl!,
+      ...(o['tools-url'] ? { toolsUrl: o['tools-url'] } : {}),
+      ...(o.app ? { appId: o.app } : {}),
+      onProgress: out,
+    });
+    return 0;
+  }
 
   if (action === 'disconnect') {
     const result = await disconnectSlack({
@@ -434,8 +493,18 @@ async function run(
 
   // Slack checks the request URL while it makes the app: answer it here unless your server already does.
   const checker = o['dry-run'] ? { close: async () => {} } : await urlChecker(Number(o.port), out);
+  let tunnel: Tunnel | undefined;
   let result: ConnectResult;
+  // A plan only shown opens no tunnel: it says where one would go.
+  const planned = (lines: string[]) =>
+    local && o['dry-run'] ? lines.map((line) => line.replaceAll(`${NOT_YET}/api/slack`, "a temporary tunnel's address")) : lines;
   try {
+    if (local && o['dry-run']) requestUrl = `${NOT_YET}/api/slack`;
+    else if (local) {
+      tunnel = await startTunnel({ port: Number(o.port), interactive, ask, say: out, instead: NO_TUNNEL, ...(io.tunnel ? { host: io.tunnel } : {}) });
+      requestUrl = `${tunnel.url}/api/slack`;
+      out(`No --public-url, so Slack gets a temporary address while the app is made: ${tunnel.url}\n`);
+    }
     result = await connectSlack({
       slack,
       voiceflow,
@@ -445,7 +514,7 @@ async function run(
       app: { ...app, ...(icon !== undefined ? { icon } : {}) },
       tools,
       ...restore,
-      confirm: (plan) => confirm([...plan.lines, ...after(plan.app.action === 'create' && !o['no-greeting'] && Boolean(plan.me))]),
+      confirm: (plan) => confirm([...planned(plan.lines), ...after(plan.app.action === 'create' && !o['no-greeting'] && Boolean(plan.me))]),
       onProgress: out,
       // Each credential is one to hide from the moment it exists, before anything after it can fail.
       onCredentials: async (c) => {
@@ -455,6 +524,7 @@ async function run(
     });
   } finally {
     await checker.close();
+    await tunnel?.close();
   }
   secrets.add(result.botToken, result.signingSecret, result.userToken);
   if (!result.applied) return 0;
@@ -484,11 +554,13 @@ async function run(
           : `not saved: copy it from Basic Information, ${page('general')}`
         : `unchanged (the app already existed): Basic Information, ${page('general')}`,
       key: envFile && (inFile.VOICEFLOW_API_KEY || saved.includes('VOICEFLOW_API_KEY')) ? `in ${envFile}` : 'your Voiceflow API key',
-      sends: `Slack sends to ${requestUrl}.`,
+      sends: local
+        ? "Slack has a temporary address, which has stopped. Start your server with `voiceflow-channels dev -- <its command>` (`npm run dev` in an app the starter made): it opens a tunnel and points Slack, and the agent's tools, at it."
+        : `Slack sends to ${requestUrl}.`,
       projectID: project,
       environment,
       published: published === 'published',
-      ...(result.install ? { toolsUrl: result.toolsUrl! } : {}),
+      ...(result.install ? { toolsUrl: local ? 'the address dev gives them' : result.toolsUrl! } : {}),
     },
     out,
   );
