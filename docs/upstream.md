@@ -216,7 +216,9 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 - [ ] A tool that outlives its time limit keeps running (Slack's client waits
       out a rate limit), so a write can land after the agent was told it
       timed out. Posts and messages are checked for a repeat; the others aren't
-- [ ] Strip known secret values from every error the CLI prints
+- [x] Known secret values are stripped from everything the CLI prints, errors
+      included (2026-11-23): where an error is made, before it is cut to
+      length, and from every line on its way out
 - [ ] Remove `"private": true`
 
 ### The first publish

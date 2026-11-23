@@ -2,6 +2,8 @@
 // `voiceflow-channels <connect|disconnect> <channel>`: hands the command to the
 // channel's package (`@voiceflow/channels-<channel>/connect`), which knows how
 // to make that channel's app and install its tools.
+import { redact } from './redact.js';
+
 const [action, channel, ...rest] = process.argv.slice(2);
 
 const USAGE = `Usage: voiceflow-channels <connect|disconnect> <channel> [options]
@@ -33,7 +35,8 @@ async function main(): Promise<number> {
 main().then(
   (code) => process.exit(code),
   (error) => {
-    console.error(error?.message ?? error);
+    // A channel's command cleans what it prints of the secrets it holds. This is for an error from before it starts.
+    console.error(redact(String(error?.message ?? error), [process.env.VOICEFLOW_API_KEY]));
     process.exit(1);
   },
 );

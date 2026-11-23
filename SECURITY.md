@@ -26,7 +26,8 @@ Each of these failing is a vulnerability worth reporting:
 - **Secrets are never printed or logged.** That covers the Voiceflow API key,
   Slack's bot and user tokens, and the app's signing secret. `connect` writes the
   app's credentials only to the file you name with `--env-file`, readable by
-  you alone.
+  you alone. An error is no exception: when a server repeats a secret back,
+  the command prints `[hidden]` in its place.
 - **No platform credential goes to Voiceflow.** The tools that act in Slack
   run on your server, with the server's own bot token. The agent holds only
   the address it calls them at.

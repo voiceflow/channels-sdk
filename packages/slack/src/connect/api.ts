@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { redact } from '@voiceflow/channels-sdk';
 
 export class SlackApiError extends Error {
   constructor(
@@ -56,7 +57,12 @@ export function createSlackApi(options: SlackApiOptions): SlackApi {
     }
     const res = await doFetch(`${base}/${method}`, { method: 'POST', headers, body });
     const json = (await res.json().catch(() => ({ ok: false, error: `http_${res.status}` }))) as any;
-    if (!json.ok) throw new SlackApiError(method, json.error ?? 'unknown_error', json.errors ?? []);
+    if (!json.ok) {
+      // What Slack says is cleaned of the token before the error cuts it: a cut could leave most of one behind.
+      const clean = (value: unknown) => JSON.parse(redact(JSON.stringify(value), [token, options.token]));
+      const details = Array.isArray(json.errors) ? json.errors : [];
+      throw new SlackApiError(method, String(clean(json.error ?? 'unknown_error')), clean(details));
+    }
     return json;
   };
 }

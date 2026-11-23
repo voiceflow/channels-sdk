@@ -11,12 +11,13 @@ import { PassThrough, Writable } from 'node:stream';
 import test from 'node:test';
 import { memoryRecordStore } from '@voiceflow/channels-sdk/install';
 import { fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
-import { hidden, urlChecker, writeEnvFile } from '../dist/connect/cli.js';
+import { cli, hidden, urlChecker, writeEnvFile } from '../dist/connect/cli.js';
 import {
   appNameOf,
   BOT_EVENTS,
   BOT_SCOPES,
   connectSlack,
+  createSlackApi,
   disconnectSlack,
   memoryAppRecordStore,
   mergeManifest,
@@ -704,4 +705,115 @@ test("the URL checker answers Slack's challenge and nothing else", async () => {
   } finally {
     await checker.close();
   }
+});
+
+// ── What the command prints ─────────────────────────────────────────────────
+
+/** Runs the command as a terminal would, against the fakes, in a folder of its own. `voiceflow(url, init)` can answer a call itself. */
+async function runCli(t, argv, { slack = fakeSlack(), voiceflow } = {}) {
+  const vf = fakeVoiceflowApi({ project: PROJECT, apiKey: VF_KEY });
+  const dir = await mkdtemp(join(tmpdir(), 'vf-cli-'));
+  const before = process.cwd();
+  process.chdir(dir);
+  t.after(() => process.chdir(before));
+  const out = [];
+  const err = [];
+  const fetch = async (url, init = {}) => {
+    if (String(url).startsWith('https://slack.com/api/')) return slack.fetch(url, init);
+    return (await voiceflow?.(String(url), init)) ?? vf.fetch(url, init);
+  };
+  const code = await cli(argv, {
+    out: (line) => out.push(line),
+    err: (line) => err.push(line),
+    login: () => ({ teamId: 'T1', token: CLI_TOKEN }),
+    env: { VOICEFLOW_API_KEY: VF_KEY },
+    fetch,
+  });
+  return { code, out: out.join('\n'), err: err.join('\n'), slack, vf, dir };
+}
+const CONNECT = ['connect', '--project', 'proj1', '--environment', 'sdk-test', '--public-url', 'https://bot.example.com', '--port', '0', '--yes'];
+/** No part of a secret long enough to matter: a cut error could leave most of one. */
+const noPartOf = (text, secret) => {
+  for (let length = 8; length <= secret.length; length++)
+    assert.ok(!text.includes(secret.slice(0, length)), `the first ${length} characters of a secret are in: ${text.slice(0, 200)}`);
+};
+
+test("Slack's app API repeating the login back never puts it in the error, even where the error is cut", async () => {
+  for (const pad of [0, 560, 590]) {
+    const api = createSlackApi({
+      token: CLI_TOKEN,
+      fetch: async () => Response.json({ ok: false, error: 'invalid_arguments', errors: [{ message: `${'x'.repeat(pad)} bad token ${CLI_TOKEN}` }] }),
+    });
+    await assert.rejects(api('apps.manifest.validate', {}), (error) => {
+      assert.match(error.message, /^apps\.manifest\.validate: invalid_arguments/);
+      noPartOf(error.message, CLI_TOKEN);
+      noPartOf(JSON.stringify(error.details), CLI_TOKEN);
+      return true;
+    });
+  }
+  // A token given for one call is cleaned the same way.
+  const api = createSlackApi({ token: CLI_TOKEN, fetch: async () => Response.json({ ok: false, error: `not_allowed_token_type ${BOT_TOKEN}` }) });
+  await assert.rejects(api('auth.test', {}, { token: BOT_TOKEN }), (error) => (noPartOf(error.message, BOT_TOKEN), true));
+});
+
+test('the command prints its plan and its result without a secret, and saves the credentials only where asked', async (t) => {
+  const { code, out, err, dir } = await runCli(t, [...CONNECT, '--env-file', '.env.local']);
+  assert.equal(code, 0, err);
+  assert.match(out, /\+ create app "Spike" from the manifest/);
+  assert.match(out, /Connected: Slack app A1, bot user UBOT\./);
+  assert.match(out, /SLACK_BOT_TOKEN {7}in \.env\.local/);
+  noSecrets(out);
+  noSecrets(err);
+  const saved = await readFile(join(dir, '.env.local'), 'utf8');
+  assert.match(saved, new RegExp(`^SLACK_SIGNING_SECRET=${SIGNING}$`, 'm'));
+  assert.match(saved, new RegExp(`^SLACK_BOT_TOKEN=${BOT_TOKEN}$`, 'm'));
+});
+
+test('an error the command prints never carries a secret it holds, whichever server repeats one back', async (t) => {
+  // Voiceflow refuses the first read, quoting the API key it was sent.
+  const badKey = await runCli(t, CONNECT, {
+    voiceflow: (url) =>
+      url.includes('/v1/stable/project/') ? new Response(JSON.stringify({ message: `No access with key ${VF_KEY}` }), { status: 401 }) : undefined,
+  });
+  assert.equal(badKey.code, 1, 'it fails with an exit code, not a thrown error');
+  assert.match(badKey.err, /answered 401: No access with key \[hidden\]/);
+  noSecrets(badKey.err + badKey.out);
+  assert.deepEqual(badKey.slack.writes(), [], 'and nothing was changed');
+
+  // Slack refuses the manifest check, quoting the login.
+  const slack = fakeSlack();
+  const real = slack.fetch;
+  slack.fetch = async (url, init) =>
+    String(url).endsWith('/apps.manifest.validate')
+      ? Response.json({ ok: false, error: 'not_allowed', errors: [{ message: `token ${CLI_TOKEN} can't do this` }] })
+      : real(url, init);
+  const badLogin = await runCli(t, CONNECT, { slack });
+  assert.equal(badLogin.code, 1);
+  assert.match(badLogin.err, /apps\.manifest\.validate: not_allowed/);
+  noSecrets(badLogin.err + badLogin.out);
+
+  // After the app is installed, a write to Voiceflow fails with text that holds the new app's
+  // token and signing secret: the command has had them for a moment, and hides them already.
+  const late = await runCli(t, CONNECT, {
+    voiceflow: (url, init) =>
+      url.includes('/v1/stable/function') && init.method === 'POST'
+        ? new Response(JSON.stringify({ message: `rejected: ${BOT_TOKEN} / ${SIGNING} / ${encodeURIComponent(VF_KEY)}` }), { status: 500 })
+        : undefined,
+  });
+  assert.equal(late.code, 1);
+  assert.match(late.err, /answered 500: rejected: \[hidden\] \/ \[hidden\] \/ \[hidden\]/);
+  noSecrets(late.err + late.out);
+  assert.match(late.out, /\+ installed it in Example: bot user UBOT/, 'what it did before failing is still shown');
+});
+
+test('a mistake in the command line is an answer and an exit code, never a stack trace', async (t) => {
+  const missing = await runCli(t, ['connect', '--project', 'proj1']);
+  assert.equal(missing.code, 2);
+  assert.match(missing.err, /Missing --environment, --public-url\./);
+  const unknown = await runCli(t, ['connect', '--no-such-flag']);
+  assert.equal(unknown.code, 1);
+  assert.match(unknown.err, /no-such-flag/);
+  const help = await runCli(t, ['connect', '--help']);
+  assert.equal(help.code, 0);
+  assert.match(help.out, /^Usage:/);
 });

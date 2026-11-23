@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { ChannelsError } from './errors.js';
+import { redact } from './redact.js';
 import { DEFAULT_PATHS, type ToolDefinition, type ToolSet } from './tools.js';
 
 export const DEFAULT_API_URL = 'https://realtime-api.voiceflow.com';
@@ -92,7 +93,8 @@ type Query = Record<string, string | boolean | undefined>;
 export function createVoiceflowApi(options: ApiOptions) {
   const base = (options.apiURL ?? DEFAULT_API_URL).replace(/\/$/, '');
   const doFetch = options.fetch ?? fetch;
-  return async function call<T = any>(method: string, path: string, query: Query = {}, body?: unknown): Promise<T> {
+  /** `sensitive`: values this call sends that must never come back in an error (a secret's value). The API key never does. */
+  return async function call<T = any>(method: string, path: string, query: Query = {}, body?: unknown, sensitive: readonly string[] = []): Promise<T> {
     const search = Object.entries(query)
       .filter(([, v]) => v !== undefined)
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
@@ -103,12 +105,14 @@ export function createVoiceflowApi(options: ApiOptions) {
     const res = await doFetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     const text = await res.text();
     if (!res.ok) {
-      let message = text.slice(0, 300);
+      // Cleaned before it's cut: a cut could leave most of a value behind.
+      const said = redact(text, [options.apiKey, ...sensitive]);
+      let message = said;
       try {
-        const parsed = JSON.parse(text);
-        message = parsed.message ?? parsed.error ?? message;
+        const parsed = JSON.parse(said);
+        message = String(parsed.message ?? parsed.error ?? said);
       } catch {}
-      throw new ChannelsError('voiceflow_http', `Voiceflow ${method} ${path} answered ${res.status}: ${message}`);
+      throw new ChannelsError('voiceflow_http', `Voiceflow ${method} ${path} answered ${res.status}: ${message.slice(0, 300)}`);
     }
     return (text ? JSON.parse(text) : {}) as T;
   };
@@ -340,7 +344,9 @@ export async function installTools(set: ToolSet, options: InstallOptions): Promi
       const value = options.secretValues?.[s.name];
       if (value && id) {
         for (const versionVariant of ['draft', 'published'] as const) {
-          await api('PUT', `/v1/stable/secret/${encodeURIComponent(id)}/value`, { projectID: project.id }, { value, environmentAlias: env, versionVariant });
+          await api('PUT', `/v1/stable/secret/${encodeURIComponent(id)}/value`, { projectID: project.id }, { value, environmentAlias: env, versionVariant }, [
+            value,
+          ]);
         }
       }
       if (s.action === 'create' || value) report(s);

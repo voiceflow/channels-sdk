@@ -29,6 +29,7 @@ export type {
 } from './extension.js';
 export { type Importer, type LoadAdapterOptions, loadAdapter } from './loader.js';
 export { mintPass, type PassClaims, passKey, readPass } from './pass.js';
+export { createRedactor, type Redactor, redact } from './redact.js';
 export {
   type ButtonsShown,
   createRenderer,
