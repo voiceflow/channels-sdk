@@ -1,11 +1,12 @@
 // The command line for `connect slack` and `disconnect slack`:
 //
-//   npx voiceflow-channels connect slack --project <id> --environment <alias> --public-url https://<host>
+//   npx voiceflow-channels connect slack --public-url https://<host> --env-file .env.local
 //
 // Secrets never reach the screen or the command line: the Voiceflow API key is
-// read from VOICEFLOW_API_KEY, a file (--key-file) or a hidden prompt; the
-// Slack login is the Slack CLI's; the app's credentials go only to a file you
-// name (--env-file), written readable by you alone, and never to Voiceflow.
+// read from a file (--key-file), VOICEFLOW_API_KEY, your server's env file
+// (--env-file) or a hidden prompt; the Slack login is the Slack CLI's; the
+// app's credentials go only to that env file, written readable by you alone,
+// and never to Voiceflow.
 // Every line this prints, an error's included, is first cleaned of the secrets
 // it holds: a server that repeats one back in an error can't put it on screen.
 import { randomUUID } from 'node:crypto';
@@ -19,8 +20,8 @@ import { createRedactor } from '@voiceflow/channels-sdk';
 import { type ConnectResult, connectSlack, disconnectSlack, type SlackCliLogin, slackCliLogin, slackManifest } from './index.js';
 
 const USAGE = `Usage:
-  voiceflow-channels connect slack --project <id> --environment <alias> --public-url <https://host> [options]
-  voiceflow-channels disconnect slack --project <id> --environment <alias> [--remove-tools] [--yes]
+  voiceflow-channels connect slack --public-url <https://host> [--env-file <path>] [options]
+  voiceflow-channels disconnect slack [--env-file <path>] [--remove-tools] [--yes]
   voiceflow-channels connect slack --print-manifest --public-url <https://host>
 
 Connect makes a Slack app for your Voiceflow agent (or adds what's missing to
@@ -28,6 +29,11 @@ one you have), installs it in your workspace, and installs Slack's tools on the
 agent. The tools run on your server, so the app's bot token never goes to
 Voiceflow. It shows the plan and asks before changing anything. It never
 publishes the agent.
+
+Your Voiceflow API key, project and environment come from the flags below,
+then VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID and VOICEFLOW_ENVIRONMENT in the
+environment, then the same names in --env-file. What's still missing is asked
+for, the key in a hidden prompt.
 
 Options:
   --project <id>          the Voiceflow project (agent)
@@ -50,12 +56,15 @@ Options:
   --no-workspace-tools    install only the presentation tools (then pass
                           workspaceTools: false to slack() on your server)
   --restore <a,b>         add these tools again, although they were removed
-  --env-file <path>       write SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET to this file
+  --env-file <path>       your server's env file. Connect reads the Voiceflow
+                          values from it, and writes to it the Slack app's
+                          SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET and any
+                          Voiceflow value it had to ask for. A value already
+                          there is never changed
   --port <n>              while the app is made, answer Slack's URL check on
                           127.0.0.1:<n>, where your tunnel points (default 3000;
                           skipped if your server already holds the port)
-  --key-file <path>       a file holding the Voiceflow API key (default:
-                          VOICEFLOW_API_KEY, or a hidden prompt)
+  --key-file <path>       a file holding only the Voiceflow API key
   --dry-run               show the plan and stop
   --yes                   don't ask before going ahead
   --remove-tools          disconnect: also take Slack's tools off the agent
@@ -71,6 +80,12 @@ export interface CliIO {
   login?: (teamId?: string) => SlackCliLogin;
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
+  /** Whether a person is there to answer a question. */
+  interactive?: boolean;
+  /** Asks a question and returns the answer. */
+  ask?: (question: string) => Promise<string>;
+  /** Asks for a secret, without showing what's typed. */
+  secret?: (question: string) => Promise<string>;
 }
 
 /** Runs the command. Returns its exit code: an error is printed, cleaned of every secret the command holds, and never thrown. */
@@ -89,6 +104,8 @@ export async function cli(argv: string[], io: CliIO = {}): Promise<number> {
 }
 
 type Say = (line: string) => void;
+/** A value that reads the same in every env file parser with no quotes around it. */
+const BARE = /^[\w.:/@+=,-]+$/;
 
 async function run(
   argv: string[],
@@ -141,29 +158,51 @@ async function run(
     return 0;
   }
 
-  const missing = ['project', 'environment'].filter((k) => !o[k as 'project']);
-  if (action === 'connect' && !requestUrl) missing.push('public-url');
+  // The server's env file, when there is one: what it already says isn't asked for again.
+  const envFile = o['env-file'];
+  const inFile = envFile ? await readEnvFile(envFile) : {};
+  secrets.add(inFile.VOICEFLOW_API_KEY, inFile.SLACK_BOT_TOKEN, inFile.SLACK_SIGNING_SECRET);
+  const interactive = io.interactive ?? Boolean(process.stdin.isTTY);
+  const ask = io.ask ?? question;
+  // A flag wins, then the environment, then the env file. A person is asked for what's left.
+  let project = o.project || io.env.VOICEFLOW_PROJECT_ID || inFile.VOICEFLOW_PROJECT_ID || '';
+  let environment = o.environment || io.env.VOICEFLOW_ENVIRONMENT || inFile.VOICEFLOW_ENVIRONMENT || '';
+  if (action === 'connect' && !requestUrl) {
+    err(`Missing --public-url: your server's public address, where Slack sends its requests.\n\n${USAGE}`);
+    return 2;
+  }
+  if (!project && interactive) project = (await ask('Voiceflow project ID: ')).trim();
+  if (!environment && interactive) environment = (await ask('Voiceflow environment to install the tools into (development, say): ')).trim();
+  const missing = [...(project ? [] : ['--project (or VOICEFLOW_PROJECT_ID)']), ...(environment ? [] : ['--environment (or VOICEFLOW_ENVIRONMENT)'])];
   if (missing.length) {
-    err(`Missing ${missing.map((m) => `--${m}`).join(', ')}.\n\n${USAGE}`);
+    err(`Missing ${missing.join(' and ')}${envFile ? `, in the environment or in ${envFile}` : ''}.\n\n${USAGE}`);
     return 2;
   }
 
   const login = (io.login ?? slackCliLogin)(o.team);
   secrets.add(login.token);
-  const apiKey = await voiceflowKey(o['key-file'], io.env);
+  const key = await voiceflowKey({ file: o['key-file'], env: io.env, inFile, envFile, interactive, secret: io.secret ?? hidden });
+  const apiKey = key.value;
   secrets.add(apiKey);
+  /** What the server needs and its env file doesn't say yet. Written once connect has done its work, never over a value that's there. */
+  const needed: [name: string, value: string][] = [
+    ['VOICEFLOW_API_KEY', key.typed ? apiKey : ''],
+    ['VOICEFLOW_PROJECT_ID', project],
+    ['VOICEFLOW_ENVIRONMENT', environment],
+  ];
+  const toSave = envFile ? needed.filter(([name, value]) => value && !inFile[name]) : [];
   const withFetch = io.fetch ? { fetch: io.fetch } : {};
-  const voiceflow = { apiKey, projectID: o.project!, environment: o.environment!, ...(o.workspace ? { expectWorkspace: o.workspace } : {}), ...withFetch };
+  const voiceflow = { apiKey, projectID: project, environment, ...(o.workspace ? { expectWorkspace: o.workspace } : {}), ...withFetch };
   const slack = { token: login.token, teamId: login.teamId, ...withFetch };
   const confirm = async (lines: string[]) => {
     out(lines.join('\n'));
     if (o['dry-run']) return false;
     if (o.yes) return true;
-    if (!process.stdin.isTTY) {
+    if (!interactive) {
       err('\nNothing was changed: run it again with --yes to go ahead.');
       return false;
     }
-    return yes('\nGo ahead? [y/N] ');
+    return /^y(es)?$/i.test((await ask('\nGo ahead? [y/N] ')).trim());
   };
 
   if (action === 'disconnect') {
@@ -204,7 +243,7 @@ async function run(
       // Each credential is one to hide from the moment it exists, before anything after it can fail.
       onCredentials: async (c) => {
         secrets.add(c.botToken, c.signingSecret);
-        if (o['env-file']) await writeEnvFile(o['env-file'], { SLACK_BOT_TOKEN: c.botToken, SLACK_SIGNING_SECRET: c.signingSecret });
+        if (envFile) await writeEnvFile(envFile, { SLACK_BOT_TOKEN: c.botToken, SLACK_SIGNING_SECRET: c.signingSecret });
       },
     });
   } finally {
@@ -212,13 +251,22 @@ async function run(
   }
   secrets.add(result.botToken, result.signingSecret, result.userToken);
   if (!result.applied) return 0;
-  printSettings(result, { envFile: o['env-file'], requestUrl: requestUrl!, projectID: o.project!, environment: o.environment! }, out);
+  // A value an env file would read back as something else (a space, a quote, a `#`, a `$`) is yours to write.
+  const saved = toSave.filter(([, value]) => BARE.test(value));
+  const unsaved = toSave.filter(([, value]) => !BARE.test(value));
+  if (envFile && saved.length) {
+    await writeEnvFile(envFile, Object.fromEntries(saved));
+    out(`+ saved ${saved.map(([name]) => name).join(', ')} to ${envFile}`);
+  }
+  for (const [name] of unsaved) err(`! ${name} wasn't saved to ${envFile}: its value needs quoting there. Add it yourself.`);
+  const keyIsSaved = Boolean(envFile && (inFile.VOICEFLOW_API_KEY || saved.some(([name]) => name === 'VOICEFLOW_API_KEY')));
+  printSettings(result, { envFile, requestUrl: requestUrl!, projectID: project, environment, keyIsSaved }, out);
   for (const problem of result.install?.problems ?? []) err(`! ${problem}`);
   for (const note of result.install?.notes ?? []) err(`! ${note}`);
   return 0;
 }
 
-function printSettings(r: ConnectResult, s: { envFile?: string; requestUrl: string; projectID: string; environment: string }, out: Say) {
+function printSettings(r: ConnectResult, s: { envFile?: string; requestUrl: string; projectID: string; environment: string; keyIsSaved: boolean }, out: Say) {
   const page = (tab: string) => `https://api.slack.com/apps/${r.appId}/${tab}`;
   const token = s.envFile ? `in ${s.envFile}` : `not saved: copy it from OAuth & Permissions, ${page('oauth')}`;
   const secret = r.signingSecret
@@ -232,7 +280,7 @@ Connected: Slack app ${r.appId}, bot user ${r.botUserId}.
 Your server needs:
   SLACK_BOT_TOKEN       ${token}
   SLACK_SIGNING_SECRET  ${secret}
-  VOICEFLOW_API_KEY     your Voiceflow API key
+  VOICEFLOW_API_KEY     ${s.keyIsSaved ? `in ${s.envFile}` : 'your Voiceflow API key'}
 
   createChannels({
     voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY, projectID: '${s.projectID}', environment: '${s.environment}' },
@@ -305,17 +353,57 @@ export async function writeEnvFile(path: string, values: Record<string, string |
   }
 }
 
-async function voiceflowKey(file: string | undefined, env: Record<string, string | undefined>): Promise<string> {
-  if (file) {
-    const key = (await readFile(file, 'utf8')).trim();
-    if (!key) throw new Error(`${file} is empty.`);
-    return key;
+/**
+ * The Voiceflow values in an env file, or any others: its `KEY=value` lines,
+ * with or without `export` and quotes. A file that isn't there is an empty one.
+ */
+export async function readEnvFile(path: string): Promise<Record<string, string>> {
+  let text: string;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    throw error;
   }
-  if (env.VOICEFLOW_API_KEY) return env.VOICEFLOW_API_KEY;
-  if (!process.stdin.isTTY) throw new Error('No Voiceflow API key: set VOICEFLOW_API_KEY or pass --key-file.');
-  const key = await hidden('Voiceflow API key (hidden): ');
+  const values: Record<string, string> = {};
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/.exec(line);
+    if (!match) continue;
+    const value = match[2]!.trim();
+    const quoted = /^(["'])(.*)\1$/.exec(value);
+    // Unquoted, a value ends where a comment starts.
+    values[match[1]!] = quoted ? quoted[2]! : value.replace(/\s+#.*$/, '');
+  }
+  return values;
+}
+
+/**
+ * The Voiceflow API key: from the file that holds only it, the environment, the
+ * server's env file, or (asked of a person) a hidden prompt. `typed` says it
+ * came from the prompt, so it can be saved for the server.
+ */
+async function voiceflowKey(from: {
+  file?: string;
+  env: Record<string, string | undefined>;
+  inFile: Record<string, string>;
+  envFile?: string;
+  interactive: boolean;
+  secret: (question: string) => Promise<string>;
+}): Promise<{ value: string; typed: boolean }> {
+  if (from.file) {
+    const key = (await readFile(from.file, 'utf8')).trim();
+    if (!key) throw new Error(`${from.file} is empty.`);
+    return { value: key, typed: false };
+  }
+  if (from.env.VOICEFLOW_API_KEY) return { value: from.env.VOICEFLOW_API_KEY, typed: false };
+  if (from.inFile.VOICEFLOW_API_KEY) return { value: from.inFile.VOICEFLOW_API_KEY, typed: false };
+  if (!from.interactive) {
+    throw new Error(`No Voiceflow API key: set VOICEFLOW_API_KEY${from.envFile ? `, here or in ${from.envFile},` : ''} or pass --key-file.`);
+  }
+  const key = await from.secret('Voiceflow API key (hidden): ');
   if (!key) throw new Error('No Voiceflow API key entered.');
-  return key;
+  return { value: key, typed: true };
 }
 
 /**
@@ -358,12 +446,12 @@ export function hidden(prompt: string, input: NodeJS.ReadStream = process.stdin,
   });
 }
 
-function yes(prompt: string): Promise<boolean> {
+function question(prompt: string): Promise<string> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     rl.question(prompt, (answer) => {
       rl.close();
-      resolve(/^y(es)?$/i.test(answer.trim()));
+      resolve(answer.trim());
     });
   });
 }

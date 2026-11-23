@@ -24,39 +24,33 @@ the assistant panel, buttons, forms and `/ask` all arrive there.
    npm run build
    ```
 
-2. Add your agent's details:
-
-   ```bash
-   cd examples/nextjs-slack
-   cp .env.example .env.local
-   ```
-
-   Fill in `VOICEFLOW_API_KEY` and `VOICEFLOW_PROJECT_ID`.
-
-3. Start a tunnel to port 3000, and keep it running:
+2. Start a tunnel to port 3000, and keep it running:
 
    ```bash
    ngrok http 3000
    ```
 
-4. Make the Slack app, with the tunnel's URL. Run this before the server, so
+3. Make the Slack app, with the tunnel's URL. Run this before the server, so
    that connect can answer Slack's check of the URL itself:
 
    ```bash
-   npm run connect -- --project <project id> --environment development --public-url https://<your tunnel>
+   cd examples/nextjs-slack
+   npm run connect -- --public-url https://<your tunnel>
    ```
 
-   It shows its plan and asks first. It makes and installs the app, installs
-   Slack's tools on the agent, and writes `SLACK_BOT_TOKEN` and
-   `SLACK_SIGNING_SECRET` to `.env.local`. The tools that act in Slack run on
+   It asks for your Voiceflow API key (in a hidden prompt), your project's ID
+   and the environment, then shows its plan and asks first. It makes and
+   installs the app, installs Slack's tools on the agent, and writes
+   `.env.local`: the app's `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`, and
+   what it asked you for. To skip the questions, copy `.env.example` to
+   `.env.local` and fill it in first. The tools that act in Slack run on
    this server, so the bot token goes nowhere else: Voiceflow gets only the
-   address the agent calls them at, which is the same route. It asks for your
-   Voiceflow API key in a hidden prompt, unless `VOICEFLOW_API_KEY` is set.
+   address the agent calls them at, which is the same route.
 
-5. Publish the agent's `development` environment in Voiceflow. The bot runs
-   the environment's published version, and connect never publishes.
+4. Publish the agent's environment in Voiceflow. The bot runs the
+   environment's published version, and connect never publishes.
 
-6. Start the server:
+5. Start the server:
 
    ```bash
    npm run dev
@@ -76,7 +70,7 @@ Slack's assistant panel.
   it at the new URL. A different environment gets an app of its own.
 
   ```bash
-  npm run connect -- --project <project id> --environment development --public-url https://<your deployment>
+  npm run connect -- --public-url https://<your deployment>
   ```
 
 ## How it fits together

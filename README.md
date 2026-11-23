@@ -64,12 +64,13 @@ installs Slack's tools on your agent, and writes the app's credentials to your
 env file. It shows its plan and asks before it changes anything:
 
 ```bash
-npx voiceflow-channels connect slack --project <project id> --environment production \
-  --public-url https://<your tunnel> --env-file .env.local
+npx voiceflow-channels connect slack --public-url https://<your tunnel> --env-file .env.local
 ```
 
-Set `VOICEFLOW_API_KEY`, `VOICEFLOW_PROJECT_ID` and `REDIS_URL`, start your
-server, publish the environment in Voiceflow, and mention the app in Slack.
+It reads `VOICEFLOW_API_KEY`, `VOICEFLOW_PROJECT_ID` and `VOICEFLOW_ENVIRONMENT`
+from that file, asks for the ones that aren't there, and saves them. Set
+`REDIS_URL` too, start your server, publish the environment in Voiceflow, and
+mention the app in Slack.
 [`examples/nextjs-slack`](examples/nextjs-slack) is the whole thing, ready to
 run.
 

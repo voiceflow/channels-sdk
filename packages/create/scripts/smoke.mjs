@@ -63,7 +63,7 @@ try {
 
   step("the app's own connect command runs from the installed package");
   const help = await run('npm', ['run', '--silent', 'connect', '--', '--help'], { cwd: app });
-  if (!/voiceflow-channels connect slack --project/.test(help.stdout)) throw new Error(`connect --help printed:\n${help.stdout}`);
+  if (!/voiceflow-channels connect slack --public-url/.test(help.stdout)) throw new Error(`connect --help printed:\n${help.stdout}`);
 
   step('typecheck and build');
   const env = { ...process.env, NEXT_TELEMETRY_DISABLED: '1' };

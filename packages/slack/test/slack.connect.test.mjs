@@ -11,7 +11,7 @@ import { PassThrough, Writable } from 'node:stream';
 import test from 'node:test';
 import { memoryRecordStore } from '@voiceflow/channels-sdk/install';
 import { fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
-import { cli, hidden, urlChecker, writeEnvFile } from '../dist/connect/cli.js';
+import { cli, hidden, readEnvFile, urlChecker, writeEnvFile } from '../dist/connect/cli.js';
 import {
   appNameOf,
   BOT_EVENTS,
@@ -709,15 +709,28 @@ test("the URL checker answers Slack's challenge and nothing else", async () => {
 
 // ── What the command prints ─────────────────────────────────────────────────
 
-/** Runs the command as a terminal would, against the fakes, in a folder of its own. `voiceflow(url, init)` can answer a call itself. */
-async function runCli(t, argv, { slack = fakeSlack(), voiceflow } = {}) {
+/**
+ * Runs the command as a terminal would, against the fakes, in a folder of its
+ * own. `voiceflow(url, init)` can answer a call itself; `files` are written
+ * there first; `answers` are what a person types, by question, and with none
+ * the command runs as a script does, where a question is a failure.
+ */
+async function runCli(t, argv, { slack = fakeSlack(), voiceflow, env = { VOICEFLOW_API_KEY: VF_KEY }, files = {}, answers } = {}) {
   const vf = fakeVoiceflowApi({ project: PROJECT, apiKey: VF_KEY });
   const dir = await mkdtemp(join(tmpdir(), 'vf-cli-'));
+  for (const [name, text] of Object.entries(files)) await writeFile(join(dir, name), text, { mode: 0o644 });
   const before = process.cwd();
   process.chdir(dir);
   t.after(() => process.chdir(before));
   const out = [];
   const err = [];
+  const asked = [];
+  const answer = (kind) => async (question) => {
+    asked.push(`${kind}: ${question}`);
+    const match = Object.entries(answers ?? {}).find(([part]) => question.includes(part));
+    if (!match) throw new Error(`asked "${question}" with no answer to give`);
+    return match[1];
+  };
   const fetch = async (url, init = {}) => {
     if (String(url).startsWith('https://slack.com/api/')) return slack.fetch(url, init);
     return (await voiceflow?.(String(url), init)) ?? vf.fetch(url, init);
@@ -726,11 +739,16 @@ async function runCli(t, argv, { slack = fakeSlack(), voiceflow } = {}) {
     out: (line) => out.push(line),
     err: (line) => err.push(line),
     login: () => ({ teamId: 'T1', token: CLI_TOKEN }),
-    env: { VOICEFLOW_API_KEY: VF_KEY },
+    env,
     fetch,
+    interactive: Boolean(answers),
+    ask: answer('asked'),
+    secret: answer('asked unseen'),
   });
-  return { code, out: out.join('\n'), err: err.join('\n'), slack, vf, dir };
+  return { code, out: out.join('\n'), err: err.join('\n'), slack, vf, dir, asked };
 }
+/** The command with only the server's address and its env file: what the starter's connect script runs. */
+const FROM_FILE = ['connect', '--public-url', 'https://bot.example.com', '--port', '0', '--yes', '--env-file', '.env.local'];
 const CONNECT = ['connect', '--project', 'proj1', '--environment', 'sdk-test', '--public-url', 'https://bot.example.com', '--port', '0', '--yes'];
 /** No part of a secret long enough to matter: a cut error could leave most of one. */
 const noPartOf = (text, secret) => {
@@ -809,11 +827,175 @@ test('an error the command prints never carries a secret it holds, whichever ser
 test('a mistake in the command line is an answer and an exit code, never a stack trace', async (t) => {
   const missing = await runCli(t, ['connect', '--project', 'proj1']);
   assert.equal(missing.code, 2);
-  assert.match(missing.err, /Missing --environment, --public-url\./);
+  assert.match(missing.err, /Missing --public-url: your server's public address/);
   const unknown = await runCli(t, ['connect', '--no-such-flag']);
   assert.equal(unknown.code, 1);
   assert.match(unknown.err, /no-such-flag/);
   const help = await runCli(t, ['connect', '--help']);
   assert.equal(help.code, 0);
   assert.match(help.out, /^Usage:/);
+});
+
+// ── The server's env file ───────────────────────────────────────────────────
+
+test("connect takes the agent from the server's env file, so nothing is typed twice", async (t) => {
+  const { code, out, err, dir, asked, vf } = await runCli(t, FROM_FILE, {
+    env: {},
+    files: { '.env.local': `# mine\nOTHER=1\nVOICEFLOW_API_KEY=${VF_KEY}\nexport VOICEFLOW_PROJECT_ID="proj1"\nVOICEFLOW_ENVIRONMENT=sdk-test # the draft\n` },
+  });
+  assert.equal(code, 0, err);
+  assert.deepEqual(asked, [], 'nothing was asked');
+  assert.match(out, /Voiceflow: project "Spike" \(proj1\) in workspace ws1, environment sdk-test/);
+  assert.deepEqual(vf.state.compiles, ['sdk-test']);
+  assert.match(out, /VOICEFLOW_API_KEY {5}in \.env\.local/);
+  assert.doesNotMatch(out, /\+ saved/, "what's there already isn't written again");
+  noSecrets(out + err);
+
+  const saved = await readFile(join(dir, '.env.local'), 'utf8');
+  assert.match(saved, /^# mine\nOTHER=1\n/, 'your own lines stay');
+  assert.match(saved, /^export VOICEFLOW_PROJECT_ID="proj1"$/m, 'and so does how you wrote them');
+  assert.match(saved, new RegExp(`^SLACK_BOT_TOKEN=${BOT_TOKEN}$`, 'm'));
+  assert.match(saved, new RegExp(`^SLACK_SIGNING_SECRET=${SIGNING}$`, 'm'));
+  assert.equal((await stat(join(dir, '.env.local'))).mode & 0o777, 0o600, 'readable only by you, once it holds a secret');
+});
+
+test("what the env file doesn't say is asked for, the key unseen, and saved there; what it says is never changed", async (t) => {
+  const { code, out, err, dir, asked } = await runCli(t, FROM_FILE, {
+    env: {},
+    files: { '.env.local': 'VOICEFLOW_API_KEY=\nVOICEFLOW_PROJECT_ID=\nVOICEFLOW_ENVIRONMENT=sdk-test\n' },
+    answers: { 'API key': VF_KEY, 'project ID': 'proj1' },
+  });
+  assert.equal(code, 0, err);
+  assert.deepEqual(asked, ['asked: Voiceflow project ID: ', 'asked unseen: Voiceflow API key (hidden): ']);
+  assert.match(out, /\+ saved VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID to \.env\.local/);
+  noSecrets(out + err);
+  const saved = await readEnvFile(join(dir, '.env.local'));
+  assert.deepEqual(
+    { key: saved.VOICEFLOW_API_KEY, project: saved.VOICEFLOW_PROJECT_ID, environment: saved.VOICEFLOW_ENVIRONMENT, bot: saved.SLACK_BOT_TOKEN },
+    { key: VF_KEY, project: 'proj1', environment: 'sdk-test', bot: BOT_TOKEN },
+  );
+
+  // A flag says which environment for this run. The file's own value is yours, and stays.
+  const flagged = await runCli(t, [...FROM_FILE, '--environment', 'sdk-test'], {
+    env: {},
+    files: { '.env.local': `VOICEFLOW_API_KEY=${VF_KEY}\nVOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=production\n` },
+  });
+  assert.equal(flagged.code, 0, flagged.err);
+  assert.deepEqual(flagged.vf.state.compiles, ['sdk-test']);
+  assert.equal((await readEnvFile(join(flagged.dir, '.env.local'))).VOICEFLOW_ENVIRONMENT, 'production');
+
+  // The environment's own key wins over the file's.
+  const fromEnv = await runCli(t, FROM_FILE, {
+    env: { VOICEFLOW_API_KEY: VF_KEY },
+    files: { '.env.local': 'VOICEFLOW_API_KEY=VF.DM.an-old-key-in-the-file\nVOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n' },
+  });
+  assert.equal(fromEnv.code, 0, fromEnv.err);
+  assert.equal((await readEnvFile(join(fromEnv.dir, '.env.local'))).VOICEFLOW_API_KEY, 'VF.DM.an-old-key-in-the-file', 'and the file is left as it was');
+
+  // A key connect was given, not asked for, stays where you keep it: it isn't copied into the file.
+  const given = await runCli(t, FROM_FILE, {
+    env: { VOICEFLOW_API_KEY: VF_KEY },
+    files: { '.env.local': 'VOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n' },
+  });
+  assert.equal(given.code, 0, given.err);
+  assert.equal((await readEnvFile(join(given.dir, '.env.local'))).VOICEFLOW_API_KEY, undefined);
+  assert.match(given.out, /VOICEFLOW_API_KEY {5}your Voiceflow API key/);
+  assert.doesNotMatch(given.out, /\+ saved/);
+});
+
+test('a key typed for a plan that is only shown is saved nowhere', async (t) => {
+  const { code, out, dir } = await runCli(t, [...FROM_FILE, '--dry-run'], {
+    env: {},
+    files: { '.env.local': 'VOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n' },
+    answers: { 'API key': VF_KEY },
+  });
+  assert.equal(code, 0);
+  assert.match(out, /\+ create app "Spike"/);
+  assert.equal(await readFile(join(dir, '.env.local'), 'utf8'), 'VOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n');
+});
+
+test("a script with nothing to go on is told what's missing, by name, and is asked nothing", async (t) => {
+  const nothing = await runCli(t, FROM_FILE, { env: {} });
+  assert.equal(nothing.code, 2);
+  assert.match(
+    nothing.err,
+    /Missing --project \(or VOICEFLOW_PROJECT_ID\) and --environment \(or VOICEFLOW_ENVIRONMENT\), in the environment or in \.env\.local\./,
+  );
+  assert.deepEqual(nothing.asked, []);
+  assert.deepEqual(nothing.slack.calls, [], 'and nothing was called');
+
+  const noKey = await runCli(t, FROM_FILE, { env: { VOICEFLOW_PROJECT_ID: 'proj1', VOICEFLOW_ENVIRONMENT: 'sdk-test' } });
+  assert.equal(noKey.code, 1);
+  assert.match(noKey.err, /No Voiceflow API key: set VOICEFLOW_API_KEY, here or in \.env\.local, or pass --key-file\./);
+  assert.deepEqual(noKey.asked, []);
+});
+
+test('an env file is read as servers read one: export, quotes and comments, and a missing file is an empty one', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vf-env-'));
+  const file = join(dir, '.env');
+  await writeFile(
+    file,
+    [
+      '# a comment',
+      '',
+      'PLAIN=one',
+      'export EXPORTED=two',
+      'QUOTED="three # not a comment"',
+      "SINGLE='four'",
+      'TRAILING=five # a comment',
+      'EMPTY=',
+      'SPACED = six',
+      'not a line',
+      '=nothing',
+    ].join('\n'),
+  );
+  assert.deepEqual(await readEnvFile(file), {
+    PLAIN: 'one',
+    EXPORTED: 'two',
+    QUOTED: 'three # not a comment',
+    SINGLE: 'four',
+    TRAILING: 'five',
+    EMPTY: '',
+    SPACED: 'six',
+  });
+  assert.deepEqual(await readEnvFile(join(dir, 'none')), {});
+});
+
+test('a person is asked only once the command can go ahead, and their answer to the plan decides', async (t) => {
+  // No address for Slack to send to: that's said first, before any question.
+  const noUrl = await runCli(t, ['connect', '--env-file', '.env.local'], { env: {}, answers: {} });
+  assert.equal(noUrl.code, 2);
+  assert.match(noUrl.err, /Missing --public-url/);
+  assert.deepEqual(noUrl.asked, []);
+
+  const files = { '.env.local': `VOICEFLOW_API_KEY=${VF_KEY}\nVOICEFLOW_PROJECT_ID=proj1\nVOICEFLOW_ENVIRONMENT=sdk-test\n` };
+  const ask = FROM_FILE.filter((arg) => arg !== '--yes');
+  const no = await runCli(t, ask, { env: {}, files, answers: { 'Go ahead': 'n' } });
+  assert.equal(no.code, 0);
+  assert.deepEqual(no.asked, ['asked: \nGo ahead? [y/N] ']);
+  assert.equal(no.slack.calls.filter((call) => call.method === 'apps.manifest.create').length, 0, 'no app was made');
+  assert.equal(await readFile(join(no.dir, '.env.local'), 'utf8'), files['.env.local']);
+
+  const yes = await runCli(t, ask, { env: {}, files, answers: { 'Go ahead': ' Y ' } });
+  assert.equal(yes.code, 0, yes.err);
+  assert.match(yes.out, /Connected: Slack app/);
+
+  // With nobody to ask, and no --yes, it shows the plan and changes nothing.
+  const script = await runCli(t, ask, { env: {}, files });
+  assert.equal(script.code, 0);
+  assert.match(script.err, /Nothing was changed: run it again with --yes/);
+  assert.deepEqual(script.asked, []);
+});
+
+test('a value an env file would read back differently is left for you to write', async (t) => {
+  const { code, out, err, dir } = await runCli(t, [...FROM_FILE, '--project', 'proj1', '--environment', 'my env #2'], {
+    env: {},
+    files: { '.env.local': `VOICEFLOW_API_KEY=${VF_KEY}\n` },
+  });
+  assert.equal(code, 0, err);
+  assert.match(out, /\+ saved VOICEFLOW_PROJECT_ID to \.env\.local/);
+  assert.match(err, /! VOICEFLOW_ENVIRONMENT wasn't saved to \.env\.local: its value needs quoting there\. Add it yourself\./);
+  const saved = await readEnvFile(join(dir, '.env.local'));
+  assert.equal(saved.VOICEFLOW_ENVIRONMENT, undefined);
+  assert.equal(saved.VOICEFLOW_PROJECT_ID, 'proj1');
 });
