@@ -139,6 +139,11 @@ public API:
 `uninstallTools` detaches the set's tools and deletes their functions, keeping
 any function you edited.
 
+An error from Voiceflow's API never carries the API key, or a secret's value
+being written, even when the API repeats one back. For a command of your own,
+`createRedactor()` does the same for what you print: tell it each secret with
+`add`, and print through `redact`.
+
 A tool is a `ToolDefinition`: its Voiceflow function's code (written as a plain
 named function, made into one with `functionSource`), inputs, outputs, paths, a
 version, the OAuth scopes it needs, and its kind: a presentation tool returns

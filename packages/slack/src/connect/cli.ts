@@ -6,6 +6,8 @@
 // read from VOICEFLOW_API_KEY, a file (--key-file) or a hidden prompt; the
 // Slack login is the Slack CLI's; the app's credentials go only to a file you
 // name (--env-file), written readable by you alone, and never to Voiceflow.
+// Every line this prints, an error's included, is first cleaned of the secrets
+// it holds: a server that repeats one back in an error can't put it on screen.
 import { randomUUID } from 'node:crypto';
 import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
@@ -13,7 +15,8 @@ import { basename, dirname, join } from 'node:path';
 import readline from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
 import { parseArgs } from 'node:util';
-import { type ConnectResult, connectSlack, disconnectSlack, slackCliLogin, slackManifest } from './index.js';
+import { createRedactor } from '@voiceflow/channels-sdk';
+import { type ConnectResult, connectSlack, disconnectSlack, type SlackCliLogin, slackCliLogin, slackManifest } from './index.js';
 
 const USAGE = `Usage:
   voiceflow-channels connect slack --project <id> --environment <alias> --public-url <https://host> [options]
@@ -58,7 +61,42 @@ Options:
   --remove-tools          disconnect: also take Slack's tools off the agent
   --print-manifest        print the app's manifest and stop`;
 
-export async function cli(argv: string[]): Promise<number> {
+/** What the command reads and writes, for a test or a program that runs it: by default the console, the Slack CLI's login, the environment and `fetch`. */
+export interface CliIO {
+  /** Takes each line of output. */
+  out?: (line: string) => void;
+  /** Takes each line of an error or a warning. */
+  err?: (line: string) => void;
+  /** The Slack CLI's login for a workspace. */
+  login?: (teamId?: string) => SlackCliLogin;
+  env?: Record<string, string | undefined>;
+  fetch?: typeof fetch;
+}
+
+/** Runs the command. Returns its exit code: an error is printed, cleaned of every secret the command holds, and never thrown. */
+export async function cli(argv: string[], io: CliIO = {}): Promise<number> {
+  const env = io.env ?? process.env;
+  // Learns each secret as soon as the command has it, and cleans every line on its way out.
+  const secrets = createRedactor(env.VOICEFLOW_API_KEY, env.SLACK_BOT_TOKEN, env.SLACK_SIGNING_SECRET);
+  const out = (line: string) => (io.out ?? console.log)(secrets.redact(line));
+  const err = (line: string) => (io.err ?? console.error)(secrets.redact(line));
+  try {
+    return await run(argv, { ...io, env }, secrets, out, err);
+  } catch (error) {
+    err(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+}
+
+type Say = (line: string) => void;
+
+async function run(
+  argv: string[],
+  io: CliIO & { env: Record<string, string | undefined> },
+  secrets: ReturnType<typeof createRedactor>,
+  out: Say,
+  err: Say,
+): Promise<number> {
   const { values: o, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -89,7 +127,7 @@ export async function cli(argv: string[]): Promise<number> {
   });
   const action = positionals[0] ?? 'connect';
   if (o.help || !['connect', 'disconnect'].includes(action)) {
-    console.log(USAGE);
+    out(USAGE);
     return o.help ? 0 : 2;
   }
   const command = o.command === undefined ? undefined : o.command === 'none' ? (false as const) : o.command;
@@ -99,27 +137,30 @@ export async function cli(argv: string[]): Promise<number> {
 
   const requestUrl = o['request-url'] ?? (o['public-url'] ? `${o['public-url'].replace(/\/+$/, '')}/api/slack` : undefined);
   if (o['print-manifest']) {
-    console.log(JSON.stringify(slackManifest({ ...app, requestUrl: requestUrl ?? 'https://example.com/api/slack', tools }), null, 2));
+    out(JSON.stringify(slackManifest({ ...app, requestUrl: requestUrl ?? 'https://example.com/api/slack', tools }), null, 2));
     return 0;
   }
 
   const missing = ['project', 'environment'].filter((k) => !o[k as 'project']);
   if (action === 'connect' && !requestUrl) missing.push('public-url');
   if (missing.length) {
-    console.error(`Missing ${missing.map((m) => `--${m}`).join(', ')}.\n\n${USAGE}`);
+    err(`Missing ${missing.map((m) => `--${m}`).join(', ')}.\n\n${USAGE}`);
     return 2;
   }
 
-  const login = slackCliLogin(o.team);
-  const apiKey = await voiceflowKey(o['key-file']);
-  const voiceflow = { apiKey, projectID: o.project!, environment: o.environment!, ...(o.workspace ? { expectWorkspace: o.workspace } : {}) };
-  const slack = { token: login.token, teamId: login.teamId };
+  const login = (io.login ?? slackCliLogin)(o.team);
+  secrets.add(login.token);
+  const apiKey = await voiceflowKey(o['key-file'], io.env);
+  secrets.add(apiKey);
+  const withFetch = io.fetch ? { fetch: io.fetch } : {};
+  const voiceflow = { apiKey, projectID: o.project!, environment: o.environment!, ...(o.workspace ? { expectWorkspace: o.workspace } : {}), ...withFetch };
+  const slack = { token: login.token, teamId: login.teamId, ...withFetch };
   const confirm = async (lines: string[]) => {
-    console.log(lines.join('\n'));
+    out(lines.join('\n'));
     if (o['dry-run']) return false;
     if (o.yes) return true;
     if (!process.stdin.isTTY) {
-      console.error('\nNothing was changed: run it again with --yes to go ahead.');
+      err('\nNothing was changed: run it again with --yes to go ahead.');
       return false;
     }
     return yes('\nGo ahead? [y/N] ');
@@ -132,14 +173,14 @@ export async function cli(argv: string[]): Promise<number> {
       ...(o.app ? { appId: o.app } : {}),
       removeTools: o['remove-tools'],
       confirm,
-      onProgress: (l) => console.log(l),
+      onProgress: out,
     });
-    if (result.applied) console.log('\nDisconnected.');
+    if (result.applied) out('\nDisconnected.');
     return 0;
   }
 
   // Slack checks the request URL while it makes the app: answer it here unless your server already does.
-  const checker = o['dry-run'] ? { close: async () => {} } : await urlChecker(Number(o.port));
+  const checker = o['dry-run'] ? { close: async () => {} } : await urlChecker(Number(o.port), out);
   let result: ConnectResult;
   try {
     result = await connectSlack({
@@ -159,20 +200,25 @@ export async function cli(argv: string[]): Promise<number> {
           }
         : {}),
       confirm: (plan) => confirm(plan.lines),
-      onProgress: (line) => console.log(line),
-      onCredentials: o['env-file'] ? (c) => writeEnvFile(o['env-file']!, { SLACK_BOT_TOKEN: c.botToken, SLACK_SIGNING_SECRET: c.signingSecret }) : undefined,
+      onProgress: out,
+      // Each credential is one to hide from the moment it exists, before anything after it can fail.
+      onCredentials: async (c) => {
+        secrets.add(c.botToken, c.signingSecret);
+        if (o['env-file']) await writeEnvFile(o['env-file'], { SLACK_BOT_TOKEN: c.botToken, SLACK_SIGNING_SECRET: c.signingSecret });
+      },
     });
   } finally {
     await checker.close();
   }
+  secrets.add(result.botToken, result.signingSecret, result.userToken);
   if (!result.applied) return 0;
-  printSettings(result, { envFile: o['env-file'], requestUrl: requestUrl!, projectID: o.project!, environment: o.environment! });
-  for (const problem of result.install?.problems ?? []) console.warn(`! ${problem}`);
-  for (const note of result.install?.notes ?? []) console.warn(`! ${note}`);
+  printSettings(result, { envFile: o['env-file'], requestUrl: requestUrl!, projectID: o.project!, environment: o.environment! }, out);
+  for (const problem of result.install?.problems ?? []) err(`! ${problem}`);
+  for (const note of result.install?.notes ?? []) err(`! ${note}`);
   return 0;
 }
 
-function printSettings(r: ConnectResult, s: { envFile?: string; requestUrl: string; projectID: string; environment: string }) {
+function printSettings(r: ConnectResult, s: { envFile?: string; requestUrl: string; projectID: string; environment: string }, out: Say) {
   const page = (tab: string) => `https://api.slack.com/apps/${r.appId}/${tab}`;
   const token = s.envFile ? `in ${s.envFile}` : `not saved: copy it from OAuth & Permissions, ${page('oauth')}`;
   const secret = r.signingSecret
@@ -180,7 +226,7 @@ function printSettings(r: ConnectResult, s: { envFile?: string; requestUrl: stri
       ? `in ${s.envFile}`
       : `not saved: copy it from Basic Information, ${page('general')}`
     : `unchanged (the app already existed): Basic Information, ${page('general')}`;
-  console.log(`
+  out(`
 Connected: Slack app ${r.appId}, bot user ${r.botUserId}.
 
 Your server needs:
@@ -204,7 +250,7 @@ Your bot runs ${s.environment}'s published version, so the agent in Slack has th
 }
 
 /** Answers Slack's URL check (and nothing else) on a local port, unless something already listens there. */
-export async function urlChecker(port: number): Promise<{ close(): Promise<void> }> {
+export async function urlChecker(port: number, say: (line: string) => void = console.log): Promise<{ close(): Promise<void> }> {
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
@@ -227,7 +273,7 @@ export async function urlChecker(port: number): Promise<{ close(): Promise<void>
     server.once('error', () => resolve(false));
     server.listen(port, '127.0.0.1', () => resolve(true));
   });
-  if (!listening) console.log(`(port ${port} is in use: your server there answers Slack's URL check)`);
+  if (!listening) say(`(port ${port} is in use: your server there answers Slack's URL check)`);
   return { close: () => (listening ? new Promise<void>((r) => server.close(() => r())) : Promise.resolve()) };
 }
 
@@ -259,13 +305,13 @@ export async function writeEnvFile(path: string, values: Record<string, string |
   }
 }
 
-async function voiceflowKey(file?: string): Promise<string> {
+async function voiceflowKey(file: string | undefined, env: Record<string, string | undefined>): Promise<string> {
   if (file) {
     const key = (await readFile(file, 'utf8')).trim();
     if (!key) throw new Error(`${file} is empty.`);
     return key;
   }
-  if (process.env.VOICEFLOW_API_KEY) return process.env.VOICEFLOW_API_KEY;
+  if (env.VOICEFLOW_API_KEY) return env.VOICEFLOW_API_KEY;
   if (!process.stdin.isTTY) throw new Error('No Voiceflow API key: set VOICEFLOW_API_KEY or pass --key-file.');
   const key = await hidden('Voiceflow API key (hidden): ');
   if (!key) throw new Error('No Voiceflow API key entered.');

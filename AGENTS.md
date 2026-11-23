@@ -78,7 +78,9 @@ a tool's code is its functions' text, so restyling it would change the tool.
   on [vercel/chat](https://github.com/vercel/chat); see `docs/upstream.md`.
 - **Never print a secret.** No token, signing secret or API key in output,
   progress lines, plans, errors, logs, saved files or test snapshots. Tests
-  assert this; extend them when you add output.
+  assert this; extend them when you add output. A command prints only through
+  its redactor (`createRedactor` in `packages/core/src/redact.ts`), and an
+  error built from a server's words is cleaned with `redact` before it is cut.
 - **The person comes from the verified event, never from the model.** A tool
   that acts for someone is a server tool: it reads them from `turn.userId`,
   which the server took from the turn's pass, and acts only where that person
