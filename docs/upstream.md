@@ -194,6 +194,10 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 - [x] A starter (2026-11-23): `npm create voiceflow-channels@latest` makes the
       app, as `npm create chat-sdk` does for Chat SDK. CI makes one from the
       packed packages, builds it and sends it what Slack sends
+- [x] Connect reads the server's env file (2026-11-23): the agent's key,
+      project and environment come from `--env-file`, a person is asked for
+      what's missing, and what was asked for is saved there. Setup is the
+      starter, then one command with the server's address
 - [ ] Contract tests passing for Phase 1: Slack (done), WhatsApp, Messenger, Instagram, Teams, Resend, Gmail
 - [ ] Upstream tracking (section 3) running
 - [ ] Docs: the Channels page (native vs Channels SDK) and one page per channel

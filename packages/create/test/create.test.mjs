@@ -64,7 +64,9 @@ test('one command makes the app: its route, its env files, and nothing else', as
   ]);
   assert.match(out, /Created my-bot: a Voiceflow agent in Slack/);
   assert.match(out, /cd my-bot/);
-  assert.match(out, /npm run connect -- --project <project id> --environment development --public-url https:\/\/<your tunnel>/);
+  assert.match(out, /npm run connect -- --public-url https:\/\/<your tunnel>/);
+  assert.match(out, /It asks for your Voiceflow API key and project ID, and saves them in \.env\.local\./);
+  assert.doesNotMatch(out, /--project|--environment/, 'the env file says which agent: nothing to repeat on the command line');
   assert.match(await read(app, 'README.md'), /^# my-bot\n/);
 });
 
@@ -106,8 +108,8 @@ test('the env files list what the server needs, hold no secret, and yours is rea
   const ignored = await read(app, '.gitignore');
   assert.match(ignored, /^\.env\.\*$/m);
   assert.match(ignored, /^!\.env\.example$/m);
-  assert.match(out, /Put your VOICEFLOW_API_KEY in \.env\.local/);
-  assert.match(out, /connect -- --project 64f0c0ffee --environment production/);
+  assert.match(out, /It asks for your Voiceflow API key, and saves it in \.env\.local\./, 'the project is in the env file already');
+  assert.match(out, /Publish the production environment in Voiceflow/);
   assert.match(await read(app, 'README.md'), /Publish the agent's `production` environment/);
 });
 
@@ -128,11 +130,11 @@ test("it installs with the package manager that ran it, and starts a repository 
 
   const pnpm = await start(['my-bot'], { env: { npm_config_user_agent: 'pnpm/10.4.0 npm/? node/v24.1.0 darwin arm64' } });
   assert.deepEqual(pnpm.ran.at(-1).args.concat(pnpm.ran.at(-1).command), ['install', 'pnpm']);
-  assert.match(pnpm.out, /pnpm connect --project <project id>/);
+  assert.match(pnpm.out, /pnpm connect --public-url https:/);
   assert.match(pnpm.out, /pnpm run dev/);
   const bun = await start(['my-bot', '--pm', 'bun'], { env: { npm_config_user_agent: 'npm/11.0.0' } });
   assert.equal(bun.ran.at(-1).command, 'bun', '--pm says otherwise');
-  assert.match(bun.out, /bun run connect --project/);
+  assert.match(bun.out, /bun run connect --public-url https:/);
   assert.equal(packageManagerOf('yarn/4.6.0 npm/? node/v22.11.0'), 'yarn');
   assert.equal(packageManagerOf(undefined), 'npm');
   assert.equal(packageManagerOf('deno/2.0'), 'npm');

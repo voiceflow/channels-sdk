@@ -4,8 +4,8 @@
 // that app is tested with, an env file, and the steps that come next.
 //
 // It writes only inside the folder you name, runs only your package manager's
-// install and `git init`, and asks for no secret: your Voiceflow API key goes
-// in .env.local by your own hand.
+// install and `git init`, and asks for no secret: the app's `connect` command
+// asks for your Voiceflow API key, unseen, or you put it in .env.local yourself.
 import { spawn } from 'node:child_process';
 import { chmod, cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
@@ -111,7 +111,7 @@ async function exists(path: string): Promise<boolean> {
 }
 
 function readme(name: string, pm: PackageManager, environment: string): string {
-  const connect = runScript(pm, 'connect', `--project <project id> --environment ${environment} --public-url https://<your tunnel>`);
+  const connect = runScript(pm, 'connect', '--public-url https://<your tunnel>');
   return `# ${name}
 
 A Voiceflow agent in Slack, served by one Next.js route:
@@ -128,31 +128,31 @@ workspace where you can create apps, the
 [Slack CLI](https://tools.slack.dev/slack-cli) logged in to it (\`slack login\`),
 and a tunnel such as [ngrok](https://ngrok.com).
 
-1. Add your agent's details to \`.env.local\`: \`VOICEFLOW_API_KEY\` and
-   \`VOICEFLOW_PROJECT_ID\`.
-
-2. Start a tunnel to port 3000, and keep it running:
+1. Start a tunnel to port 3000, and keep it running:
 
    \`\`\`bash
    ngrok http 3000
    \`\`\`
 
-3. Make the Slack app, with the tunnel's URL. Run this before the server, so
+2. Make the Slack app, with the tunnel's URL. Run this before the server, so
    that connect can answer Slack's check of the URL itself:
 
    \`\`\`bash
    ${connect}
    \`\`\`
 
-   It shows its plan and asks first. It makes and installs the app, installs
-   Slack's tools on the agent, and writes \`SLACK_BOT_TOKEN\` and
-   \`SLACK_SIGNING_SECRET\` to \`.env.local\`. The bot token stays on this
-   server: it never goes to Voiceflow.
+   It reads your agent's details from \`.env.local\` and asks for what isn't
+   there: your Voiceflow API key, in a hidden prompt, and your project's ID.
+   It shows its plan and asks before it changes anything. Then it makes and
+   installs the app, installs Slack's tools on the agent, and fills in
+   \`.env.local\`: the app's \`SLACK_BOT_TOKEN\` and \`SLACK_SIGNING_SECRET\`,
+   and what it asked you for. The bot token stays on this server: it never
+   goes to Voiceflow.
 
-4. Publish the agent's \`${environment}\` environment in Voiceflow. The bot runs
+3. Publish the agent's \`${environment}\` environment in Voiceflow. The bot runs
    the environment's published version, and connect never publishes.
 
-5. Start the server:
+4. Start the server:
 
    \`\`\`bash
    ${pm} run dev
@@ -327,12 +327,12 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
       'Next:',
       ...(where === '.' ? [] : [`  cd ${where}`]),
       ...(installed ? [] : [`  ${pm} install`]),
-      `  1. Put your VOICEFLOW_API_KEY${o.project ? '' : ' and VOICEFLOW_PROJECT_ID'} in .env.local.`,
-      '  2. Start a tunnel to port 3000 (ngrok http 3000), and log the Slack CLI in (slack login).',
-      '  3. Make the Slack app:',
-      `       ${runScript(pm, 'connect', `--project ${o.project ?? '<project id>'} --environment ${environment} --public-url https://<your tunnel>`)}`,
-      `  4. Publish the ${environment} environment in Voiceflow.`,
-      `  5. ${pm} run dev`,
+      '  1. Start a tunnel to port 3000 (ngrok http 3000), and log the Slack CLI in (slack login).',
+      '  2. Make the Slack app:',
+      `       ${runScript(pm, 'connect', '--public-url https://<your tunnel>')}`,
+      `     It asks for your Voiceflow API key${o.project ? '' : ' and project ID'}, and saves ${o.project ? 'it' : 'them'} in .env.local.`,
+      `  3. Publish the ${environment} environment in Voiceflow.`,
+      `  4. ${pm} run dev`,
       '',
       'README.md has each step in full.',
     ].join('\n'),

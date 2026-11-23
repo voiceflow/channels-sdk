@@ -32,11 +32,11 @@ which this repository builds on every change.
 
 ## After it runs
 
-1. Put your `VOICEFLOW_API_KEY` and `VOICEFLOW_PROJECT_ID` in `.env.local`.
-2. Start a tunnel to port 3000, and log the Slack CLI in (`slack login`).
-3. Make the Slack app: `npm run connect -- --project <project id> --environment development --public-url https://<your tunnel>`.
-4. Publish the environment in Voiceflow.
-5. `npm run dev`.
+1. Start a tunnel to port 3000, and log the Slack CLI in (`slack login`).
+2. Make the Slack app: `npm run connect -- --public-url https://<your tunnel>`.
+   It asks for your Voiceflow API key and project ID, and saves them in `.env.local`.
+3. Publish the environment in Voiceflow.
+4. `npm run dev`.
 
 The new app's README has each step in full.
 
@@ -59,8 +59,10 @@ With npm, put `--` before the options: `npm create voiceflow-channels@latest -- 
 
 ## What it doesn't do
 
-- **It asks for no secret.** Your Voiceflow API key goes in `.env.local` by
-  your own hand, and `connect` writes the Slack app's credentials there.
+- **It asks for no secret.** The app's `connect` command, which you run next,
+  is what asks for your Voiceflow API key: in a hidden prompt, saved in
+  `.env.local` beside the Slack app's credentials. Or put it there yourself
+  first, and it isn't asked for.
 - **It writes only in the folder you name**, and runs only your package
   manager's install and `git init`.
 - **It asks nothing of a script.** Run without a terminal, as a coding agent

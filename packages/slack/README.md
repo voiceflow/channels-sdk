@@ -11,9 +11,7 @@ One command makes the Slack app, installs it, and installs Slack's tools on
 your agent:
 
 ```bash
-npx voiceflow-channels connect slack \
-  --project <voiceflow project id> --environment development \
-  --public-url https://<your server> --env-file .env
+npx voiceflow-channels connect slack --public-url https://<your server> --env-file .env
 ```
 
 It shows its whole plan and asks before it changes anything:
@@ -36,12 +34,17 @@ Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment developme
 
 - **Slack login:** the [Slack CLI](https://tools.slack.dev/slack-cli)'s
   (`slack login`). Pick a workspace with `--team` when it's logged in to several.
-- **Voiceflow key:** `VOICEFLOW_API_KEY`, `--key-file`, or a hidden prompt.
-  Never a command-line value.
-- **The app's credentials** go only to the file you name with `--env-file`
-  (`SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`), written readable by you alone.
-  Without one, connect tells you where Slack shows them. Slack gives out a new
-  app's signing secret once, when connect makes the app.
+- **Which agent:** `--project` and `--environment`, or `VOICEFLOW_PROJECT_ID`
+  and `VOICEFLOW_ENVIRONMENT` in the environment or in the `--env-file`. With
+  neither, connect asks.
+- **Voiceflow key:** `VOICEFLOW_API_KEY`, in the environment or in the
+  `--env-file`; `--key-file`; or a hidden prompt. Never a command-line value.
+- **The env file ends up complete.** Connect writes the app's
+  `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` to the file you name with
+  `--env-file`, readable by you alone, and anything it had to ask you for. It
+  never changes a Voiceflow value that's already there. Without the flag,
+  connect tells you where Slack shows the app's credentials. Slack gives out a
+  new app's signing secret once, when connect makes the app.
 - **Slack checks the request URL** while it makes the app. Point your tunnel at
   `--port` (default 3000) while connect runs, and connect answers the check
   itself. When your server already holds that port, it answers instead.
