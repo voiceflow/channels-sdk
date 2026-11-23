@@ -21,7 +21,8 @@ packages support.
 |---|---|
 | `packages/core` | `@voiceflow/channels-sdk`: the agent on any Chat SDK adapter, the extension API, the tool installer |
 | `packages/slack` | `@voiceflow/channels-slack`: Slack's native features, its tools, and `connect slack` |
-| `examples/` | Apps that use the packages, such as a Next.js Slack bot |
+| `packages/create` | `create-voiceflow-channels`: the starter, `npm create voiceflow-channels` |
+| `examples/` | Apps that use the packages, such as a Next.js Slack bot. The starter writes this app |
 | `docs/` | How a conversation works, and how this project tracks Vercel Chat SDK |
 | `.changeset/` | Pending changesets and the release configuration |
 
@@ -66,8 +67,13 @@ npx changeset
   examples need none. CI's `changeset` check says when one is missing.
 - **Which bump:** `patch` for a fix, `minor` for something new, `major` for a
   change that breaks existing code. Before 1.0, a breaking change is `minor`.
-- **One version:** `@voiceflow/channels-sdk` and `@voiceflow/channels-slack`
-  share a version number, so a changeset for either moves both.
+- **The example is the starter's app.** `create-voiceflow-channels` writes
+  `examples/nextjs-slack`, so a change there changes what the starter makes:
+  add a changeset for `create-voiceflow-channels`. The check can't tell, since
+  examples need no changeset of their own.
+- **One version:** `@voiceflow/channels-sdk`, `@voiceflow/channels-slack` and
+  `create-voiceflow-channels` share a version number, so a changeset for one
+  moves all three. The starter writes that version into the apps it makes.
 - **Releasing:** when changesets reach `main`, the `release` workflow opens a
   "chore(release): version packages" pull request with the new versions and
   changelogs. Merging it publishes to npm with provenance, through npm's trusted

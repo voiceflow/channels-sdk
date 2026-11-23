@@ -18,6 +18,18 @@ any platform it has an adapter for.
 
 ## Quickstart
 
+One command makes the app:
+
+```bash
+npm create voiceflow-channels@latest my-bot
+```
+
+It writes a small Next.js server with the route Slack calls, an env file, and
+a README with the steps from there: add your Voiceflow API key, run connect,
+publish, and start the server.
+
+### Or add it to an app you have
+
 Install the packages, Chat SDK and a state adapter:
 
 ```bash
@@ -67,6 +79,7 @@ run.
 |---|---|
 | [`@voiceflow/channels-sdk`](packages/core) | The core: a Voiceflow agent on any Chat SDK adapter, the extension API, the tool installer, and the `voiceflow-channels` CLI. |
 | [`@voiceflow/channels-slack`](packages/slack) | Slack at full fidelity: its native features, its tools, and `connect slack`. |
+| [`create-voiceflow-channels`](packages/create) | The starter: `npm create voiceflow-channels@latest` makes a new app. |
 
 ## Features
 
