@@ -1,16 +1,23 @@
 #!/usr/bin/env node
-// `voiceflow-channels <connect|disconnect> <channel>`: hands the command to the
-// channel's package (`@voiceflow/channels-<channel>/connect`), which knows how
-// to make that channel's app and install its tools.
+// `voiceflow-channels <connect|disconnect|point> <channel>`: hands the command
+// to the channel's package (`@voiceflow/channels-<channel>/connect`), which
+// knows how to make that channel's app, install its tools, and point it at an
+// address. `voiceflow-channels dev` is this package's own: a tunnel, your
+// server, and every channel pointed at it (dev.ts).
+import { dev } from './dev.js';
+import { NeedsYou } from './errors.js';
 import { redact } from './redact.js';
 
 const [action, channel, ...rest] = process.argv.slice(2);
 
-const USAGE = `Usage: voiceflow-channels <connect|disconnect> <channel> [options]
-       voiceflow-channels connect slack --help`;
+const USAGE = `Usage: voiceflow-channels <connect|disconnect|point> <channel> [options]
+       voiceflow-channels dev [options] -- <your server's command>
+       voiceflow-channels connect slack --help
+       voiceflow-channels dev --help`;
 
 async function main(): Promise<number> {
-  if (!action || !channel || !['connect', 'disconnect'].includes(action) || !/^[a-z0-9-]+$/.test(channel)) {
+  if (action === 'dev') return dev(process.argv.slice(3));
+  if (!action || !channel || !['connect', 'disconnect', 'point'].includes(action) || !/^[a-z0-9-]+$/.test(channel)) {
     console.log(USAGE);
     return action === '--help' || action === '-h' ? 0 : 2;
   }
@@ -37,6 +44,6 @@ main().then(
   (error) => {
     // A channel's command cleans what it prints of the secrets it holds. This is for an error from before it starts.
     console.error(redact(String(error?.message ?? error), [process.env.VOICEFLOW_API_KEY]));
-    process.exit(1);
+    process.exit(error instanceof NeedsYou ? 3 : 1);
   },
 );

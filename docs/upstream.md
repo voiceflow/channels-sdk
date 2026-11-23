@@ -208,7 +208,14 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       publishes on a yes or `--publish`, never for a script that didn't ask.
       The new app's bot then messages whoever connected it. A changed tools
       address is written to the published version's secret as well as the
-      draft's, so it should need no publish; that hasn't been tested alone
+      draft's, and needs no publish: seen live 2026-11-23, twice, through dev
+- [x] A server on your own machine needs no address from you (2026-11-23):
+      connect opens a temporary tunnel when it's given none, and
+      `voiceflow-channels dev` opens one on each start, starts the server and
+      points each channel at it. `point` is the channel's half of that, and
+      asks the server the platform's signed check first. A new tunnel's name
+      is asked of a public resolver before this machine's own, which remembers
+      a miss: found live, where asking too soon cost the whole wait
 - [ ] Uninstall with a key that can't delete functions stops after detaching
       the tool (seen live 2026-11-23, a 401 on the delete): check the key
       first, or finish the step and say what was left

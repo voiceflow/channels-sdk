@@ -43,6 +43,10 @@
       "types": "./dist/install.d.ts",
       "import": "./dist/install.js"
     },
+    "./dev": {
+      "types": "./dist/dev.d.ts",
+      "import": "./dist/dev.js"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"

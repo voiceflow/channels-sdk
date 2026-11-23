@@ -81,9 +81,9 @@ export function packageManagerOf(userAgent: string | undefined): PackageManager 
 }
 
 /** How each package manager runs a script with arguments: only npm needs the `--`. */
-function runScript(pm: PackageManager, script: string, args: string): string {
-  if (pm === 'npm') return `npm run ${script} -- ${args}`;
-  return pm === 'bun' ? `bun run ${script} ${args}` : `${pm} ${script} ${args}`;
+function runScript(pm: PackageManager, script: string, args = ''): string {
+  const run = pm === 'npm' || pm === 'bun' ? `${pm} run ${script}` : `${pm} ${script}`;
+  return args ? `${run}${pm === 'npm' ? ' --' : ''} ${args}` : run;
 }
 
 /** Why a name can't be a package's, or nothing when it can. */
@@ -111,7 +111,8 @@ async function exists(path: string): Promise<boolean> {
 }
 
 function readme(name: string, pm: PackageManager, environment: string): string {
-  const connect = runScript(pm, 'connect', '--public-url https://<your tunnel>');
+  const connect = runScript(pm, 'connect');
+  const deployed = runScript(pm, 'connect', '--public-url https://<your deployment>');
   return `# ${name}
 
 A Voiceflow agent in Slack, served by one Next.js route:
@@ -123,20 +124,16 @@ Made with [\`create-voiceflow-channels\`](https://github.com/voiceflow/channels-
 
 ## Run it
 
-You need Node.js 22 or later, a Voiceflow agent with an API key, a Slack
-workspace where you can create apps, and a tunnel such as
-[ngrok](https://ngrok.com). Connect signs you in to Slack through the
-[Slack CLI](https://tools.slack.dev/slack-cli), and offers to install it
-when you don't have it.
+You need Node.js 22 or later, a Voiceflow agent with an API key, and a Slack
+workspace where you can create apps. Two tools are used on the way, and each
+is offered to you when you don't have it: the
+[Slack CLI](https://tools.slack.dev/slack-cli), to sign you in to Slack, and
+[cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/),
+for the tunnel that gives this machine a public address. Neither needs an
+account of its own.
 
-1. Start a tunnel to port 3000, and keep it running:
-
-   \`\`\`bash
-   ngrok http 3000
-   \`\`\`
-
-2. Make the Slack app, with the tunnel's URL. Run this before the server, so
-   that connect can answer Slack's check of the URL itself:
+1. Make the Slack app. Run this before the server, so that connect can answer
+   Slack's check of the address itself:
 
    \`\`\`bash
    ${connect}
@@ -158,11 +155,15 @@ when you don't have it.
    tools: say no to publish it in Voiceflow yourself. The new app's bot then
    messages you in Slack.
 
-3. Start the server:
+2. Start the server:
 
    \`\`\`bash
    ${pm} run dev
    \`\`\`
+
+   It opens a tunnel to port 3000, starts the server, and points the Slack app
+   and the agent's tools at the tunnel's address, which is new each time. That
+   needs no publish. Stop it with Ctrl-C. For another port, set \`PORT\`.
 
 Mention the app in a channel, send it a direct message, or open it from
 Slack's assistant panel.
@@ -172,8 +173,9 @@ Slack's assistant panel.
 - Set the same environment variables on your host, with \`REDIS_URL\` pointing at
   a Redis database: conversations live in memory without it, and end when the
   server restarts or a request reaches another instance.
-- Run connect again with your deployment's URL as \`--public-url\`. It reuses
-  the app it made and points it at the new address.
+- Run connect again with your deployment's address: \`${deployed}\`. It
+  reuses the app it made and points it there. \`${pm} run start\` runs the server
+  with no tunnel.
 
 ## Learn more
 
@@ -333,12 +335,13 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
       'Next:',
       ...(where === '.' ? [] : [`  cd ${where}`]),
       ...(installed ? [] : [`  ${pm} install`]),
-      '  1. Start a tunnel to port 3000 (ngrok http 3000).',
-      '  2. Make the Slack app:',
-      `       ${runScript(pm, 'connect', '--public-url https://<your tunnel>')}`,
+      '  1. Make the Slack app:',
+      `       ${runScript(pm, 'connect')}`,
       `     It signs you in to Slack, asks for your Voiceflow API key${o.project ? '' : ' and project ID'}, and saves ${o.project ? 'it' : 'them'} in .env.local.`,
       `     Then it asks whether to publish the ${environment} environment, and the bot messages you in Slack.`,
-      `  3. ${pm} run dev`,
+      '  2. Start it:',
+      `       ${runScript(pm, 'dev')}`,
+      '     It opens a tunnel, starts the server, and points Slack at it.',
       '',
       'README.md has each step in full.',
     ].join('\n'),

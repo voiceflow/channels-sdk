@@ -4,7 +4,7 @@
   "private": true,
   "description": "A Voiceflow agent in Slack, served by a Next.js route.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "voiceflow-channels dev --env-file .env.local -- next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",

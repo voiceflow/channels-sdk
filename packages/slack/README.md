@@ -63,9 +63,22 @@ Then:
   never changes a Voiceflow value that's already there. Without the flag,
   connect tells you where Slack shows the app's credentials. Slack gives out a
   new app's signing secret once, when connect makes the app.
-- **Slack checks the request URL** while it makes the app. Point your tunnel at
-  `--port` (default 3000) while connect runs, and connect answers the check
-  itself. When your server already holds that port, it answers instead.
+- **A server on your own machine** needs no address from you. Without
+  `--public-url`, connect opens a temporary tunnel (cloudflared, no account)
+  so Slack has an address while the app is made, and
+  `voiceflow-channels dev -- <your server's command>` then opens one on each
+  start and points the app, and the agent's tools, at it.
+- **`point`** is what dev runs: `voiceflow-channels point slack --public-url
+  <address>` moves a connected app's request URL and the tools' address, and
+  changes nothing else. The tools' address is set in the published version as
+  well as the draft, so it needs no publish. Given `--local-url`, as dev gives
+  it, it first asks your server Slack's own signed URL check: a server that's
+  down, or runs with another signing secret, is said there, and nothing is
+  changed. For an app you made by hand (`--manual`) it sets the tools' address
+  and tells you what to change in Slack.
+- **Slack checks the request URL** while it makes the app. Connect answers the
+  check itself on `--port` (default 3000), where its tunnel or yours points.
+  When your server already holds that port, it answers instead.
 - **The bot token stays with your server.** The tools that act in Slack run
   on your server, so Voiceflow gets only the address the agent calls them at:
   the webhook URL, or `--tools-url` for a route of their own. When that

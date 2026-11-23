@@ -40,7 +40,8 @@ a tool's code is its functions' text, so restyling it would change the tool.
 | `packages/slack` | `@voiceflow/channels-slack`: `slack()`, Slack's extension, its tools, `connect slack` |
 | `packages/slack/src/tools/` | What goes on the agent: `presentation.ts` (functions that show native Slack UI) and the install set |
 | `packages/slack/src/workspace.ts` | The workspace tools (act in Slack): server tools, run with the adapter's own client |
-| `packages/slack/src/connect/` | `connect slack`: manifest, Slack CLI login, app creation, the Voiceflow install |
+| `packages/core/src/dev.ts`, `tunnel.ts` | `voiceflow-channels dev`: a tunnel, your server, and each channel pointed at it |
+| `packages/slack/src/connect/` | `connect slack` and `point slack`: manifest, Slack CLI login, app creation, the Voiceflow install |
 | `packages/slack/test/helpers/fake-slack.mjs` | A fake of Slack's Web API and events |
 | `packages/slack/scripts/live/` | The live harness: real Slack, real Voiceflow (see below) |
 | `packages/create` | `create-voiceflow-channels`: the starter. Its template is built from `examples/nextjs-slack`, so there is one copy of the app |

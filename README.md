@@ -57,21 +57,31 @@ export async function POST(request: Request) {
 }
 ```
 
-Make the Slack app. Point a tunnel at port 3000 first: connect answers Slack's
-check of the URL while it runs. It signs you in to Slack through the
+Make the Slack app. Connect signs you in to Slack through the
 [Slack CLI](https://tools.slack.dev/slack-cli), offering to install it when
 you don't have it. It installs the app in your workspace, installs Slack's
 tools on your agent, and writes the app's credentials to your env file. It
 shows its plan and asks before it changes anything:
 
 ```bash
-npx voiceflow-channels connect slack --public-url https://<your tunnel> --env-file .env.local
+npx voiceflow-channels connect slack --env-file .env.local
 ```
 
 It reads `VOICEFLOW_API_KEY`, `VOICEFLOW_PROJECT_ID` and `VOICEFLOW_ENVIRONMENT`
-from that file, asks for the ones that aren't there, and saves them. Set
-`REDIS_URL` too, start your server, publish the environment in Voiceflow, and
-mention the app in Slack.
+from that file, asks for the ones that aren't there, and saves them. Then it
+asks whether to publish the environment, and the app's bot messages you in
+Slack.
+
+Start your server. Slack, and the agent's tools, have to reach it, so on your
+own machine that takes a tunnel. Dev opens one, starts the server and points
+both at it:
+
+```bash
+npx voiceflow-channels dev --env-file .env.local -- next dev
+```
+
+For a server that has an address of its own, give it to connect instead
+(`--public-url https://<your server>`), and set `REDIS_URL` there.
 [`examples/nextjs-slack`](examples/nextjs-slack) is the whole thing, ready to
 run.
 
