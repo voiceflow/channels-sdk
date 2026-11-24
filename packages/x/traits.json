@@ -1,0 +1,12 @@
+{
+  "maxTextLength": 10000,
+  "addressGoes": "in X's developer console, as a webhook subscribed to post.mention.create, dm.received and dm.sent",
+  "notes": [
+    "**A reply to a public mention** is a post, and X takes 280 characters in one, as X counts them, on an account without Premium. The adapter sends a longer answer whole and X refuses it: keep the agent's public answers short, or have it answer in direct messages, which take 10,000."
+  ],
+  "why": {
+    "maxTextLength": "The adapter sends a message's text whole, whatever its length (sendDm, sendReply), and X refuses a direct message over 10,000 characters, so the whole reply would be lost. A public reply is shorter still: 280 characters, as X counts them, on an account without Premium. This one number is the direct message's.",
+    "addressGoes": "The adapter makes no call that registers a webhook. Its README has it done once in the console (console.x.com), which then sends the CRC check the adapter answers; the Activity API can do the same (POST /2/webhooks, then POST /2/activity/subscriptions), but with a different kind of sign-in for each call.",
+    "notes": "sendReply posts the text whole. 280 is X's limit for a post, from X's documentation and not the adapter: only direct messages are stood in for in the tests."
+  }
+}

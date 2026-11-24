@@ -1,0 +1,18 @@
+{
+  "maxTextLength": 2000,
+  "addressGoes": "the Meta app's dashboard → Messenger API Settings → Configure webhooks → Callback URL, with FACEBOOK_VERIFY_TOKEN as the Verify Token",
+  "plainText": true,
+  "settings": [
+    {
+      "key": "FACEBOOK_VERIFY_TOKEN",
+      "description": "The token Meta sends back when it checks your server's address: any text of your own, entered as the webhook's Verify Token.",
+      "make": true
+    }
+  ],
+  "why": {
+    "maxTextLength": "Messenger takes 2,000 characters in a message's text. The adapter cuts a longer one to 1,997 and three dots (MESSENGER_MESSAGE_LIMIT, truncateMessage) and says nothing, so the rest of an answer would be lost.",
+    "addressGoes": "The adapter's settings are the app's secret, the Page's token and the verify token: not the app's ID, which the call that sets a webhook's address needs. Meta checks the address as it is saved, with a GET the adapter answers, so the server has to be running.",
+    "plainText": "Messenger shows text as it is typed. The adapter sends Markdown as its source (fromAst), so a person would read **Plan A** and 3\\. Pick A.",
+    "settings": "The verify token is the caller's own choice: Meta is given it with the address, and sends it back in the GET it checks the address with (hub.verify_token), which the adapter compares with this setting."
+  }
+}

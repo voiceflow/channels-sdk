@@ -1,6 +1,6 @@
 # @voiceflow/channels-slack
 
-A Voiceflow agent in Slack at full fidelity: everything Slack has is on by
+A Voiceflow agent in Slack: everything Slack has is on by
 default, and Slack's tools are installed on the agent when you connect it.
 
 > **Status:** pre-release, local only. Not published. The package name is not final.

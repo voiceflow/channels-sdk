@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/prom
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { create, packageManagerOf } from '../dist/index.js';
+import { CHANNELS, create, packageManagerOf } from '../dist/index.js';
 
 const EXAMPLE = new URL('../../../examples/nextjs-slack/', import.meta.url);
 const read = (dir, path) => readFile(join(dir, path), 'utf8');
@@ -220,7 +220,7 @@ test('a name that can be a package, or the default: a person is asked, a script 
 
 test('a mistake in the command is an answer and an exit code, with nothing written', async () => {
   for (const [argv, said] of [
-    [['my-bot', '--channel', 'whatsapp'], /There's no starter for "whatsapp" yet/],
+    [['my-bot', '--channel', 'carrier-pigeon'], /There's no starter for "carrier-pigeon"/],
     [['my-bot', '--pm', 'pip'], /--pm is one of npm, pnpm, yarn, bun, not "pip"/],
     [['my-bot', '--project', 'abc\nSLACK_BOT_TOKEN=x'], /--project is letters, digits/],
     [['my-bot', '--environment', '$(rm -rf ~)'], /--environment is letters, digits/],
@@ -357,6 +357,7 @@ test("the Discord app carries its own notes: the token is the person's to copy, 
 });
 
 const TEAMS_EXAMPLE = new URL('../../../examples/nextjs-teams/', import.meta.url);
+const TELEGRAM_EXAMPLE = new URL('../../../examples/nextjs-telegram/', import.meta.url);
 
 test('--channel teams makes the Teams app: its route, its env file, and its own steps', async () => {
   const { code, out, err, app } = await start(['my-bot', '--channel', 'teams']);
@@ -429,8 +430,128 @@ test("the Teams app carries its own notes: the sign-in and the click are the per
   assert.doesNotMatch(readme, /Slack|slack|Discord|discord/);
 });
 
+test('--channel telegram makes the Telegram app: its route, its env file, and its own steps', async () => {
+  const { code, out, err, app } = await start(['my-bot', '--channel', 'telegram']);
+  assert.equal(code, 0, err);
+  assert.deepEqual(await tree(app), [
+    '.env.example',
+    '.env.local',
+    '.gitignore',
+    'AGENTS.md',
+    'CLAUDE.md',
+    'README.md',
+    'app/api/telegram/bot.ts',
+    'app/api/telegram/route.ts',
+    'app/layout.tsx',
+    'app/page.tsx',
+    'next.config.ts',
+    'package.json',
+    'tsconfig.json',
+  ]);
+  // One copy of the app: the example, which CI builds.
+  for (const path of ['app/api/telegram/bot.ts', 'app/api/telegram/route.ts', 'app/page.tsx', 'next.config.ts']) {
+    assert.equal(await read(app, path), await readFile(new URL(path, TELEGRAM_EXAMPLE), 'utf8'), path);
+  }
+  assert.equal(await read(app, '.env.example'), await readFile(new URL('.env.example', TELEGRAM_EXAMPLE), 'utf8'));
+  const pkg = JSON.parse(await read(app, 'package.json'));
+  assert.equal(pkg.description, 'A Voiceflow agent in Telegram, served by a Next.js route.');
+  assert.equal(pkg.scripts.connect, 'voiceflow-channels connect telegram --env-file .env.local');
+  assert.ok(pkg.dependencies['@voiceflow/channels-telegram'] && pkg.dependencies['@chat-adapter/telegram']);
+
+  assert.match(out, /Created my-bot: a Voiceflow agent in Telegram/);
+  assert.match(out, /1\. Put Telegram's settings in \.env\.local: TELEGRAM_BOT_TOKEN\.\n {5}They come from Telegram's own pages: https:\/\//);
+  assert.match(
+    out,
+    /2\. Start it:\n {7}npm run dev\n {5}The first time, it sets the channel up before it starts: it asks for your Voiceflow API key and project ID\./,
+  );
+  assert.match(out, /Then it opens a tunnel, starts the server, and points Telegram at it\./);
+  assert.match(out, /\(npm run connect does the setting up alone\.\)/);
+
+  // The env file names what the server needs, with nothing in it: the secret connect makes included.
+  const env = await read(app, '.env.local');
+  for (const name of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET_TOKEN', 'VOICEFLOW_API_KEY']) assert.match(env, new RegExp(`^${name}=$`, 'm'));
+  assert.match(env, /Leave it empty: connect makes it\.\nTELEGRAM_WEBHOOK_SECRET_TOKEN=$/m);
+  assert.equal((await stat(join(app, '.env.local'))).mode & 0o777, 0o600);
+
+  const readme = await read(app, 'README.md');
+  assert.match(readme, /put its settings in\s+`\.env\.local`: `TELEGRAM_BOT_TOKEN`\./);
+  assert.match(readme, /makes\s+`TELEGRAM_WEBHOOK_SECRET_TOKEN`: a secret of your own that Telegram sends back with each message\./);
+  assert.match(readme, /starts the server, and gives Telegram the tunnel's address\./);
+  const notes = await read(app, 'AGENTS.md');
+  assert.match(notes, /Connect makes `TELEGRAM_WEBHOOK_SECRET_TOKEN` itself, and saves it in `\.env\.local`: leave it empty,\nand never print it\./);
+  assert.match(notes, /grep -c '\^TELEGRAM_BOT_TOKEN=\.' \.env\.local/);
+});
+
+test('every channel has a starter: its own app, its own settings, and nothing of another channel in it', async () => {
+  const channels = JSON.parse(await readFile(new URL('../template/channels.json', import.meta.url), 'utf8'));
+  assert.deepEqual(CHANNELS, Object.keys(channels));
+  assert.deepEqual(CHANNELS.slice(0, 3), ['slack', 'discord', 'teams']);
+  assert.ok(CHANNELS.length >= 14, `${CHANNELS.length} channels`);
+  for (const channel of CHANNELS) {
+    const info = channels[channel];
+    const { code, out, err, app } = await start(['my-bot', '--channel', channel, '--project', 'proj1']);
+    assert.equal(code, 0, `${channel}: ${err}`);
+    const files = await tree(app);
+    assert.ok(files.includes(`app/api/${channel}/route.ts`), `${channel}: its route`);
+    const pkg = JSON.parse(await read(app, 'package.json'));
+    assert.equal(pkg.scripts.connect, `voiceflow-channels connect ${channel} --env-file .env.local`);
+    for (const dep of [`@voiceflow/channels-${channel}`, '@voiceflow/channels-sdk', info.package, 'chat', 'next']) {
+      assert.ok(pkg.dependencies[dep], `${channel}: depends on ${dep}`);
+    }
+    assert.equal(
+      pkg.dependencies[`@voiceflow/channels-${channel}`],
+      pkg.dependencies['@voiceflow/channels-sdk'],
+      `${channel}: its package at the core's version`,
+    );
+    assert.match(pkg.dependencies[info.package], /^\^\d/, `${channel}: the adapter at a version it was tested with`);
+    // Nothing of another channel: no other package, and no other channel's name in any file.
+    const others = CHANNELS.filter((other) => other !== channel);
+    assert.deepEqual(
+      Object.keys(pkg.dependencies).filter((dep) => others.some((other) => dep === `@voiceflow/channels-${other}` || dep === `@chat-adapter/${other}`)),
+      [],
+      channel,
+    );
+    for (const file of files.filter((path) => !/^(\.env|package\.json)/.test(path))) {
+      const text = await read(app, file);
+      for (const other of others.filter((name) => name.length > 1)) {
+        assert.doesNotMatch(
+          text,
+          new RegExp(`channels-${other}\\b|/api/${other}\\b|connect ${other}\\b|\\b${other}\\(\\)`),
+          `${channel}: ${file} names ${other}`,
+        );
+      }
+    }
+    // Its settings, empty; the agent's ID where it was given.
+    const env = await read(app, '.env.local');
+    for (const setting of [...info.required, ...(info.modes[0]?.settings ?? []), ...info.made, ...info.later])
+      assert.match(env, new RegExp(`^${setting.key}=$`, 'm'), `${channel}: ${setting.key}`);
+    assert.match(env, /^VOICEFLOW_PROJECT_ID=proj1$/m);
+    assert.match(await read(app, 'README.md'), new RegExp(`A Voiceflow agent in ${info.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), channel);
+    assert.match(await read(app, 'AGENTS.md'), new RegExp(`connect|${channel}`), channel);
+    assert.match(out, new RegExp(`Created my-bot: a Voiceflow agent in ${info.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), channel);
+  }
+});
+
+test('a channel whose address a person enters says so, and where; one whose setting comes later says that', async () => {
+  const github = await start(['my-bot', '--channel', 'github']);
+  assert.match(github.out, /1\. Put GitHub's settings in \.env\.local: GITHUB_BOT_USERNAME, GITHUB_TOKEN\./);
+  assert.match(github.out, /starts the server, and prints the address to give GitHub\./);
+  const readme = await read(github.app, 'README.md');
+  assert.match(readme, /\(or sign in another way: GitHub App\)/);
+  assert.match(readme, /prints the address to give GitHub: it goes in the repository's Settings → Webhooks → Add webhook/);
+  assert.match(readme, /makes\s+`GITHUB_WEBHOOK_SECRET`/);
+  const notes = await read(github.app, 'AGENTS.md');
+  assert.match(notes, /It prints a line\s+starting `! Give GitHub this address`: give the person that line as it\s+is\./);
+
+  const notion = await start(['my-bot', '--channel', 'notion']);
+  assert.match(await read(notion.app, 'README.md'), /- `NOTION_VERIFICATION_TOKEN` can't be set yet: Notion sends it to your server as the webhook is saved/);
+  assert.match(await read(notion.app, '.env.example'), /Not yet: Notion sends it to your server as the webhook is saved.*\nNOTION_VERIFICATION_TOKEN=$/m);
+});
+
 test('a channel with no starter is said, with the ones there are', async () => {
-  const { code, err } = await start(['my-bot', '--channel', 'whatsapp']);
+  const { code, err } = await start(['my-bot', '--channel', 'carrier-pigeon']);
   assert.equal(code, 2);
-  assert.match(err, /There's no starter for "whatsapp" yet: there is one for slack, discord and teams\./);
+  assert.match(err, /There's no starter for "carrier-pigeon": there is one for slack, discord, teams, gchat, [a-z, ]+ and x\./);
+  const help = await start(['--help']);
+  assert.match(help.out, /--channel <channel> {5}the channel to start with \(default: slack\):\n {26}slack, discord, teams, gchat,/);
 });

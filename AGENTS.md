@@ -13,6 +13,7 @@ npm test               # builds, then node --test, every package
 npm run lint           # Biome: lint, formatting, import order
 npm run fix            # apply Biome's safe fixes and formatting
 npm run validate       # lint + build + typecheck + test: run it before you're done
+npm run channels       # write the channel packages that share one template (-- --check: fail if one was edited by hand)
 npx changeset          # describe a change to a published package
 ```
 
@@ -40,11 +41,14 @@ a tool's code is its functions' text, so restyling it would change the tool.
 | `packages/slack` | `@voiceflow/channels-slack`: `slack()`, Slack's extension, its tools, `connect slack` |
 | `packages/slack/src/tools/` | What goes on the agent: `presentation.ts` (functions that show native Slack UI) and the install set |
 | `packages/slack/src/workspace.ts` | The workspace tools (act in Slack): server tools, run with the adapter's own client |
+| `packages/core/src/channel.ts`, `connect.ts`, `contract.ts`, `plain.ts` | What every channel's package is built from: `channel()`, the `connect`/`point`/`disconnect` commands, the conversation contract every channel's tests run, and Markdown as plain words |
+| `packages/<channel>` | A channel's package. Discord and Teams are written by hand like Slack; the rest are written by `scripts/channels.mjs` from one template, with what a platform needs beyond it in the package's `traits.json`, `src/platform.ts`, `src/connect/point.ts` and `test/stand-in.mjs` (never written by the script) |
+| `scripts/channels.mjs` | Writes those packages and the README's table of channels. `--check` fails when one was edited by hand. Change the template, then run it |
 | `packages/core/src/dev.ts`, `tunnel.ts` | `voiceflow-channels dev`: a tunnel, your server, and each channel pointed at it |
 | `packages/slack/src/connect/` | `connect slack` and `point slack`: manifest, Slack CLI login, app creation, the Voiceflow install |
 | `packages/slack/test/helpers/fake-slack.mjs` | A fake of Slack's Web API and events |
 | `packages/slack/scripts/live/` | The live harness: real Slack, real Voiceflow (see below) |
-| `packages/create` | `create-voiceflow-channels`: the starter. Its template is built from `examples/nextjs-slack`, so there is one copy of the app |
+| `packages/create` | `create-voiceflow-channels`: the starter. Its templates are built from the example apps (`scripts/template.mjs`), so there is one copy of each app; a channel with no example of its own gets `examples/nextjs-telegram` with its name in |
 | `examples/` | Apps that use the packages; workspaces named `example-*`, never published |
 | `docs/` | How a conversation works; how this project tracks Vercel Chat SDK |
 
@@ -99,6 +103,10 @@ a tool's code is its functions' text, so restyling it would change the tool.
   what's missing or upgrades a tool whose version rose; a person's edits on the
   agent stay. An install never publishes a Voiceflow environment; `connect`
   does only on a person's yes or `--publish`, after showing what the draft holds.
+- **Every channel is said the same way.** One package per channel, the same
+  commands, the same README shape, the same row in the README's table. What a
+  platform lacks or needs is said as a fact about that platform, in its own
+  package: never as a kind or a level of channel.
 - **A test that can't fail isn't one.** Break the code once and watch the new
   test go red before relying on it.
 - **Add a changeset** for any change a package's users would notice
@@ -111,6 +119,12 @@ a tool's code is its functions' text, so restyling it would change the tool.
   `packages/slack/test/helpers/fake-slack.mjs`).
 - Contract tests (`*.contract.test.mjs`) pin behaviour a channel promises;
   behaviour tests cover the turn loop end to end through the fakes.
+- A channel's package written from the template runs the conversation every
+  channel has to carry (`channelContract`): Chat SDK's real adapter against a
+  stand-in for the platform (`test/stand-in.mjs`). Slack's, Discord's and
+  Teams' contract tests are their own, of the same shape. A stand-in is written from the adapter's source and
+  the platform's documentation. Never loosen one to make a test pass: a test
+  that fails there is a fact about the platform or a bug in the adapter.
 - **Live checks** (`packages/slack/scripts/live/slack.mjs`, `drive.mjs`) run
   against a real Slack workspace and Voiceflow agent. They need the Slack CLI,
   a Voiceflow API key file and a public URL. Only a person runs them; don't

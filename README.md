@@ -8,14 +8,13 @@
 Put your Voiceflow agent in Slack, with everything Slack has: streamed answers,
 the assistant panel, buttons, forms, tables and charts, and tools that act in
 Slack for the person asking. One command makes the Slack app; one route runs
-it. Built on [Vercel Chat SDK](https://chat-sdk.dev), so the same agent reaches
-any platform it has an adapter for.
+it. The same agent runs in Discord, Microsoft Teams, Telegram, WhatsApp and
+[nine more channels](#channels), each with a package of its own and the same
+commands. Built on [Vercel Chat SDK](https://chat-sdk.dev).
 
 > **Status:** pre-release, local only. Not published; package names are not final.
-> Slack is supported and tested end to end, in Slack itself as well as in the
-> tests. Discord and Microsoft Teams each have a package of their own, tested
-> the same two ways. Other adapters load through the same catalog, but none
-> has been tried live yet.
+> Every channel is tested end to end on one machine: Chat SDK's real adapter
+> for it, against a stand-in for its platform.
 
 ## Quickstart
 
@@ -27,7 +26,8 @@ npm create voiceflow-channels@latest my-bot
 
 It writes a small Next.js server with the route Slack calls, an env file, and
 a README with the steps from there: add your Voiceflow API key, run connect,
-publish, and start the server.
+publish, and start the server. For another channel, name it:
+`npm create voiceflow-channels@latest my-bot -- --channel telegram`.
 
 ### Or add it to an app you have
 
@@ -86,15 +86,40 @@ For a server that has an address of its own, give it to connect instead
 [`examples/nextjs-slack`](examples/nextjs-slack) is the whole thing, ready to
 run.
 
+## Channels
+
+Each channel is a package: `slack()`, `telegram()` and the rest go in
+`createChannels`, and `voiceflow-channels connect <channel>` sets each one up.
+A reply fits what the channel can show.
+
+<!-- channels:start -->
+| Channel | Package | Choices | Cards | Answers | Your server's address |
+|---|---|---|---|---|---|
+| Slack | [`@voiceflow/channels-slack`](packages/slack) | Buttons | Cards | Streamed | `connect` gives it |
+| Discord | [`@voiceflow/channels-discord`](packages/discord) | Buttons | Cards | Posted whole | `connect` gives it |
+| Microsoft Teams | [`@voiceflow/channels-teams`](packages/teams) | Buttons | Cards | Posted whole | `connect` gives it |
+| Google Chat | [`@voiceflow/channels-gchat`](packages/gchat) | A numbered list | Cards | Posted whole | You enter it |
+| GitHub | [`@voiceflow/channels-github`](packages/github) | A numbered list | Cards | Posted whole | You enter it |
+| GitLab | [`@voiceflow/channels-gitlab`](packages/gitlab) | A numbered list | Cards | Posted whole | You enter it |
+| Instagram | [`@voiceflow/channels-instagram`](packages/instagram) | A numbered list | Text | Posted whole | You enter it |
+| Linear | [`@voiceflow/channels-linear`](packages/linear) | A numbered list | Cards | Posted whole | You enter it |
+| Messenger | [`@voiceflow/channels-messenger`](packages/messenger) | A numbered list | Text | Posted whole | You enter it |
+| Notion | [`@voiceflow/channels-notion`](packages/notion) | A numbered list | Cards | Posted whole | You enter it |
+| Telegram | [`@voiceflow/channels-telegram`](packages/telegram) | A numbered list | Text | Posted whole | `connect` gives it |
+| Twilio | [`@voiceflow/channels-twilio`](packages/twilio) | A numbered list | Text | Posted whole | You enter it |
+| WhatsApp Business Cloud | [`@voiceflow/channels-whatsapp`](packages/whatsapp) | Buttons, up to 3 | Text | Posted whole | You enter it |
+| X | [`@voiceflow/channels-x`](packages/x) | A numbered list | Text | Posted whole | You enter it |
+<!-- channels:end -->
+
+Each package's README has its settings, its options and its variables.
+
 ## Packages
 
 | Package | What it is |
 |---|---|
 | [`@voiceflow/channels-sdk`](packages/core) | The core: a Voiceflow agent on any Chat SDK adapter, the extension API, the tool installer, and the `voiceflow-channels` CLI. |
-| [`@voiceflow/channels-slack`](packages/slack) | Slack at full fidelity: its native features, its tools, and `connect slack`. |
-| [`@voiceflow/channels-discord`](packages/discord) | Discord: mentions, threads, direct messages, buttons, `/ask`, and `connect discord`. |
-| [`@voiceflow/channels-teams`](packages/teams) | Microsoft Teams: chats, channel threads, mentions, buttons, cards, and `connect teams`, with no Azure account. |
-| [`create-voiceflow-channels`](packages/create) | The starter: `npm create voiceflow-channels@latest` makes a new app. |
+| `@voiceflow/channels-<channel>` | A channel: its adapter, its variables, what only its platform has, and `connect <channel>`. One for each [channel above](#channels). |
+| [`create-voiceflow-channels`](packages/create) | The starter: `npm create voiceflow-channels@latest` makes a new app, for any channel. |
 
 ## Features
 
@@ -142,6 +167,8 @@ run.
   how Discord reaches your server, the options, and the `discord_*` variables.
 - [`@voiceflow/channels-teams`](packages/teams/README.md): `connect teams`, what
   Microsoft has to allow, the options, and the `teams_*` variables.
+- Every other channel's README, from the [table above](#channels): its
+  settings, what happens in it, its options and its variables.
 - [`@voiceflow/channels-sdk`](packages/core/README.md): the API, server tools,
   channel extensions, and installing tools.
 - [Staying current with Chat SDK](docs/upstream.md).

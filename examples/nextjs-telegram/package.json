@@ -1,0 +1,31 @@
+{
+  "name": "example-nextjs-telegram",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Voiceflow agent in Telegram, served by a Next.js route.",
+  "scripts": {
+    "dev": "voiceflow-channels dev --env-file .env.local -- next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "next typegen && tsc --noEmit",
+    "connect": "voiceflow-channels connect telegram --env-file .env.local"
+  },
+  "dependencies": {
+    "@chat-adapter/catalog": "4.45.0",
+    "@chat-adapter/state-memory": "4.45.0",
+    "@chat-adapter/state-redis": "4.45.0",
+    "@chat-adapter/telegram": "4.45.0",
+    "@voiceflow/channels-sdk": "*",
+    "@voiceflow/channels-telegram": "*",
+    "chat": "4.45.0",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3"
+  }
+}

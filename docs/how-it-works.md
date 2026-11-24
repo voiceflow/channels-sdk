@@ -77,39 +77,39 @@ turn's own stream, and your server shows it.
 
 ## Any Chat SDK adapter
 
-A channel package (`@voiceflow/channels-slack`, `@voiceflow/channels-discord`,
-`@voiceflow/channels-teams`)
-brings what only its platform has. Any other platform in
-[Chat SDK's catalog](https://chat-sdk.dev/adapters) loads through the core on
-its own, with the replies fitted to what the platform can show. Slack, Discord
-and Teams have been tried live so far.
+A channel's package ([each one is in the README's table](../README.md#channels))
+brings its adapter and what only its platform has. A platform in
+[Chat SDK's catalog](https://chat-sdk.dev/adapters) with no package here, one
+of the adapters its own vendor makes, say, loads through the core by its name
+in the catalog, with the replies fitted to what the catalog says it can show.
+None of those has been run here.
 
 Install its adapter, and name it in `channels`:
 
 ```bash
-npm install @chat-adapter/whatsapp
+npm install @larksuite/vercel-chat-adapter
 ```
 
 ```ts
-import * as whatsappAdapter from '@chat-adapter/whatsapp';
+import * as larkAdapter from '@larksuite/vercel-chat-adapter';
 import { createRedisState } from '@chat-adapter/state-redis';
 import { createChannels } from '@voiceflow/channels-sdk';
 import { slack } from '@voiceflow/channels-slack';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: process.env.VOICEFLOW_PROJECT_ID! },
-  // The adapter reads its own env vars, as the catalog lists them.
-  channels: [slack(), { slug: 'whatsapp', module: whatsappAdapter }],
+  // Each adapter reads its own env vars, as the catalog lists them.
+  channels: [slack(), { slug: 'lark', module: larkAdapter }],
   state: createRedisState(),
 });
 ```
 
 - **`module`** is the adapter's package, imported. A bundled server (Next.js,
   say) needs it: a bundler can't follow an import of a name it only learns at
-  run time. On a server that isn't bundled, `'whatsapp'` alone is enough, and
+  run time. On a server that isn't bundled, `'lark'` alone is enough, and
   the package is imported by the name the catalog gives.
 - **`options`** passes the adapter's own config instead of its env vars:
-  `{ slug: 'whatsapp', module: whatsappAdapter, options: { … } }`. The same
+  `{ slug: 'lark', module: larkAdapter, options: { … } }`. The same
   `options` turn on an adapter's own features.
 - **`adapter`** uses an adapter you built yourself, as it is.
 

@@ -1,0 +1,18 @@
+{
+  "maxTextLength": 333,
+  "addressGoes": "Meta's app dashboard, in the Instagram product's webhook settings, with INSTAGRAM_VERIFY_TOKEN as the verify token",
+  "plainText": true,
+  "settings": [
+    {
+      "key": "INSTAGRAM_VERIFY_TOKEN",
+      "description": "The token Meta sends back when it checks your server's address: any text of your own, entered as the webhook's verify token.",
+      "make": true
+    }
+  ],
+  "why": {
+    "maxTextLength": "Instagram takes 1,000 bytes of text in a message, counted as UTF-8, and the adapter cuts a longer one short and says nothing (INSTAGRAM_MESSAGE_BYTE_LIMIT, truncateUtf8). A reply is split by its characters, and a character is up to 3 bytes: 333 characters are within 1,000 bytes whatever they are. 1,000 would lose the end of any part that isn't plain ASCII (half of one in Cyrillic).",
+    "addressGoes": "The adapter has no call that gives Instagram the address: a person enters it, and the verify token with it, on Meta's page. Instagram then sends a GET with that token, which the adapter answers.",
+    "plainText": "Instagram shows text as it is typed. The adapter flattens Markdown to plain text itself, and in doing so drops a list's numbers and a link's address. Text sent as a string is left as it is.",
+    "settings": "The verify token is the caller's own choice: Meta is given it with the address, and sends it back in the GET it checks the address with (hub.verify_token), which the adapter compares with this setting."
+  }
+}

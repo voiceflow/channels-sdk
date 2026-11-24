@@ -21,6 +21,8 @@ packages support.
 |---|---|
 | `packages/core` | `@voiceflow/channels-sdk`: the agent on any Chat SDK adapter, the extension API, the tool installer |
 | `packages/slack` | `@voiceflow/channels-slack`: Slack's native features, its tools, and `connect slack` |
+| `packages/<channel>` | A channel's package: `@voiceflow/channels-discord`, `-teams`, `-telegram` and the rest. [Adding a channel](#adding-a-channel) |
+| `scripts/channels.mjs` | Writes the channel packages that share one template, and the README's table of channels |
 | `packages/create` | `create-voiceflow-channels`: the starter, `npm create voiceflow-channels` |
 | `examples/` | Apps that use the packages, such as a Next.js Slack bot. The starter writes this app |
 | `docs/` | How a conversation works, and how this project tracks Vercel Chat SDK |
@@ -51,6 +53,32 @@ packages support.
   as it exists, and text from a server is cleaned (`redact`) before it is cut.
 - **A change comes with a test**, and a test that can't fail isn't one: break
   the code once and watch the test go red before you rely on it.
+
+## Adding a channel
+
+A channel is a package that passes the conversation every channel has to
+carry (`channelContract`, in `@voiceflow/channels-sdk/testing`) against Chat
+SDK's real adapter and a stand-in for the platform.
+
+1. Add the platform's name in Chat SDK's catalog to `CHANNELS` in
+   `scripts/channels.mjs`, its adapter to the root `devDependencies`, and
+   `packages/<channel>` to the workspaces.
+2. Write `packages/<channel>/test/stand-in.mjs`: the platform, as a server on
+   this machine. It signs what it sends as the platform signs, refuses what
+   the platform refuses (a text over its limit, say), and records what the bot
+   sends. Write it from the adapter's source and the platform's own
+   documentation, never from what makes a test pass.
+3. Run `node scripts/channels.mjs <channel>` and the package's tests. What
+   fails is what the platform needs that the template doesn't have: say it in
+   `packages/<channel>/traits.json` (the top of `scripts/channels.mjs` lists
+   what it can say), with the reason beside it under `why`, or as code in
+   `src/platform.ts` or `src/connect/point.ts`, each with a test of its own.
+4. A test that fails because the adapter is wrong is not worked around in the
+   stand-in. Report it upstream, and note it in
+   [docs/upstream.md](docs/upstream.md).
+
+`node scripts/channels.mjs --check` (in CI) fails when a written file was
+edited by hand, or the README's table is out of date.
 
 ## Changesets
 

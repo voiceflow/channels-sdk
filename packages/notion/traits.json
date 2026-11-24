@@ -1,0 +1,24 @@
+{
+  "maxTextLength": 1900,
+  "addressGoes": "the Webhooks tab of the connection's own page in Notion → Create a subscription, with comment.created among its events",
+  "later": {
+    "NOTION_VERIFICATION_TOKEN": "Notion sends it to your server as the webhook is saved, and the server's log shows it. Paste it into Notion to verify the subscription, set it here, and start the server again."
+  },
+  "settings": [
+    {
+      "key": "NOTION_BOT_USERNAME",
+      "description": "The bot's name in Notion, as people write it after an @ in a comment."
+    }
+  ],
+  "notes": [
+    "**Notion locks a webhook's address once it is verified.** For another address (a tunnel's is new each time `dev` starts), delete the subscription and make it again."
+  ],
+  "why": {
+    "maxTextLength": "The adapter cuts a comment over 1,900 characters into several itself (MAX_COMMENT_MARKDOWN_CHARS, chunkMarkdown): between paragraphs and lines where there are any, and every 1,900 characters wherever that falls, in the middle of a word, where there are none. Cut here first, where the text breaks, nothing is left for it to cut.",
+    "addressGoes": "The adapter makes no call that registers a webhook: the subscription is made by hand in Notion. As it is saved Notion posts a verification token to the address, once and unsigned, which the adapter answers and writes to its log (handleVerificationHandshake). A person pastes that token back into Notion to verify the subscription and sets it as NOTION_VERIFICATION_TOKEN, so the server has to be running first, without that setting. The adapter's own message says the address is locked once verified: to change it, the subscription is deleted and made again.",
+    "later": "handleVerificationHandshake: Notion posts the token to the address once, unsigned, as the subscription is made. It can't be known before the server is running.",
+    "settings": "The adapter answers only a comment that says @userName in plain text, which is NOTION_BOT_USERNAME or else the made-up notion-bot.",
+    "src/platform.ts": "normalizeCommentMarkdown strips ^\\d+\\.\\s+ and ^[-*+]\\s+ from every line of every reply, a plain string's included, because Notion's comments take inline Markdown only. (1) and • are not list marks to Markdown, so they pass through the adapter as written.",
+    "notes": "The adapter's own handshake log says the address is locked once verified."
+  }
+}

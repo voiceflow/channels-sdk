@@ -1,4 +1,4 @@
-// Slack at full fidelity: everything Slack has that the channel-neutral agent
+// Slack's own: everything Slack has that the channel-neutral agent
 // doesn't, on by default. Each part can be turned off in `slack()`'s options;
 // what the agent does with it stays in Voiceflow.
 

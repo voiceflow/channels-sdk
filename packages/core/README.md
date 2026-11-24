@@ -15,17 +15,18 @@ native behaviours, its tools, and the `connect` command that sets it up.
 |---|---|
 | `@voiceflow/channels-sdk` | `createChannels`, the agent, rendering, server tools, the extension API. |
 | `@voiceflow/channels-sdk/install` | `installTools` / `uninstallTools`: puts a channel's tools on an agent. Node only. |
+| `@voiceflow/channels-sdk/connect` | `channelCommands`: `connect`, `point` and `disconnect` for a channel whose bot or app is made on the platform's own pages. Node only. |
 | `@voiceflow/channels-sdk/dev` | `dev` and `startTunnel`: a tunnel, your server, and each channel pointed at it. Node only. |
-| `@voiceflow/channels-sdk/testing` | Fakes of Voiceflow's API and runtime, and `runFunction`, which runs a tool as Voiceflow's sandbox does. |
+| `@voiceflow/channels-sdk/testing` | Fakes of Voiceflow's API and runtime, `runFunction`, which runs a tool as Voiceflow's sandbox does, and `channelContract`: the conversation every channel's tests run. |
 | `voiceflow-channels` (bin) | `voiceflow-channels connect <channel>` (and `point`, `disconnect`): hands off to `@voiceflow/channels-<channel>/connect`. `voiceflow-channels dev` is this package's own. |
 
 ## Bundled servers
 
 A bundler (Next.js, say) can't follow an import of a name it only learns at
 run time, so the core can't load an adapter by the name the catalog gives.
-Pass the adapter's module with its slug: `{ slug: 'whatsapp', module: await
-import('@chat-adapter/whatsapp') }`. A channel package (`slack()`) passes it
-for you. See [How it works](../../docs/how-it-works.md#any-chat-sdk-adapter).
+Pass the adapter's module with its slug: `{ slug: 'lark', module: await
+import('@larksuite/vercel-chat-adapter') }`. A channel's package (`slack()`,
+`whatsapp()`) passes it for you. See [How it works](../../docs/how-it-works.md#any-chat-sdk-adapter).
 
 ## Channel extensions
 
@@ -42,6 +43,18 @@ A channel package gives `createChannels` an extension (`ChannelExtension`):
   reply goes as several, cut between paragraphs, lines, sentences or words (and a
   code block cut in two is closed and opened again). Set it where the adapter
   would otherwise cut a long message short.
+- `text`: rewrite the agent's text into what the platform shows, before it is
+  posted (Teams has no headings; a Notion comment has no lists).
+- `plainText`: the platform shows text as it is typed, so the agent's Markdown
+  goes as plain words, a list still numbered and a link's address written out.
+- `capabilities`: what the platform can show, where the channel knows it
+  better than Chat SDK's catalog: `{ buttons: false }`, `{ maxButtons: 3 }`.
+- `follow`: `false` has the bot answer only where it is mentioned, and not go
+  on answering the conversation after.
+
+`channel(slug, module, options, traits)` makes a channel from an adapter's
+module and those facts about its platform: it is what each channel's package
+calls.
 
 ## Server tools
 

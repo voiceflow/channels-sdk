@@ -18,7 +18,7 @@ function bot(): Promise<Channels> {
       projectID: process.env.VOICEFLOW_PROJECT_ID!,
       environment: process.env.VOICEFLOW_ENVIRONMENT ?? 'production',
     },
-    // Slack at full fidelity. The adapter reads SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET.
+    // Slack, with everything Slack has. The adapter reads SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET.
     channels: [slack()],
     // A conversation's state lives here. Memory is fine on your machine; use
     // Redis anywhere that runs more than one instance or restarts.

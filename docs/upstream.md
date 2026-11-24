@@ -24,15 +24,35 @@ stays compatible as upstream ships.
 - **An adapter called with no options reads its own env vars**, the catalog's names
   (`createSlackAdapter()` reads `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`).
 
-## 1. Adapters in three tiers
+## 1. How a channel is built
 
-| Tier | What it takes | Example |
-|---|---|---|
-| **1: catalog-driven (the easy adapters)** | Nothing. Loaded and configured from the catalog alone | Most official adapters |
-| 2: override hook | A small render or ID override, in this package, behind a documented hook | A platform whose thread IDs need mapping |
-| 3: hosted connector | Hosted relay only: the setup handshake, reading the conversation ID before verification | Meta's `hub.challenge`, Slack's `url_verification` |
+Every channel is a package, `@voiceflow/channels-<name>`, and every package is
+the same four things:
 
-**How tier 1 works**
+- Chat SDK's adapter for the platform, with its module imported so a bundled
+  server needs nothing loaded by name;
+- the channel's variables (`<name>_user_id` and the rest), set on every turn;
+- the commands `connect`, `point` and `disconnect` for it;
+- what only that platform has, or needs.
+
+The last is where packages differ, and only there. Slack's holds its native
+features and its tools; Discord's, the standing connection a bot reads
+messages over; Teams', Microsoft's own command for making the app. The
+packages written from one template (`scripts/channels.mjs`) hold it in three
+small files that the script reads and never writes:
+
+- `traits.json`: facts about the platform the catalog doesn't carry, each with
+  its reason under `why`. The longest text in a message; whether text is shown
+  as typed, so Markdown goes as plain words; a secret of your own that connect
+  makes; a setting the catalog calls optional and the adapter can't answer
+  without; where a person enters the server's address.
+- `src/platform.ts`: the same, where it has to be code. Twilio's puts the
+  address a request was signed for back together behind a tunnel; Notion's
+  writes a list in marks a comment keeps.
+- `src/connect/point.ts`: gives the platform the server's address, where the
+  platform takes one from a command. Telegram's does.
+
+**How an adapter is loaded and fitted**
 
 1. `createChannels({ channels: ['slack'] })` looks each slug up with `getAdapter`
    (`packages/core/src/catalog.ts`). An unknown slug, or a state adapter, is refused with a code.
@@ -62,8 +82,8 @@ stays compatible as upstream ships.
 6. Credentials pass through to the adapter as given. Where an adapter accepts a
    function (Slack's `botToken` does), the hosted version can lend a secret for one turn.
 
-**Promotion rule:** an adapter counts as supported only once it passes the contract
-tests (section 4). The catalog says what exists; our tests say what works.
+**The rule for adding one:** a platform gets a package only once it passes the
+contract (section 4). The catalog says what exists; the tests say what works.
 
 ## 2. Dependency model
 
@@ -100,29 +120,40 @@ Not built yet: the plan for before the public release.
 - **A major version (5.x)** gets a migration branch. The 4.x line keeps receiving
   fixes for 90 days.
 
-## 4. Contract tests (what makes an adapter "supported")
+## 4. The contract (what every channel has to pass)
 
-Slack's is `test/slack.contract.test.mjs`: the real Chat SDK and the real Slack adapter,
-loaded from the catalog, against a fake Slack Web API and a fake Voiceflow runtime
-(`packages/slack/test/helpers/fake-slack.mjs`, and `@voiceflow/channels-sdk/testing`). Each new adapter gets one of the same shape.
+`channelContract`, in `@voiceflow/channels-sdk/testing`
+(`packages/core/src/contract.ts`), is the conversation every channel carries.
+Each package's tests run it with the real Chat SDK, the platform's real
+adapter, the core's agent, a scripted Voiceflow runtime, and a stand-in for
+the platform (`test/stand-in.mjs`): a server on this machine that signs what
+it sends as the platform signs, refuses what the platform refuses, and records
+what the bot sends. Slack's, Discord's and Teams' packages have contract tests
+of the same shape, written before this one was shared.
 
-Per tier-1 adapter, with fixtures picked by shape, never by content:
+It asserts, for every channel:
 
-1. A recorded inbound webhook, signed with a test secret.
-2. Run through the real adapter, then through our handler.
-3. Replies go to a fake platform API. Use the catalog's API base-URL override where the
-   adapter has one (`customApiEndpoint` feature; for Slack, `SLACK_API_URL`).
-4. Assert:
-   - a reply is posted;
-   - a forged signature is refused;
-   - a follow-up in the same thread reaches the same Voiceflow session;
-   - buttons render natively, and a click sends the button's Voiceflow request;
-   - a click from an earlier turn is answered as stale, never replayed;
-   - a typed number picks an offered choice;
-   - a Voiceflow failure posts the error message instead of going silent;
-   - where the catalog says the feature is a full `yes`: streaming into one live message,
-     progress cards, link buttons, and the adapter's own extras (Slack: feedback
-     buttons, suggested prompts from the launch turn).
+- the channel is the adapter, with its module and its four variables;
+- a request that isn't the platform's is refused, and nothing happens;
+- a message gets the agent's answer, and a choice can be taken: by a click
+  where the platform has buttons, by its number where it doesn't;
+- who and where are set as variables, every one on every turn;
+- what isn't said to the bot is answered only in a conversation it is
+  following (where the platform has conversations with other people in them);
+- a long answer arrives whole, each part within the platform's limit;
+- what the agent writes is readable there: a link keeps its address, a list
+  its numbers, and where text is shown as typed, no Markdown marks are sent;
+- a card and a picture are shown, or said in words;
+- the commands are the same as every channel's, and know what it needs;
+- `connect` sets it up (the variables, any secret it makes), prints no
+  secret, and changes nothing on a second run;
+- nothing is reached outside this machine.
+
+What it can't assert is that the stand-in is right about the platform. A
+stand-in is written from the adapter's source and the platform's
+documentation; where a fact in one comes from memory of the platform's
+documentation, the package's `traits.json` says so under `why`. Section 8 is
+the record of what has been run on the platforms themselves.
 
 Slack's native features are in `test/slack.native.contract.test.mjs`. Each one was
 fault-injected (the feature removed from the build) to prove its test goes red.
@@ -454,3 +485,114 @@ few things done by hand, once:
       opened with the default `GITHUB_TOKEN` starts no workflows.
 - [x] Decide the oldest Node version supported: 22. Node 20's support ended
       on 2026-04-30; Vercel Chat SDK tests 22 and 24.
+
+## 8. What has been run where
+
+The record of each channel on its own platform, with a real account. A
+channel with no date has passed the contract and nothing more.
+
+| Channel | Run on the platform | What was run |
+|---|---|---|
+| Slack | 2026-11-22 and 2026-11-23 | `connect` and `dev` through the starter's app; server tools against a real agent (section 7 has each run) |
+| Discord | 2026-11-23 | A new application, `connect`, and what section 5 lists as found there |
+| Microsoft Teams | 2026-11-23 | `connect`, `dev`, a 1:1 chat, a button, a channel mention, a thread's replies. On a new trial organization, as its admin |
+| Google Chat, GitHub, GitLab, Instagram, Linear, Messenger, Notion, Telegram, Twilio, WhatsApp, X | Not yet | |
+
+Before a channel is first run live, read its `traits.json`: each `why` says
+what the fact rests on, and the ones that rest on memory of a platform's
+documentation are the first to check. Known ahead of any run:
+
+- **Telegram.** The catalog marks its buttons as partial, so choices are a
+  numbered list. The adapter does send inline keyboards, but refuses a message
+  of buttons alone ("Message text cannot be empty"), and the core posts a
+  turn's choices as one. Buttons there need the core to put a line of text on
+  such a message.
+- **X.** Only direct messages are stood in for. A public reply is limited to
+  280 characters as X counts them, without Premium: the adapter sends a
+  longer one whole and X refuses it, so a long answer to a public mention is
+  lost. The 10,000-character limit in its `traits.json` is the direct
+  message's.
+- **Notion.** The verification token arrives at the running server as the
+  webhook is saved, so connect doesn't wait for it; and Notion locks a
+  webhook's address once verified, so a tunnel's new address each `dev` means
+  a new subscription.
+- **WhatsApp, Messenger, Instagram, GitHub, GitLab, Linear, Google Chat,
+  Twilio, X.** The address is entered by a person on the platform's page, and
+  a tunnel's address is new each time `dev` starts. A fixed address
+  (`dev --public-url`) avoids entering it again.
+- **Google Chat.** Choices are a numbered list everywhere, because of the
+  adapter's thread naming in direct messages (below).
+
+### Platforms set aside (2026-11-24)
+
+Four of Chat SDK's own adapters have no package, each for a reason that a
+stand-in can't settle. The work done on each is kept outside the repository.
+
+- **X Chat** (`xchat`). End-to-end encrypted: every message is decrypted with
+  keys held in X's key service (Juicebox), which nothing on this machine can
+  stand in for honestly. Its adapter also needs three packages of X's that
+  this repository doesn't install. The core does load it by name (its adapter
+  is at `@chat-adapter/x/chat`, which the loader now reads from the catalog).
+- **Web** (`web`). Not a platform but a chat in the app's own page: the reply
+  is the response to the request, the person is whoever the app's own sign-in
+  says, and there is no address to give anyone. It needs an app of its own
+  shape, not this one.
+- **Gmail** (`gmail`). The adapter answers nothing until its `watch()` has
+  been called, the watch lapses after seven days, and mail arrives through a
+  Google Cloud Pub/Sub subscription. That is a renewing connection like
+  Discord's, to be built as one.
+
+- **Twitch** (`twitch`). It passed the contract, with two facts about it said
+  in its package: a conversation is a channel's whole chat, so the bot answers
+  only where it is mentioned (`follow: false`) and everyone there shares one
+  Voiceflow session; and a message is 500 characters. What it lacks is setup.
+  Twitch takes a server's address only through its API, as an EventSub
+  subscription per channel that the broadcaster has to have allowed, and a
+  tunnel's new address each `dev` needs the old subscriptions found and
+  removed. The adapter has a call to make one (`subscribeToChat`) and none to
+  list or remove them, so a `point` for it would be written from memory of
+  Twitch's API. It is the next one to build, with a Twitch account to run it on.
+
+### Found in the adapters while adding channels (4.45.0)
+
+To report to `vercel/chat`. Each is worked around here, with a test.
+
+- **Google Chat:** a button's click in a direct message is given another
+  thread than the message it is on. `handleMessageEvent` names a direct
+  message `<space>:dm`; `handleCardClick` builds the thread from the message's
+  thread name and never says `isDM`. So a click's state is never found. Here:
+  `capabilities: { buttons: false }`.
+- **Chat SDK's `toPlainText` / `markdownToPlainText`** drop a list's numbers
+  and a link's address. Instagram's adapter flattens every reply with it, so a
+  numbered list of choices arrived with no numbers. Here: the core's own
+  `toPlain` (`packages/core/src/plain.ts`), and text sent as a string where a
+  platform shows no Markdown.
+- **Notion:** `normalizeCommentMarkdown` strips `1. ` and `- ` from the start
+  of every line of every reply, a plain string's too. Here: lists are written
+  `(1)` and `•` (`packages/notion/src/platform.ts`).
+- **WhatsApp:** more than three buttons are cut to three and nothing is said
+  (`extractReplyButtons`). Here: `capabilities: { maxButtons: 3 }`, and a
+  longer list is numbered.
+- **Twilio:** with no `webhookUrl` the adapter checks the signature against
+  `request.url`, which behind a tunnel or a proxy is the server's own address
+  and not the one Twilio signed. No environment variable sets it. Here: the
+  address is rebuilt from the forwarding headers
+  (`packages/twilio/src/platform.ts`), checked under Next.js by the starter's
+  smoke test.
+- **Telegram:** the catalog lists `TELEGRAM_WEBHOOK_SECRET_TOKEN` as optional,
+  and the adapter refuses every webhook request without it. Here: connect
+  makes it.
+- **Messenger, Instagram, Twilio:** `userName` and `fullName` are the
+  person's ID or number when the platform gives no name. Here: a name equal to
+  the ID is no name (`packages/core/src/channel.ts`).
+- **Messenger, Twilio:** Markdown is sent as its source to a platform that
+  shows it as typed. Here: `plainText`.
+- **GitHub, Linear, Notion:** the bot answers only a mention of `userName`,
+  which defaults to a made-up name (`github-bot`, `linear-bot`, `notion-bot`)
+  and is never read from the account. Here: the name is a needed setting.
+- **Messenger, Instagram:** the Graph API's address can't be set
+  (`GRAPH_API_BASE` is fixed), though the catalog says Instagram's can. The
+  stand-ins replace `fetch` for that one host while they're up.
+- **Twilio:** an inbound message with an empty body (a picture alone) is
+  taken as a status callback and dropped. Not worked around.
+

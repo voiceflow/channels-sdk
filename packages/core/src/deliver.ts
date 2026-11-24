@@ -4,6 +4,7 @@
 // whenever something that can't stream (buttons, a card, an image) comes next.
 // A rich post the channel refuses is sent again as text, and the turn goes on.
 import type { SentMessage, StreamChunk, Thread } from 'chat';
+import { toPlain } from './plain.js';
 import { type ButtonsShown, type Post, type Renderer, type RenderOptions, withSources } from './render.js';
 import { type Measure, splitMarkdown } from './split.js';
 import { type Choice, type Reply, type Source, sourcesOf, translate } from './translate.js';
@@ -34,6 +35,8 @@ export interface DeliveryOptions extends RenderOptions {
   measureText?: Measure;
   /** Rewrites a text post into what the channel shows, before it is measured and sent. */
   shapeText?: (markdown: string) => string;
+  /** Sends text as plain words: the channel shows Markdown as it is typed. */
+  plain?: boolean;
 }
 
 /** What a custom trace's handler can do in the turn: post below what's shown, or close the streamed message. */
@@ -55,14 +58,22 @@ function plainText(post: Post): string | null {
 }
 
 /**
- * Posts a post. Text is first put into what the channel shows (`shapeText`). Text longer than the channel shows
+ * Posts a post. Text is first put into what the channel shows (`shapeText`, and plain words where the channel
+ * shows no Markdown). Text longer than the channel shows
  * in one message goes as several, in order: some adapters cut a long message short and say nothing, and the end
  * of an answer would be lost. Returns the last message sent.
  */
 async function postFitting(thread: AnyThread, post: Post, options: DeliveryOptions): Promise<SentMessage> {
-  const written = options.maxText || options.shapeText ? plainText(post) : null;
+  const written = options.maxText || options.shapeText || options.plain ? plainText(post) : null;
   if (written === null) return thread.post(post);
   const text = options.shapeText ? options.shapeText(written) : written;
+  if (options.plain) {
+    // A string is sent as it is: no adapter reads it as Markdown, or writes it back with marks of its own.
+    const words = toPlain(text);
+    let sent!: SentMessage;
+    for (const part of options.maxText ? splitMarkdown(words, options.maxText, options.measureText) : [words]) sent = await thread.post(part);
+    return sent;
+  }
   const whole: Post = text === written ? post : { markdown: text };
   if (!options.maxText) return thread.post(whole);
   const parts = splitMarkdown(text, options.maxText, options.measureText);

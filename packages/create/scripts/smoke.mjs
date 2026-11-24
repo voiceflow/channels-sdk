@@ -1,17 +1,22 @@
 // The starter, end to end, the way someone meets it: the command makes an app,
 // the app installs the packages as npm would deliver them (packed tarballs, not
-// links into this repository), builds, and answers its channel. Once for each
-// channel the starter has: Slack, Discord and Teams. It catches what the
-// unit tests can't: a file missing from a package, an export that doesn't
-// resolve, a generated app that doesn't compile.
+// links into this repository), builds, and answers its channel. It catches
+// what the unit tests can't: a file missing from a package, an export that
+// doesn't resolve, a generated app that doesn't compile.
 //
-//   npm run build && node packages/create/scripts/smoke.mjs [--keep] [slack|discord|teams]
+//   npm run build && node packages/create/scripts/smoke.mjs [--keep] [--all] [channel…]
+//
+// With no channel named it runs the ones whose apps differ: Slack, Discord and
+// Teams, each with an app of its own, Telegram, whose app every other
+// channel's is made from, and Twilio, whose check of a request depends on what
+// the server is told of its own address. `--all` runs every channel.
 //
 // It installs from the npm registry (Next.js, React, Chat SDK), so it needs the
 // network, and takes a minute or two. Nothing here is a real credential.
 import { execFile, spawn } from 'node:child_process';
 import { createHmac, generateKeyPairSync, sign } from 'node:crypto';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import http from 'node:http';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,12 +27,21 @@ const run = promisify(execFile);
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const keep = process.argv.includes('--keep');
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+const all = process.argv.includes('--all');
+/** Every channel the starter has, with the settings each needs: written when the starter is built. */
+const STARTERS = JSON.parse(await readFile(new URL('../template/channels.json', import.meta.url), 'utf8'));
+const DEFAULT = ['slack', 'discord', 'teams', 'telegram', 'twilio'];
 const work = await mkdtemp(join(tmpdir(), 'vf-starter-smoke-'));
 const step = (text) => console.log(`\n▸ ${text}`);
 const SIGNING_SECRET = 'smoke-test-signing-secret';
 const DISCORD_TOKEN = 'smoke-test-discord-token';
 const discordKeys = generateKeyPairSync('ed25519');
+const TELEGRAM_TOKEN = '110201543:smoke-test-telegram-token';
+const TELEGRAM_SECRET = 'smoke-test-telegram-secret';
+const TWILIO_TOKEN = 'smoke-test-twilio-token';
 let server;
+/** A stand-in for a platform's API that a check started: closed with the server. */
+let platform;
 
 /** What differs by channel: its package, what its server is given, and what its platform sends. */
 const CHANNELS = {
@@ -55,26 +69,47 @@ const CHANNELS = {
     help: /voiceflow-channels connect teams --env-file <path> \[--public-url/,
     check: checkTeams,
   },
+  telegram: {
+    // The adapter asks Telegram who the bot is as it starts: a stand-in on this machine answers.
+    env: async () => ({ TELEGRAM_BOT_TOKEN: TELEGRAM_TOKEN, TELEGRAM_WEBHOOK_SECRET_TOKEN: TELEGRAM_SECRET, TELEGRAM_API_BASE_URL: await fakeTelegram() }),
+    check: checkTelegram,
+  },
+  twilio: {
+    env: { TWILIO_ACCOUNT_SID: 'ACsmoke00000000000000000000000000', TWILIO_AUTH_TOKEN: TWILIO_TOKEN },
+    check: checkTwilio,
+  },
 };
+/** A channel with no check of its own: its settings filled with made-up values, and its route asked. */
+function channelOf(name) {
+  const info = STARTERS[name];
+  if (!info) throw new Error(`no starter for ${name}: there is one for ${Object.keys(STARTERS).join(', ')}`);
+  const settings = [...info.required, ...(info.modes[0]?.settings ?? []), ...info.made, ...info.later];
+  return {
+    env: Object.fromEntries(settings.map((setting) => [setting.key, `smoke-test-${setting.key.toLowerCase()}`])),
+    help: new RegExp(`voiceflow-channels connect ${name} --env-file <path> \\[--public-url`),
+    check: checkRoute,
+    ...CHANNELS[name],
+  };
+}
 
 try {
   step('pack the packages, as a publish would');
-  await run('npm', ['pack', '--pack-destination', work, '-w', 'packages/core', '-w', 'packages/slack', '-w', 'packages/discord', '-w', 'packages/teams'], {
-    cwd: root,
-  });
+  const chosen = only.length ? only : all ? Object.keys(STARTERS) : DEFAULT;
+  for (const name of chosen) channelOf(name);
+  await run('npm', ['pack', '--pack-destination', work, '-w', 'packages/core', ...chosen.flatMap((name) => ['-w', `packages/${name}`])], { cwd: root });
   const tarballs = (await readdir(work)).filter((f) => f.endsWith('.tgz'));
   const tarball = (name) => {
     const file = tarballs.find((f) => f.startsWith(`${name}-`));
     if (!file) throw new Error(`no tarball for ${name} among ${tarballs.join(', ')}`);
     return `file:${join(work, file)}`;
   };
-  for (const channel of Object.keys(CHANNELS).filter((name) => !only.length || only.includes(name))) {
+  for (const channel of chosen) {
     await smoke(channel, {
       '@voiceflow/channels-sdk': tarball('voiceflow-channels-sdk'),
       [`@voiceflow/channels-${channel}`]: tarball(`voiceflow-channels-${channel}`),
     });
   }
-  console.log('\n✓ the starter makes apps that install, build and answer their channels');
+  console.log(`\n✓ the starter makes apps that install, build and answer their channels: ${chosen.join(', ')}`);
 } finally {
   await stop();
   if (keep) console.log(`kept: ${work}`);
@@ -91,10 +126,16 @@ async function stop() {
     await new Promise((resolve) => server.once('close', resolve));
   }
   server = undefined;
+  if (platform) {
+    platform.closeAllConnections();
+    await new Promise((resolve) => platform.close(resolve));
+  }
+  platform = undefined;
 }
 
 async function smoke(channel, packed) {
-  const { env: channelEnv, help: helpText, check } = CHANNELS[channel];
+  const { env: channelSettings, help: helpText, check } = channelOf(channel);
+  const channelEnv = typeof channelSettings === 'function' ? await channelSettings() : channelSettings;
   step(`${channel}: run the starter`);
   const { stdout } = await run(
     process.execPath,
@@ -166,6 +207,103 @@ async function smoke(channel, packed) {
 
   await check(url, () => log);
   await stop();
+}
+
+/** Sends a request with exactly these headers, the host's included, as a proxy passes one on. */
+function post(url, headers, body) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, { method: 'POST', headers: { 'content-length': Buffer.byteLength(body), ...headers } }, (res) => {
+      res.resume();
+      res.on('end', () => resolve(res.statusCode));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+/** Telegram's Bot API, as far as a bot that is starting asks of it. */
+async function fakeTelegram() {
+  platform = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      const known = req.url?.startsWith(`/bot${TELEGRAM_TOKEN}/`);
+      res.writeHead(known ? 200 : 401, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify(
+          known
+            ? { ok: true, result: req.url.endsWith('/getMe') ? { id: 110201543, is_bot: true, first_name: 'Smoke', username: 'smoke_test_bot' } : true }
+            : { ok: false, error_code: 401, description: 'Unauthorized' },
+        ),
+      );
+    });
+  });
+  await new Promise((resolve) => platform.listen(0, '127.0.0.1', resolve));
+  return `http://127.0.0.1:${platform.address().port}`;
+}
+
+async function checkTelegram(url, log) {
+  // Telegram proves itself with the secret the bot's webhook was set with, in a header. An update with nothing in
+  // it for the bot is checked the same way, and starts no conversation.
+  const send = (secret) =>
+    fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(secret ? { 'x-telegram-bot-api-secret-token': secret } : {}) },
+      body: JSON.stringify({ update_id: 1 }),
+    });
+  const genuine = await send(TELEGRAM_SECRET);
+  if (genuine.status !== 200) throw new Error(`an update with the webhook's secret got ${genuine.status}, not 200\n${log()}`);
+  const forged = await send('not-the-secret');
+  if (forged.status !== 401) throw new Error(`an update with another secret got ${forged.status}, not 401\n${log()}`);
+  const bare = await send();
+  if (bare.status !== 401) throw new Error(`an update with no secret got ${bare.status}, not 401\n${log()}`);
+  console.log("with the webhook's secret 200 · with another 401 · with none 401");
+}
+
+async function checkTwilio(url, log) {
+  // Twilio signs each request over the address it was given. This server is reached at another, as one behind a
+  // tunnel is: the app has to put the public address back together from what the tunnel says of the request.
+  const fields = {
+    AccountSid: 'ACsmoke00000000000000000000000000',
+    MessageSid: 'SMsmoke0000000000000000000000000',
+    MessageStatus: 'delivered',
+    SmsStatus: 'delivered',
+    To: '+15550000001',
+  };
+  const path = new URL(url).pathname;
+  const signed = (address, token = TWILIO_TOKEN) =>
+    createHmac('sha1', token)
+      .update(
+        address +
+          Object.keys(fields)
+            .sort()
+            .map((name) => name + fields[name])
+            .join(''),
+      )
+      .digest('base64');
+  const body = new URLSearchParams(fields).toString();
+  const send = (headers) => post(url, { 'content-type': 'application/x-www-form-urlencoded', ...headers }, body);
+  const publicUrl = `https://smoke.example.com${path}`;
+  // A tunnel passes the public host on as the host, and says the request came by https.
+  const tunnelled = await send({ host: 'smoke.example.com', 'x-forwarded-proto': 'https', 'x-twilio-signature': signed(publicUrl) });
+  if (tunnelled !== 200) throw new Error(`Twilio's request through a tunnel got ${tunnelled}, not 200\n${log()}`);
+  // A proxy that keeps its own host says the public one in a header.
+  const proxied = await send({ 'x-forwarded-host': 'smoke.example.com', 'x-forwarded-proto': 'https', 'x-twilio-signature': signed(publicUrl) });
+  if (proxied !== 200) throw new Error(`Twilio's request through a proxy got ${proxied}, not 200\n${log()}`);
+  const forged = await send({ host: 'smoke.example.com', 'x-forwarded-proto': 'https', 'x-twilio-signature': signed(publicUrl, 'not-the-token') });
+  if (forged !== 401) throw new Error(`a forged Twilio request got ${forged}, not 401\n${log()}`);
+  const elsewhere = await send({ host: 'someone-else.example.com', 'x-forwarded-proto': 'https', 'x-twilio-signature': signed(publicUrl) });
+  if (elsewhere !== 401) throw new Error(`a request signed for another address got ${elsewhere}, not 401\n${log()}`);
+  console.log('through a tunnel 200 · through a proxy 200 · forged 401 · signed for another address 401');
+}
+
+async function checkRoute(url, log) {
+  // What this platform signs with can't be made here, and its adapter may ask the platform who the bot is before
+  // it answers anything. So what's checked is that the app was built with its route, and that the route takes
+  // nothing unsigned: any answer but "taken".
+  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  if (response.status === 404 || response.status === 405) throw new Error(`the app has no route at ${url} (${response.status})\n${log()}`);
+  if (response.status < 400) throw new Error(`an unsigned request got ${response.status}: it was taken\n${log()}`);
+  console.log(`the route is there · an unsigned request ${response.status}`);
 }
 
 async function checkSlack(url, log) {

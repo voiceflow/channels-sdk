@@ -1,0 +1,23 @@
+{
+  "maxTextLength": 4000,
+  "addressGoes": "the Google Cloud console → Google Chat API → Configuration → Connection settings → App URL, with Authentication audience set to Project number",
+  "settings": [
+    {
+      "key": "GOOGLE_CHAT_PROJECT_NUMBER",
+      "description": "Your Google Cloud project's number: requests from Google Chat are signed for it."
+    }
+  ],
+  "notes": [
+    "**In a space**, set `GOOGLE_CHAT_BOT_USER_ID` (the `users/…` name of your Chat app) so the bot knows a mention of itself. In a direct message it answers every message without it."
+  ],
+  "capabilities": {
+    "buttons": false
+  },
+  "why": {
+    "maxTextLength": "Google Chat takes 4,096 characters in a message's text, and 32,000 bytes for a whole message. The second is written in @googleapis/chat (spaces.messages.create); the first is in neither the adapter nor that library, and is worth checking against Google once. The adapter sends a reply's text whole, whatever its length (postMessage), so Google would refuse a long answer and all of it would be lost. 4,000 is within both.",
+    "addressGoes": "The adapter never gives Google the address, and no call of the Chat API takes one: it is the App URL on the Chat API's Configuration page (step 5 of the adapter's README). The audience matters as much. The adapter reads GOOGLE_CHAT_PROJECT_NUMBER from the environment and checks requests signed for a project number with it; requests signed for the address itself need endpointUrl, which it reads from no variable.",
+    "settings": "The adapter's constructor throws unless it can verify requests: googleChatProjectNumber (GOOGLE_CHAT_PROJECT_NUMBER) is the one of its three ways it reads from the environment for a direct webhook.",
+    "notes": "isBotMentioned: with no botUserId, a mention of the app can't be matched in a space.",
+    "capabilities": "A click on a button in a direct message reaches the adapter under another conversation's name than the message it is on (handleCardClick builds the thread from the message's thread name; handleMessageEvent names a direct message <space>:dm), so the choice it picks is not found and the person is told it is no longer available. Until the adapter names both the same way, choices go as a numbered list, which works everywhere."
+  }
+}

@@ -25,6 +25,8 @@ export interface ChannelCapabilities {
   editMessages: boolean;
   /** Select menus, which show a long list of choices in one control. */
   selectMenus: boolean;
+  /** The most buttons the platform shows on one message, where it has a limit: a longer list goes as numbered text. */
+  maxButtons?: number;
 }
 
 /** The catalog entry for a platform adapter, or a `ChannelsError`. */

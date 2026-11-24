@@ -1,0 +1,18 @@
+{
+  "maxTextLength": 4000,
+  "adapterDefaults": {
+    "mode": "webhook"
+  },
+  "settings": [
+    {
+      "key": "TELEGRAM_WEBHOOK_SECRET_TOKEN",
+      "description": "The secret Telegram sends back with each message, which is how the server knows a message is Telegram's.",
+      "make": true
+    }
+  ],
+  "why": {
+    "maxTextLength": "The adapter cuts a longer message short and says nothing: 4,096 characters as plain text (TELEGRAM_MESSAGE_LIMIT), 32,768 as a rich message. 4,000 is within both.",
+    "adapterDefaults": "Left to choose (mode auto), the adapter can read messages by long polling instead, which a server that answers requests and stops can't hold open. This channel gives Telegram a webhook, so the adapter is told to expect one.",
+    "settings": "In webhook mode the adapter refuses every request unless a secret token is set (TELEGRAM_WEBHOOK_VERIFICATION_ERROR), and the catalog lists the token as optional. It is any text of your own, given to Telegram in the same call as the address (setWebhook's secret_token: 1 to 256 characters of A-Z, a-z, 0-9, _ and -)."
+  }
+}
