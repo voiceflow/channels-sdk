@@ -12,7 +12,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { NeedsYou } from '@voiceflow/channels-sdk';
+import { NeedsYou } from '@voiceflow/channelkit';
 import { SLACK_CLI_CREDENTIALS, SlackApiError, type SlackCliLogin, slackCliLogins } from './api.js';
 
 export { NeedsYou };

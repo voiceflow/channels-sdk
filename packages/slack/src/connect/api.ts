@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { redact } from '@voiceflow/channels-sdk';
+import { redact } from '@voiceflow/channelkit';
 
 export class SlackApiError extends Error {
   constructor(

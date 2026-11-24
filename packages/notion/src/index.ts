@@ -1,11 +1,11 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // A Voiceflow agent in Notion. Everything channel-neutral comes from
-// @voiceflow/channels-sdk; this package brings Chat SDK's Notion adapter.
+// @voiceflow/channelkit; this package brings Chat SDK's Notion adapter.
 import * as adapter from '@chat-adapter/notion';
-import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channels-sdk';
+import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channelkit';
 import { text } from './platform.js';
 
-export type { ChannelOptions as NotionOptions } from '@voiceflow/channels-sdk';
+export type { ChannelOptions as NotionOptions } from '@voiceflow/channelkit';
 
 /** Every variable this channel sets, with what it holds. `connect notion` creates them on the agent. */
 export const CONTEXT_VARIABLES: Record<string, string> = contextVariables('notion');

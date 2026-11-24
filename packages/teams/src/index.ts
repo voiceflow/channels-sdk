@@ -1,7 +1,7 @@
 // A Voiceflow agent in Microsoft Teams. Everything channel-neutral comes from
-// @voiceflow/channels-sdk; this package adds what only Teams has.
+// @voiceflow/channelkit; this package adds what only Teams has.
 import * as teamsAdapter from '@chat-adapter/teams';
-import type { ChannelSpec } from '@voiceflow/channels-sdk';
+import type { ChannelSpec } from '@voiceflow/channelkit';
 import { createTeamsExtension, type TeamsOptions } from './extension.js';
 
 export type { ConversationType, Place, TeamsActivity, TeamsAdapterLike, TeamsThreadId } from './adapter.js';

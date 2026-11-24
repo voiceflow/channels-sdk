@@ -12,7 +12,7 @@
 // for that person's approval. Who the person is, and which conversation this
 // is, come from the turn's pass, which the server made from Slack's verified
 // event: the model chooses neither.
-import { askFirst, quoted, type ServerTool, type ToolOutcome, type ToolResult, type ToolTurn } from '@voiceflow/channels-sdk';
+import { askFirst, quoted, type ServerTool, type ToolOutcome, type ToolResult, type ToolTurn } from '@voiceflow/channelkit';
 import type { Thread } from 'chat';
 import { slackAdapter, where } from './adapter.js';
 

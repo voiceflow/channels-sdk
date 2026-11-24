@@ -10,8 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import test from 'node:test';
-import { memoryRecordStore } from '@voiceflow/channels-sdk/install';
-import { fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
+import { memoryRecordStore } from '@voiceflow/channelkit/install';
+import { fakeVoiceflowApi } from '@voiceflow/channelkit/testing';
 import { cli, hidden, readEnvFile, urlChecker, writeEnvFile } from '../dist/connect/cli.js';
 import {
   appNameOf,
@@ -1257,9 +1257,9 @@ test("connect shows what the draft holds, publishes on your yes, and the new app
   assert.equal(asked.at(-1), 'asked: \nPublish sdk-test now? Its whole draft goes live, not only these tools. [y/N] ');
   assert.deepEqual(
     vf.state.publishes.map((p) => `${p.environment}: ${p.name}`),
-    ['sdk-test: Slack tools (Channels SDK)'],
+    ['sdk-test: Slack tools (ChannelKit)'],
   );
-  assert.match(out, /\+ published sdk-test \(release "Slack tools \(Channels SDK\)"\)/);
+  assert.match(out, /\+ published sdk-test \(release "Slack tools \(ChannelKit\)"\)/);
   assert.match(out, /sdk-test is published: the agent in Slack has the tools now\./);
   assert.doesNotMatch(out, /only once you publish/);
 
@@ -1439,7 +1439,7 @@ test('without an address, connect opens a tunnel for as long as the app takes to
   assert.match(out, new RegExp(`No --public-url, so Slack gets a temporary address while the app is made: ${TUNNEL}`));
   assert.deepEqual(urlsOf(slack.apps.get('A1')), [`${TUNNEL}/api/slack`, `${TUNNEL}/api/slack`, `${TUNNEL}/api/slack`]);
   assert.equal(machine.state.stopped, 1, 'the tunnel is closed when connect is done');
-  assert.match(out, /Slack has a temporary address, which has stopped\. Start your server with `voiceflow-channels dev -- <its command>`/);
+  assert.match(out, /Slack has a temporary address, which has stopped\. Start your server with `voiceflow-channelkit dev -- <its command>`/);
   assert.match(out, /The agent's Slack tools call your server at the address dev gives them/);
   assert.doesNotMatch(out, /Slack sends to https/);
   assert.deepEqual(vf.state.compiles, ['sdk-test']);

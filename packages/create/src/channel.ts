@@ -128,9 +128,9 @@ this app.
 - \`app/api/${slug}/route.ts\`: the route. \`app/api/${slug}/bot.ts\`:
   \`createChannels\`, where the agent and its channels are set.
 - \`.env.local\`: the server's settings. \`.env.example\` names each one.
-- Every option: \`npx voiceflow-channels connect ${slug} --help\` and
-  \`npx voiceflow-channels dev --help\`.
-- The rest: [Voiceflow Channels](https://github.com/voiceflow/channels-sdk).
+- Every option: \`npx voiceflow-channelkit connect ${slug} --help\` and
+  \`npx voiceflow-channelkit dev --help\`.
+- The rest: [Voiceflow ChannelKit](https://github.com/voiceflow/channelkit).
 `;
 
   const readme = (app: string, pm: PackageManager, environment: string) => `# ${app}
@@ -138,7 +138,7 @@ this app.
 A Voiceflow agent in ${name}, served by one Next.js route:
 [\`app/api/${slug}/route.ts\`](app/api/${slug}/route.ts).
 
-Made with [\`create-voiceflow-channels\`](https://github.com/voiceflow/channels-sdk).
+Made with [\`create-voiceflow-channelkit\`](https://github.com/voiceflow/channelkit).
 
 ## Run it
 
@@ -192,7 +192,7 @@ ${later.length ? `\n${later.join('\n')}\n` : ''}
 
 ## Learn more
 
-- [Voiceflow Channels](https://github.com/voiceflow/channels-sdk): every
+- [Voiceflow ChannelKit](https://github.com/voiceflow/channelkit): every
   ${name} option, and the other channels.
 - [Voiceflow's documentation](https://www.voiceflow.com/docs), for building the
   agent itself.

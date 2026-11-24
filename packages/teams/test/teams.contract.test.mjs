@@ -9,8 +9,8 @@ import test from 'node:test';
 import { inspect } from 'node:util';
 import { createMemoryState } from '@chat-adapter/state-memory';
 import * as teamsAdapterModule from '@chat-adapter/teams';
-import { createChannels } from '@voiceflow/channels-sdk';
-import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
+import { createChannels } from '@voiceflow/channelkit';
+import { fakeVoiceflow, waiter } from '@voiceflow/channelkit/testing';
 import { CONTEXT_VARIABLES, createTeamsExtension, MAX_TEXT, teams, teamsLogger } from '../dist/index.js';
 import { ADA, ADA_EMAIL, APP_PASSWORD, buttonsOf, CHANNEL, CHAT, fakeTeams, GRACE, TEAM, TENANT } from './helpers/fake-teams.mjs';
 

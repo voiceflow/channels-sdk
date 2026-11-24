@@ -1,5 +1,5 @@
 // `connect discord` and what it's made of. Node only: import it from
-// `@voiceflow/channels-discord/connect`.
+// `@voiceflow/channelkit-discord/connect`.
 export {
   APP_FLAGS,
   BOT_PERMISSIONS,

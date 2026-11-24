@@ -42,7 +42,7 @@ export interface VoiceflowAgentOptions extends RenderOptions {
   userName?: string;
   /** Variables set on the Voiceflow session before each turn, over the channel extension's own. */
   variables?: (ctx: TurnContext) => Record<string, unknown> | Promise<Record<string, unknown>>;
-  /** What only some platforms have, one extension per channel (`slack()` from @voiceflow/channels-slack). */
+  /** What only some platforms have, one extension per channel (`slack()` from @voiceflow/channelkit-slack). */
   extensions?: readonly ChannelExtension[];
   /**
    * Your own server tools: tools the agent calls whose code runs here, with

@@ -90,9 +90,9 @@ this app.
   \`dev\` does its job.
 - \`.env.local\`: the server's settings. \`.env.example\` names each one.
 - A server that has an address of its own: \`README.md\`, "Deploy it".
-- Every option: \`npx voiceflow-channels connect discord --help\` and
-  \`npx voiceflow-channels dev --help\`.
-- The rest: [Voiceflow Channels](https://github.com/voiceflow/channels-sdk).
+- Every option: \`npx voiceflow-channelkit connect discord --help\` and
+  \`npx voiceflow-channelkit dev --help\`.
+- The rest: [Voiceflow ChannelKit](https://github.com/voiceflow/channelkit).
 `;
 }
 
@@ -105,7 +105,7 @@ A Voiceflow agent in Discord, served by one Next.js route:
 [\`app/api/discord/route.ts\`](app/api/discord/route.ts). Mentions, threads,
 direct messages, buttons and \`/ask\` all arrive there.
 
-Made with [\`create-voiceflow-channels\`](https://github.com/voiceflow/channels-sdk).
+Made with [\`create-voiceflow-channelkit\`](https://github.com/voiceflow/channelkit).
 
 ## Run it
 
@@ -200,7 +200,7 @@ Discord reaches a bot two ways, and a deployment needs both.
 
 ## Learn more
 
-- [Voiceflow Channels](https://github.com/voiceflow/channels-sdk): every
+- [Voiceflow ChannelKit](https://github.com/voiceflow/channelkit): every
   Discord option, and the other channels.
 - [Voiceflow's documentation](https://www.voiceflow.com/docs), for building the
   agent itself.

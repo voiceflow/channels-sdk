@@ -61,4 +61,4 @@ Write to the bot in its chat, or mention it in a channel it was added to.
 `npm run dev` alone does all of it the first time: it runs connect before it
 starts when no bot is connected from here.
 
-[`@voiceflow/channels-teams`](../../packages/teams/README.md) has every option.
+[`@voiceflow/channelkit-teams`](../../packages/teams/README.md) has every option.

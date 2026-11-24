@@ -1,4 +1,4 @@
-# @voiceflow/channels-whatsapp
+# @voiceflow/channelkit-whatsapp
 
 A Voiceflow agent in WhatsApp Business Cloud, with one command to set it up.
 
@@ -8,7 +8,7 @@ A Voiceflow agent in WhatsApp Business Cloud, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect whatsapp --env-file .env.local
+npx voiceflow-channelkit connect whatsapp --env-file .env.local
 ```
 
 WhatsApp Business Cloud's side is made on WhatsApp Business Cloud's own pages: its app or bot, and the
@@ -21,11 +21,11 @@ the rest. It shows its whole plan and asks before it changes anything.
 - **It creates the `whatsapp_*` variables** on your agent, for its prompts.
 - **It writes the Voiceflow values** it had to ask for to the env file. A
   value already there is never changed.
-- **It says what address to give WhatsApp Business Cloud**: your server's public address, then `/api/whatsapp`. It goes in the Meta app's dashboard → WhatsApp → Configuration → Callback URL, with WHATSAPP_VERIFY_TOKEN as the Verify token, subscribed to messages. `voiceflow-channels dev` prints the tunnel's each time it starts.
+- **It says what address to give WhatsApp Business Cloud**: your server's public address, then `/api/whatsapp`. It goes in the Meta app's dashboard → WhatsApp → Configuration → Callback URL, with WHATSAPP_VERIFY_TOKEN as the Verify token, subscribed to messages. `voiceflow-channelkit dev` prints the tunnel's each time it starts.
 - **With nobody at the terminal** (a script, a coding agent) connect asks
   nothing. It stops with exit code 3 and says, in the one stop, everything a
   person has to do. Exit 0 is done, 1 a failure, 2 a mistake in the command.
-- **`voiceflow-channels dev` runs connect for you** the first time, when a
+- **`voiceflow-channelkit dev` runs connect for you** the first time, when a
   person is there. So in an app the starter made, `npm run dev` is the one
   command.
 - **Nothing is published.** The variables are live once you publish the
@@ -35,7 +35,7 @@ the rest. It shows its whole plan and asks before it changes anything.
 ## In your server
 
 ```ts
-import { whatsapp } from '@voiceflow/channels-whatsapp';
+import { whatsapp } from '@voiceflow/channelkit-whatsapp';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: process.env.VOICEFLOW_PROJECT_ID! },
@@ -48,7 +48,7 @@ const channels = await createChannels({
 Install it with Chat SDK's adapter:
 
 ```bash
-npm install @voiceflow/channels-sdk @voiceflow/channels-whatsapp chat @chat-adapter/catalog @chat-adapter/whatsapp
+npm install @voiceflow/channelkit @voiceflow/channelkit-whatsapp chat @chat-adapter/catalog @chat-adapter/whatsapp
 ```
 
 ### What happens in WhatsApp Business Cloud

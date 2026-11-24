@@ -1,7 +1,7 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // `connect notion`, `point notion` and `disconnect notion`. Node only: import it
-// from `@voiceflow/channels-notion/connect`.
-import { channelCommands } from '@voiceflow/channels-sdk/connect';
+// from `@voiceflow/channelkit-notion/connect`.
+import { channelCommands } from '@voiceflow/channelkit/connect';
 
 export const { cli, connected, settings } = channelCommands('notion', {
   settings: [{ key: 'NOTION_BOT_USERNAME', description: "The bot's name in Notion, as people write it after an @ in a comment." }],

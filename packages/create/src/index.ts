@@ -1,4 +1,4 @@
-// `npm create voiceflow-channels@latest my-bot`: a new app for a Voiceflow
+// `npm create voiceflow-channelkit@latest my-bot`: a new app for a Voiceflow
 // agent in Slack, Discord, Teams or any other channel there is a package for,
 // ready for `connect`. It writes a small Next.js app (the channel's example
 // app, which CI builds), a package.json with the versions that app is tested
@@ -38,6 +38,8 @@ export interface CreateIO {
 }
 
 const DEFAULT_NAME = 'my-bot';
+/** This project's own packages: the core, and each channel's. */
+const OURS = /^@voiceflow\/channelkit(-[a-z0-9-]+)?$/;
 const TEMPLATES = new URL('../template/', import.meta.url);
 
 /** Every channel there is a starter for, with what the starter says of it: written beside the templates when this is built. */
@@ -57,7 +59,7 @@ const CHANNEL_LINES = CHANNELS.reduce<string[]>((lines, channel, i) => {
 }, []).join(`\n${' '.repeat(26)}`);
 
 const USAGE = `Usage:
-  npm create voiceflow-channels@latest [name] [options]
+  npm create voiceflow-channelkit@latest [name] [options]
 
 Makes a new app for a Voiceflow agent in Slack, Discord, Teams or another
 channel: a Next.js server with the route the channel calls, its env file, and
@@ -171,7 +173,7 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
   }
   if (!CHANNELS.includes(o.channel)) {
     err(
-      `There's no starter for "${o.channel}": there is one for ${CHANNEL_LIST}. Any other Chat SDK adapter works with the core by hand: https://github.com/voiceflow/channels-sdk/blob/main/docs/how-it-works.md#any-chat-sdk-adapter`,
+      `There's no starter for "${o.channel}": there is one for ${CHANNEL_LIST}. Any other Chat SDK adapter works with the core by hand: https://github.com/voiceflow/channelkit/blob/main/docs/how-it-works.md#any-chat-sdk-adapter`,
     );
     return 2;
   }
@@ -222,9 +224,7 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
   const own = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
   // This project's packages at the version this starter shipped with; everything else at the version the app was tested with, or a later compatible one.
   const versioned = (deps: Record<string, string>) =>
-    Object.fromEntries(
-      Object.entries(deps).map(([dep, version]) => [dep, dep.startsWith('@voiceflow/channels-') ? `^${own.version}` : `^${version.replace(/^[\^~]/, '')}`]),
-    );
+    Object.fromEntries(Object.entries(deps).map(([dep, version]) => [dep, OURS.test(dep) ? `^${own.version}` : `^${version.replace(/^[\^~]/, '')}`]));
 
   await mkdir(target, { recursive: true });
   // The app itself: its routes, its page, and its settings. Everything in the template but the two files read here.

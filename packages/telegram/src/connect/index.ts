@@ -1,7 +1,7 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // `connect telegram`, `point telegram` and `disconnect telegram`. Node only: import it
-// from `@voiceflow/channels-telegram/connect`.
-import { channelCommands } from '@voiceflow/channels-sdk/connect';
+// from `@voiceflow/channelkit-telegram/connect`.
+import { channelCommands } from '@voiceflow/channelkit/connect';
 import { point, remove } from './point.js';
 
 export const { cli, connected, settings } = channelCommands('telegram', {

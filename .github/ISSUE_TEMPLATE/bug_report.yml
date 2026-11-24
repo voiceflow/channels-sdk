@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for reporting this. The more of the form you fill in, the faster it gets fixed.
 
-        **Never paste a token, signing secret or API key**, in the text, the code or the logs. To report a vulnerability, don't open an issue: see [SECURITY.md](https://github.com/voiceflow/channels-sdk/blob/main/SECURITY.md).
+        **Never paste a token, signing secret or API key**, in the text, the code or the logs. To report a vulnerability, don't open an issue: see [SECURITY.md](https://github.com/voiceflow/channelkit/blob/main/SECURITY.md).
 
   - type: dropdown
     id: package
@@ -15,9 +15,9 @@ body:
       label: Where is the bug?
       multiple: true
       options:
-        - "@voiceflow/channels-sdk (the core: createChannels, rendering, extensions)"
-        - "@voiceflow/channels-slack (Slack's features)"
-        - "connect (voiceflow-channels connect)"
+        - "@voiceflow/channelkit (the core: createChannels, rendering, extensions)"
+        - "@voiceflow/channelkit-slack (Slack's features)"
+        - "connect (voiceflow-channelkit connect)"
         - "A tool connect installed on the agent"
         - "Not sure"
     validations:

@@ -39,4 +39,4 @@ A Voiceflow agent in Telegram, served by one Next.js route:
 
 `npm run dev` alone does all of it the first time.
 
-[`@voiceflow/channels-telegram`](../../packages/telegram/README.md) has every option.
+[`@voiceflow/channelkit-telegram`](../../packages/telegram/README.md) has every option.

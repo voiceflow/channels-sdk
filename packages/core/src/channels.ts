@@ -1,6 +1,6 @@
 // The one-call setup: a Chat SDK bot with the named channels, answered by a
 // Voiceflow agent. Every adapter comes from Chat SDK's catalog; a channel's
-// package (`slack()` from @voiceflow/channels-slack) adds its extension.
+// package (`slack()` from @voiceflow/channelkit-slack) adds its extension.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { type Adapter, Chat, type ChatConfig, type StateAdapter, type WebhookOptions } from 'chat';
 import { createVoiceflowAgent, type VoiceflowAgent, type VoiceflowAgentOptions } from './agent.js';

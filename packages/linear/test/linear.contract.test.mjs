@@ -4,7 +4,7 @@
 // (./stand-in.mjs) and a scripted Voiceflow runtime. Every channel runs the
 // same conversation.
 import { createMemoryState } from '@chat-adapter/state-memory';
-import { channelContract } from '@voiceflow/channels-sdk/testing';
+import { channelContract } from '@voiceflow/channelkit/testing';
 import * as commands from '../dist/connect/index.js';
 import { CONTEXT_VARIABLES, linear } from '../dist/index.js';
 import { start } from './stand-in.mjs';

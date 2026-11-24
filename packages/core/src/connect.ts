@@ -7,7 +7,7 @@
 // one step most platforms do allow from here: giving the platform that address.
 //
 // Every line this prints, an error's included, is first cleaned of the secrets
-// it holds. Node only: import it from `@voiceflow/channels-sdk/connect`.
+// it holds. Node only: import it from `@voiceflow/channelkit/connect`.
 import { randomBytes } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { platformEntry } from './catalog.js';
@@ -77,7 +77,7 @@ export interface ChannelCommandSet {
   /** The settings the channel can't run without: the ones a person brings, and the secrets connect makes. */
   settings: { needed: string[]; made: string[] };
   cli(argv: string[], io?: ChannelCliIO): Promise<number>;
-  /** Whether the settings the adapter needs are all there: `voiceflow-channels dev` asks, and runs connect first when not. */
+  /** Whether the settings the adapter needs are all there: `voiceflow-channelkit dev` asks, and runs connect first when not. */
   connected(options?: { envFile?: string; env?: Record<string, string | undefined> }): Promise<boolean>;
 }
 
@@ -131,9 +131,9 @@ export function channelCommands(slug: string, setup: ChannelSetup = {}): Channel
     .map((v) => v.key)
     .concat((setup.settings ?? []).filter((v) => v.make).map((v) => v.key));
   const usage = `Usage:
-  voiceflow-channels connect ${slug} --env-file <path> [--public-url <https://host>] [options]
-  voiceflow-channels point ${slug} --public-url <https://host> [--env-file <path>]
-  voiceflow-channels disconnect ${slug}
+  voiceflow-channelkit connect ${slug} --env-file <path> [--public-url <https://host>] [options]
+  voiceflow-channelkit point ${slug} --public-url <https://host> [--env-file <path>]
+  voiceflow-channelkit disconnect ${slug}
 
 Connect sets up ${platform} for your Voiceflow agent. ${platform}'s side (its
 app or bot, and the settings below) is made on ${platform}'s own pages:
@@ -155,7 +155,7 @@ then VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID and VOICEFLOW_ENVIRONMENT in the
 environment, then --env-file; a person is asked for what's left.
 
 Point ${setup.point ? `gives ${platform} another address` : `says the address to give ${platform}`}, and changes nothing else:
-\`voiceflow-channels dev\` runs it on each start. Disconnect ${setup.remove ? `has ${platform} stop sending to your server` : `says where ${platform}'s side is taken out`}.
+\`voiceflow-channelkit dev\` runs it on each start. Disconnect ${setup.remove ? `has ${platform} stop sending to your server` : `says where ${platform}'s side is taken out`}.
 
 It exits 0 when done, 1 on a failure, 2 on a mistake in the command, and 3
 when it's waiting on you: do what it says, then run it again.
@@ -237,7 +237,7 @@ Options:
     const making = toMake(has, setup);
     if (!envFile) lacking.push(...making.splice(0).map((v) => ({ key: v.key, description: `${v.description} Any long random text of your own.` })));
     const notConnected = () =>
-      `${platform} isn't connected here yet: run \`voiceflow-channels connect ${slug} --env-file ${envFile}\` first. It makes ${making.map((v) => v.key).join(' and ')} and saves ${making.length === 1 ? 'it' : 'them'} there.`;
+      `${platform} isn't connected here yet: run \`voiceflow-channelkit connect ${slug} --env-file ${envFile}\` first. It makes ${making.map((v) => v.key).join(' and ')} and saves ${making.length === 1 ? 'it' : 'them'} there.`;
     const lackingText = () =>
       `${platform} isn't set up here yet. ${lacking.length === 1 ? 'One setting is' : 'These settings are'} missing ${where}:\n${lacking
         .map((v) => `  ${v.key}=…   ${v.description}${v.oneOf ? ` (or sign in another way: ${v.oneOf})` : ''}`)
@@ -345,7 +345,7 @@ Options:
       [
         `${platform}: Chat SDK's ${platform} adapter, with the settings ${where}`,
         !requestUrl
-          ? `  · ${platform} needs your server's address: \`voiceflow-channels dev\` ${setup.point ? 'gives it one' : 'says it'} each time it starts`
+          ? `  · ${platform} needs your server's address: \`voiceflow-channelkit dev\` ${setup.point ? 'gives it one' : 'says it'} each time it starts`
           : setup.point
             ? `  + have ${platform} send to ${requestUrl}`
             : `  · ${platform} is given ${requestUrl} by hand: connect says where`,
@@ -399,7 +399,7 @@ Options:
           voiceflow,
           { publish: true, noPublish: false },
           io2,
-          { name: `${platform} variables (Channels SDK)`, description: `Published by \`voiceflow-channels connect ${slug} --publish\`.` },
+          { name: `${platform} variables (ChannelKit)`, description: `Published by \`voiceflow-channelkit connect ${slug} --publish\`.` },
           true,
         )
       : 'not';
@@ -416,7 +416,7 @@ Connected: ${platform}, with your agent "${projectRead.name}".
       out(
         o['from-dev']
           ? `Your server starts next: dev ${setup.point ? `gives ${platform} its address` : `says the address to give ${platform}`}.`
-          : `Then start your server with \`voiceflow-channels dev -- <its command>\` (\`npm run dev\` in an app the starter made): it ${setup.point ? `gives ${platform} your server's address` : `says the address to give ${platform}`}, each time it starts.`,
+          : `Then start your server with \`voiceflow-channelkit dev -- <its command>\` (\`npm run dev\` in an app the starter made): it ${setup.point ? `gives ${platform} your server's address` : `says the address to give ${platform}`}, each time it starts.`,
       );
     for (const [later, why] of Object.entries(setup.later ?? {})) {
       if (!has(later)) out(`! ${later} isn't set yet, and can't be: ${why}`);

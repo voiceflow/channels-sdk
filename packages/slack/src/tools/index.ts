@@ -8,7 +8,7 @@ import {
   serverToolDefinition,
   type ToolDefinition,
   type ToolSet,
-} from '@voiceflow/channels-sdk';
+} from '@voiceflow/channelkit';
 import { CONTEXT_VARIABLES } from '../context.js';
 import { createWorkspaceTools } from '../workspace.js';
 import { presentationTools } from './presentation.js';
