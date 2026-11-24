@@ -36,11 +36,14 @@ import {
   connectDiscord,
   DEFAULT_COMMAND,
   disconnectDiscord,
+  greetingText,
   isLoopback,
   pointDiscord,
   readApp,
   readsMessages,
+  sendGreeting,
   WEBHOOK_PATH,
+  waitForServer,
 } from './connect.js';
 
 const USAGE = `Usage:
@@ -102,6 +105,8 @@ Options:
   --server <id>           the Discord server to add the bot to: the page that adds
                           it opens with that server chosen
   --no-open               open no page in your browser: the links are printed
+  --no-wait               don't wait for the bot to be added to a server
+  --no-greeting           don't have the bot message you in Discord once it's in one
   --no-variables          create no variables on the agent (then pass
                           context: false to discord() on your server)
   --env-file <path>       your server's env file. Connect reads the bot token and
@@ -129,6 +134,8 @@ export interface CliIO {
   secret?: (question: string) => Promise<string>;
   /** Opens a page in the person's browser, and says whether it could. Default: their own browser, where there is one here. */
   open?: (url: string) => Promise<boolean>;
+  /** Waits, between looks at whether the bot has been added to a server. Default: a timer. */
+  wait?: (ms: number) => Promise<void>;
   /** Holds Discord's Gateway connection, in place of the real one: for a test. */
   gateway?: (options: ForwardGatewayOptions) => Promise<void>;
 }
@@ -185,6 +192,10 @@ async function run(
       icon: { type: 'string' },
       server: { type: 'string' },
       'no-open': { type: 'boolean', default: false },
+      'no-wait': { type: 'boolean', default: false },
+      'no-greeting': { type: 'boolean', default: false },
+      // Set by `voiceflow-channels dev` when it runs connect itself: the server starts next, so nobody is told to start it.
+      'from-dev': { type: 'boolean', default: false },
       'no-variables': { type: 'boolean', default: false },
       'env-file': { type: 'string' },
       'token-file': { type: 'string' },
@@ -352,6 +363,10 @@ async function run(
           ? `  + publish ${environment}: its whole draft goes live (--publish)`
           : `  · nothing is published, and nothing has to be: the variables are live once you publish ${environment}`,
         '  + you get the link that adds the bot to a server',
+        // Said only where it will happen: for a person who is there, about a bot that is in no server yet.
+        ...(interactive && plan.app.servers === 0 && !o['no-wait'] && !o['no-greeting'] && plan.app.ownerId
+          ? ["  + once it's in one, the bot messages you in Discord to say it's connected"]
+          : []),
       ]),
     onProgress: out,
   });
@@ -409,12 +424,33 @@ ${inNoServer ? 'The bot is in no server yet. Add it to one' : 'To add the bot to
 
 ${
   result.endpoint === 'local'
-    ? "Then start your server with `voiceflow-channels dev -- <its command>` (`npm run dev` in an app the starter made): it holds the connection Discord sends messages over, and gives Discord your server's address for slash commands and buttons."
+    ? o['from-dev']
+      ? "Your server starts next: dev holds the connection Discord sends messages over, and gives Discord your server's address for slash commands and buttons."
+      : "Then start your server with `voiceflow-channels dev -- <its command>` (`npm run dev` in an app the starter made): it holds the connection Discord sends messages over, and gives Discord your server's address for slash commands and buttons."
     : result.endpoint === 'refused'
       ? 'Discord has no address for slash commands and buttons yet: see below.'
       : `Discord sends slash commands and buttons to ${requestUrl}. What people write comes over a standing connection your server has to hold: the starter's README says how, for a server that stays up and for one that doesn't.`
 }${variables ? `\nThe discord_* variables are on ${environment}'s draft, for your agent's prompts: {discord_user_name}, say.${published === 'published' ? '' : ` They're live once you publish ${environment}.`}` : ''}`);
   for (const problem of [...(result.install?.problems ?? []), ...(result.install?.notes ?? [])]) err(`! ${problem}`);
+  // Adding the bot is a person's, on a page of Discord's. A person who is there is waited for, so the run ends
+  // with the bot in a server and saying so, not with a link and a hope.
+  if (inNoServer && interactive && !o['no-wait']) {
+    out('\nWaiting for the bot to be added to a server. Ctrl-C stops the waiting, and loses nothing.');
+    const api = createDiscordApi({ token: token.value, ...(apiUrl ? { apiUrl } : {}), ...withFetch });
+    const server = await waitForServer(api, { ...(io.wait ? { wait: io.wait } : {}) });
+    if (!server) out("· The bot is in no server yet. The link above adds it, when you're ready.");
+    else {
+      out(`+ ${app.botName} is in ${server.name}`);
+      if (!o['no-greeting'] && app.ownerId) {
+        const command = result.plan.command;
+        const failed = await sendGreeting(api, {
+          userId: app.ownerId,
+          text: greetingText({ name: app.botName, server: server.name, ...(command ? { command } : {}) }),
+        });
+        out(failed ? `· ${app.botName} couldn't message you in Discord: ${failed}.` : `+ ${app.botName} messaged you in Discord: look under Direct Messages`);
+      }
+    }
+  }
   // What's left is a person's to do: the run did everything else.
   const left = result.problems;
   if (left.length) {
@@ -471,6 +507,16 @@ async function botToken(from: {
 }
 
 /**
+ * Whether a Discord bot has been connected from here: its token, its public key and its application's ID are all
+ * in the environment or the env file. `voiceflow-channels dev` asks, and runs connect first when it hasn't.
+ */
+export async function connected(options: { envFile?: string; env?: Record<string, string | undefined> } = {}): Promise<boolean> {
+  const env = options.env ?? process.env;
+  const inFile = options.envFile ? await readEnvFile(options.envFile) : {};
+  return ['DISCORD_BOT_TOKEN', 'DISCORD_PUBLIC_KEY', 'DISCORD_APPLICATION_ID'].every((name) => Boolean(env[name] || inFile[name]));
+}
+
+/**
  * Holds Discord's Gateway connection open for `voiceflow-channels dev`, passing
  * what people write to your server on this machine, until `signal` aborts.
  */
@@ -504,6 +550,7 @@ export async function listen(
   }
   if (app.servers === 0) out(`· ${app.botName} is in no server yet. Add it to one: ${installLink(app.id)}`);
   const channels = get('DISCORD_RESPOND_TO_CHANNEL_IDS');
+  let heard = false;
   await (io.gateway ?? forwardGateway)({
     webhookUrl,
     signal: options.signal,
@@ -523,5 +570,11 @@ export async function listen(
     },
     onConnected: (bot) => out(`= connected to Discord as ${bot || app.botName}: what people write reaches your server at ${webhookUrl}`),
     onProblem: (problem) => err(`! discord: ${problem}`),
+    // Said once: the proof that it's working end to end, for whoever just set it up.
+    onForwarded: (type) => {
+      if (heard || type !== 'GATEWAY_MESSAGE_CREATE') return;
+      heard = true;
+      out('= the first message from Discord reached your server');
+    },
   });
 }

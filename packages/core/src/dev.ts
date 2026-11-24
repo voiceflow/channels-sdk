@@ -10,7 +10,8 @@
 // request signed as its platform signs one, before the platform is pointed at it.
 // A channel whose platform sends over a standing connection (Discord's Gateway)
 // also exports `listen`: dev holds that connection open beside the server, and
-// closes it when it stops. Node only.
+// closes it when it stops. And one that exports `connected` is connected first
+// when it never was: one command sets the channel up and starts it. Node only.
 import { type ChildProcess, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -55,6 +56,13 @@ export interface ChannelCommands {
    * server at `localUrl`, until `signal` aborts. Rejects if it can't.
    */
   listen?(options: { localUrl: string; envFile?: string; signal: AbortSignal; out: (line: string) => void; err: (line: string) => void }): Promise<void>;
+  /**
+   * Whether the channel has been connected from here. When it hasn't, dev is
+   * starting the server itself, and a person is there, dev runs the channel's
+   * connect first: `cli(['connect', '--from-dev', '--env-file', <path>])`. A
+   * channel that exports this takes `--from-dev`, which says the server starts next.
+   */
+  connected?(options: { envFile?: string; env: Record<string, string | undefined> }): boolean | Promise<boolean>;
 }
 
 /** What `dev` reads, writes and runs, for a test or a program that runs it. */
@@ -157,11 +165,33 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
       return 1;
     }
 
+    const interactive = io.interactive ?? Boolean(process.stdin.isTTY);
+    const loaded = new Map<string, ChannelCommands>();
+    for (const name of channels) {
+      const got = await (io.channel ?? channelCli)(name);
+      loaded.set(name, typeof got === 'function' ? { cli: got } : got);
+    }
+    // A channel that was never connected from here is connected first, so one command sets it up and starts it.
+    // Only for a person who is there (connect asks things), and only where dev starts the server: one that's
+    // running already was started without what connect writes.
+    if (command.length && interactive) {
+      for (const [name, commands] of loaded) {
+        if (!commands.connected || (await commands.connected({ ...(o['env-file'] ? { envFile: o['env-file'] } : {}), env }))) continue;
+        out(`${name} isn't connected yet, so that comes first.\n`);
+        const code = await commands.cli(['connect', '--from-dev', ...(o['env-file'] ? ['--env-file', o['env-file']] : [])]);
+        if (code !== 0) {
+          err(`\n${name} wasn't connected, so dev is stopping.`);
+          return code;
+        }
+        out('');
+      }
+    }
+
     let url = o['public-url']?.replace(/\/+$/, '');
     if (!url) {
       tunnel = await startTunnel({
         port,
-        interactive: io.interactive ?? Boolean(process.stdin.isTTY),
+        interactive,
         ask: io.ask ?? question,
         say: out,
         instead: 'Or start no tunnel, and give dev your own address: --public-url https://<host>.',
@@ -195,9 +225,7 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
     const connectionLost = new Promise<number>((resolve) => {
       lost = resolve;
     });
-    for (const name of channels) {
-      const loaded = await (io.channel ?? channelCli)(name);
-      const commands: ChannelCommands = typeof loaded === 'function' ? { cli: loaded } : loaded;
+    for (const [name, commands] of loaded) {
       const code = await commands.cli(['point', '--public-url', url, '--local-url', local, ...(o['env-file'] ? ['--env-file', o['env-file']] : [])]);
       if (code !== 0) {
         err(`\n${name} wasn't pointed at ${url}, so dev is stopping.`);
@@ -256,7 +284,11 @@ async function channelCli(name: string): Promise<ChannelCommands> {
     throw error;
   }
   if (typeof loaded.cli !== 'function') throw new Error(`@voiceflow/channels-${name} has no command to point it with.`);
-  return { cli: loaded.cli, ...(typeof loaded.listen === 'function' ? { listen: loaded.listen } : {}) };
+  return {
+    cli: loaded.cli,
+    ...(typeof loaded.listen === 'function' ? { listen: loaded.listen } : {}),
+    ...(typeof loaded.connected === 'function' ? { connected: loaded.connected } : {}),
+  };
 }
 
 function serve(command: string, args: string[], env: Record<string, string | undefined>): DevServer {

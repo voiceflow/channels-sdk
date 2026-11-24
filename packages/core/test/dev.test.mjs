@@ -365,6 +365,75 @@ test("a server that stops on its own ends dev with the server's code", async () 
   assert.deepEqual(a.events.slice(-2), ['stop server', 'stop tunnel']);
 });
 
+test('a channel that was never connected is connected first, for a person who is there, and then started', async () => {
+  /** A channel that isn't connected until its connect has run. */
+  const channelOf = (a, { connect = 0 } = {}) => {
+    let isConnected = false;
+    return async (name) => ({
+      connected: ({ envFile, env }) => {
+        a.events.push(`${name} connected? (${envFile}, ${Object.keys(env).length} in env)`);
+        return isConnected;
+      },
+      cli: async (argv) => {
+        a.events.push(`${name}: ${argv.join(' ')}`);
+        if (argv[0] === 'connect') {
+          isConnected = connect === 0;
+          return connect;
+        }
+        queueMicrotask(() => a.stop.abort());
+        return 0;
+      },
+    });
+  };
+  const a = await app();
+  a.io.interactive = true;
+  a.io.channel = channelOf(a);
+  assert.equal(await dev(['--env-file', '.env.local', '--', 'next', 'dev'], a.io), 0, a.err.join('\n'));
+  // Connect comes before anything is started: the server then starts with what connect wrote.
+  assert.deepEqual(a.events.slice(0, 3), [
+    'slack connected? (.env.local, 0 in env)',
+    'slack: connect --from-dev --env-file .env.local',
+    'start /fake/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:3000',
+  ]);
+  assert.ok(a.events.includes(`slack: point --public-url ${URL_} --local-url http://127.0.0.1:3000 --env-file .env.local`));
+  assert.match(a.out.join('\n'), /slack isn't connected yet, so that comes first\./);
+
+  // A connect that waits on the person stops dev with its code, and nothing was started.
+  const waits = await app();
+  waits.io.interactive = true;
+  waits.io.channel = channelOf(waits, { connect: 3 });
+  assert.equal(await dev(['--env-file', '.env.local', '--', 'next', 'dev'], waits.io), 3);
+  assert.deepEqual(waits.events, ['slack connected? (.env.local, 0 in env)', 'slack: connect --from-dev --env-file .env.local']);
+  assert.match(waits.err.join('\n'), /slack wasn't connected, so dev is stopping\./);
+
+  // With nobody there, connect is not run: point says what's missing, as before.
+  const script = await app();
+  script.io.channel = channelOf(script);
+  await dev(['--env-file', '.env.local', '--', 'next', 'dev'], script.io);
+  assert.ok(!script.events.some((e) => /connect/.test(e)), script.events.join('\n'));
+
+  // A server that is running already was started without what connect writes: connect is not run for it.
+  const running = await app({ serverUp: 'already' });
+  running.io.interactive = true;
+  running.io.channel = channelOf(running);
+  await dev(['--env-file', '.env.local'], running.io);
+  assert.ok(!running.events.some((e) => /connect/.test(e)), running.events.join('\n'));
+
+  // A channel that is connected is asked, and left alone.
+  const done = await app();
+  done.io.interactive = true;
+  done.io.channel = async (name) => ({
+    connected: () => true,
+    cli: async (argv) => {
+      done.events.push(`${name}: ${argv.join(' ')}`);
+      queueMicrotask(() => done.stop.abort());
+      return 0;
+    },
+  });
+  assert.equal(await dev(['--', 'next', 'dev'], done.io), 0);
+  assert.ok(!done.events.some((e) => /connect/.test(e)));
+});
+
 test("dev holds a channel's standing connection open beside the server, and closes it first when it stops", async () => {
   const a = await app();
   const heard = [];

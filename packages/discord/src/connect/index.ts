@@ -14,10 +14,11 @@ export {
   NEW_APPLICATION,
   PERMISSIONS,
 } from './api.js';
-export { type CliIO, cli, listen } from './cli.js';
+export { type CliIO, cli, connected, listen } from './cli.js';
 export {
   askCommand,
   botNameOf,
+  botServers,
   type ConnectDiscordOptions,
   type ConnectPlan,
   type ConnectResult,
@@ -27,12 +28,16 @@ export {
   DEFAULT_COMMAND,
   type DisconnectDiscordOptions,
   type DiscordApp,
+  type DiscordServer,
   disconnectDiscord,
   EndpointRefused,
+  greetingText,
   isLoopback,
   type PointDiscordOptions,
   pointDiscord,
   readApp,
   readsMessages,
+  sendGreeting,
   WEBHOOK_PATH,
+  waitForServer,
 } from './connect.js';

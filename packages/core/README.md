@@ -132,6 +132,12 @@ command, for any channel:
   package the app depends on is asked to move its platform, and the agent's
   tools, to the new address. A channel takes part by answering
   `point --public-url <address> --local-url <the server here>`.
+- **It connects a channel that never was**, before anything is started, when
+  a person is there: a channel's connect module can export `connected`, and
+  dev runs its `connect --from-dev` when that says no. Discord's does, so its
+  first `dev` is its setup too.
+- **It holds a standing connection** for a channel whose platform sends over
+  one (Discord's Gateway): the connect module exports `listen`.
 - **Stopping it stops all of it.** `--public-url` uses an address of your own
   and starts no tunnel.
 

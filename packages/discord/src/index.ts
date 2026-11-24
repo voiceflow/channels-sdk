@@ -8,6 +8,7 @@ export type { DiscordAdapterLike, DiscordThreadId } from './adapter.js';
 export { CONTEXT_VARIABLES, type ContextVariable } from './context.js';
 export { createDiscordExtension, type DiscordOptions, titleOf } from './extension.js';
 export { type ForwardGatewayOptions, forwardGateway } from './gateway.js';
+export { discordLogger, withoutInteractionTokens } from './log.js';
 
 /**
  * Discord as a channel for `createChannels`, with everything only Discord has.

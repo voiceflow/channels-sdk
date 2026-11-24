@@ -5,9 +5,10 @@
 // Mentions, threads, direct messages, buttons, cards and carousels need
 // nothing here: the channel-neutral agent and the Discord adapter do them.
 import type { ChannelExtension, ExtensionHost } from '@voiceflow/channels-sdk';
-import { type Chat, ConsoleLogger, type Thread } from 'chat';
+import type { Chat, Thread } from 'chat';
 import { type DiscordAdapterLike, DM_GUILD, discordAdapter, fitMessages, nameThreads, SLUG, type ThreadNames, where } from './adapter.js';
 import { createContext } from './context.js';
+import { discordLogger } from './log.js';
 
 type AnyThread = Thread<any, any>;
 
@@ -50,9 +51,9 @@ export function createDiscordExtension(options: DiscordOptions = {}): ChannelExt
   const extension: ChannelExtension = {
     slug: SLUG,
     // The adapter logs every event it's passed, and Discord's connection passes on a great many that aren't for the
-    // bot (a server's every message, each person typing). So only its warnings and errors are printed, unless you
-    // give it a logger of your own.
-    adapterDefaults: { logger: new ConsoleLogger('warn').child('discord') },
+    // bot (a server's every message, each person typing). So only its warnings and errors are printed, a request
+    // with a bad signature is one line, and no interaction's token is printed: unless you give it a logger of your own.
+    adapterDefaults: { logger: discordLogger() },
     // Discord takes 2,000 characters in a message, and the adapter cuts a longer one short without a word. A long
     // answer goes as several messages instead, with room left for what the adapter's formatting can add.
     maxTextLength: MAX_TEXT,

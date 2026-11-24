@@ -196,7 +196,8 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
         The core now sends an image as the card's own (`imageUrl`), which the adapter keeps.
         Ask for image children to be kept, and for no embed where there is nothing to put in it.
       - When a post to an interaction's webhook fails, the adapter logs its path, and the path
-        holds the interaction's token (good for fifteen minutes). Ask for it to be left out.
+        holds the interaction's token (good for fifteen minutes). This package's logger takes
+        it out (`packages/discord/src/log.ts`). Ask for it to be left out at the source.
       - Renaming a thread leaves "changed the channel name" in it, so every conversation
         opened with that line. `nameThreads` (`packages/discord/src/adapter.ts`) puts the name
         in as the adapter asks Discord for the thread: the question for a slash command, and
@@ -205,7 +206,9 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
         where the message can't be read, the thread is renamed afterwards as before. Ask for
         `createDiscordThread` to take a name, and to be public.
       - Discord's check of a new address includes a request with a bad signature, which the
-        adapter rightly refuses, and logs as a failure in ten lines on every `dev` start.
+        adapter rightly refuses, and logs as a failure in a dozen lines, with the key's first
+        and last characters, on every `dev` start. This package's logger makes it one line.
+        Ask for one line, and for none of the key.
     - **Settled by that run:** the Message Content intent can be turned on through the API;
       Discord takes a quick tunnel's address; a message in a thread arrives marked as one
       (`channel_type`), so a follow-up needs no mention; a thread started on a slash command's
@@ -305,6 +308,15 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 - [x] Discord: a conversation's thread is named when it's made, not after, so
       it doesn't open with "changed the channel name" (2026-11-23, seen in
       Discord itself for a mention and for `/ask`)
+- [x] Discord's setup, as close to Slack's as Discord allows (2026-11-23):
+      connect opens the pages for the steps Discord leaves to a person, waits
+      for the bot to be added and has it message whoever made it; `dev` runs
+      connect first for a bot that was never connected (a channel's connect
+      module exports `connected` for that); and `dev` says when the first
+      message came through. What stays by hand: making the application,
+      copying its token, and authorizing the server
+- [ ] Slack: let `dev` run connect first too. It needs `connected` and
+      `--from-dev` in Slack's connect module, as Discord's has
 - [ ] Uninstall with a key that can't delete functions stops after detaching
       the tool (seen live 2026-11-23, a 401 on the delete): check the key
       first, or finish the step and say what was left

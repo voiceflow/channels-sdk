@@ -63,6 +63,14 @@ Then:
   it open with your server chosen. It asks for the permissions the bot uses:
   to see channels, send messages (in threads too), open and manage threads,
   read history, react, embed links, attach files and use slash commands.
+- **Connect waits for the bot to be added**, when a person is there: up to
+  five minutes, then it says which server the bot is in, and the bot messages
+  you in Discord to say it's connected (you, because the application is
+  yours; nothing is posted in the server). `--no-wait` and `--no-greeting`
+  turn each off.
+- **`voiceflow-channels dev` runs connect for you** the first time, when the
+  bot was never connected from here and a person is there. So in an app the
+  starter made, `npm run dev` is the one command.
 - **Nothing is published.** The bot works as soon as it's connected. The
   `discord_*` variables are for your agent's prompts, and are live once you
   publish the environment. `--publish` does that here: the whole draft goes live.

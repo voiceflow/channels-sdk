@@ -38,12 +38,14 @@ test('it holds the connection until told to stop, passing events to your server'
   const fake = fakeAdapter();
   const stop = new AbortController();
   const connected = [];
+  const through = [];
   const held = forwardGateway({
     webhookUrl: WEBHOOK,
     signal: stop.signal,
     adapter: { botToken: TOKEN, publicKey: 'k', applicationId: '1' },
     create: fake.create,
     onConnected: (bot) => connected.push(bot),
+    onForwarded: (type) => through.push(type),
   });
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(fake.starts.length, 1);
@@ -54,6 +56,12 @@ test('it holds the connection until told to stop, passing events to your server'
   fake.log().child('discord').info('Discord Gateway connected', { username: 'support-bot', id: '1' });
   fake.log().info('Discord Gateway forwarding event', { type: 'MESSAGE_CREATE' });
   assert.deepEqual(connected, ['support-bot']);
+  // An event is said to have got through once your server has taken it, not when it was only on its way.
+  assert.deepEqual(through, []);
+  fake.log().debug('Forwarding Gateway event to webhook', { type: 'GATEWAY_MESSAGE_CREATE', webhookUrl: WEBHOOK });
+  assert.deepEqual(through, []);
+  fake.log().debug('Gateway event forwarded successfully', { type: 'GATEWAY_MESSAGE_CREATE' });
+  assert.deepEqual(through, ['GATEWAY_MESSAGE_CREATE']);
   stop.abort();
   await held;
 });

@@ -10,9 +10,20 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { NeedsYou } from '@voiceflow/channels-sdk';
 import { fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
-import { APP_FLAGS, BOT_PERMISSIONS, botNameOf, cli, createDiscordApi, installLink, listen, NEW_APPLICATION } from '../dist/connect/index.js';
+import {
+  APP_FLAGS,
+  BOT_PERMISSIONS,
+  botNameOf,
+  cli,
+  connected,
+  createDiscordApi,
+  greetingText,
+  installLink,
+  listen,
+  NEW_APPLICATION,
+} from '../dist/connect/index.js';
 import { CONTEXT_VARIABLES } from '../dist/index.js';
-import { APP_ID, BOT_TOKEN, fakeDiscord } from './helpers/fake-discord.mjs';
+import { ADA, APP_ID, BOT_TOKEN, DM, fakeDiscord } from './helpers/fake-discord.mjs';
 
 const PROJECT = { id: 'proj1', name: 'Spike', workspaceID: 'ws1' };
 const VF_KEY = 'VF.DM.discord-connect-test';
@@ -47,6 +58,8 @@ async function setup({
       out: (line) => out.push(line),
       err: (line) => err.push(line),
       open: async (url) => (opened.push(url), true),
+      // No test waits on a clock: the time between looks at whether the bot has been added is none.
+      wait: async () => {},
       env: { DISCORD_API_URL: fake.apiUrl },
       // Discord is the stand-in, over HTTP; a picture is wherever its URL says; everything else is Voiceflow's API.
       fetch: (url, init) => {
@@ -153,8 +166,10 @@ test('from a bot token, connect does the rest', async (t) => {
   assert.ok(!r.all.includes(BOT_TOKEN) && !r.all.includes(VF_KEY), 'a secret was printed');
   // Discord refuses a request that doesn't say what sent it.
   assert.ok(s.fake.state.calls.every((c) => /^DiscordBot \(/.test(c.agent)));
-  // Nobody is there, so no page is opened for anybody: the link is printed.
+  // Nobody is there, so no page is opened for anybody: the link is printed. And nobody is waited for.
   assert.deepEqual(s.opened, []);
+  assert.doesNotMatch(r.all, /Waiting for the bot/);
+  assert.equal(s.fake.state.looks, 1, 'the list of servers was read again, with nobody to wait for');
   assert.match(r.out, /Add it to one: open this link, pick the server, and authorize\./);
 
   // Run again: everything is there, and nothing is written anywhere.
@@ -261,6 +276,77 @@ test('a page is opened only for a person who is there, when not told otherwise, 
   assert.equal(r4.code, 0, r4.all);
   assert.ok(r4.out.includes(`1. Make the application: ${NEW_APPLICATION}`), r4.out);
   assert.match(r4.out, /Add it to one: open this link, pick the server, and authorize\./);
+});
+
+test('a person is waited for until the bot is in a server, and then the bot messages them', async (t) => {
+  const person = { interactive: true, ask: async () => 'y' };
+  // Someone adds the bot while connect waits: on its third look after connecting.
+  const s = await setup({ api: { joinsAfter: 3 } });
+  t.after(s.fake.close);
+  const r = await s.run(['connect', '--env-file', s.envFile], person);
+  assert.equal(r.code, 0, r.all);
+  assert.match(r.out, /\+ once it's in one, the bot messages you in Discord to say it's connected/);
+  assert.match(r.out, /Waiting for the bot to be added to a server\. Ctrl-C stops the waiting, and loses nothing\./);
+  assert.match(r.out, /\+ Spike is in Acme HQ/);
+  assert.match(r.out, /\+ Spike messaged you in Discord: look under Direct Messages/);
+  // To whoever made the application, in the bot's own conversation with them: nothing is posted in the server.
+  const calls = s.fake.state.calls;
+  assert.deepEqual(calls.find((c) => c.method === 'POST' && c.path === '/users/@me/channels')?.body, { recipient_id: ADA.id });
+  const said = calls.filter((c) => c.method === 'POST' && /\/messages$/.test(c.path));
+  assert.deepEqual(
+    said.map((c) => [c.path, c.body.content]),
+    [[`/channels/${DM}/messages`, 'Spike is connected to Acme HQ. Once your server is running, mention me in a channel there, message me here, or use /ask.']],
+  );
+  assert.equal(
+    greetingText({ name: 'Spike', server: 'Acme HQ' }),
+    'Spike is connected to Acme HQ. Once your server is running, mention me in a channel there, message me here.',
+  );
+
+  // Nobody adds it: the wait ends by itself, says so, and the run is still a success.
+  const never = await setup();
+  t.after(never.fake.close);
+  const r2 = await never.run(['connect', '--env-file', never.envFile], person);
+  assert.equal(r2.code, 0, r2.all);
+  assert.match(r2.out, /· The bot is in no server yet\. The link above adds it, when you're ready\./);
+  assert.ok(never.fake.state.looks > 100, 'it gave up after a few looks');
+  assert.ok(!never.fake.state.calls.some((c) => c.path === '/users/@me/channels'));
+
+  // --no-wait: no waiting. --no-greeting: it waits, says where the bot is, and the bot says nothing.
+  const quick = await setup({ api: { joinsAfter: 3 } });
+  t.after(quick.fake.close);
+  const r3 = await quick.run(['connect', '--env-file', quick.envFile, '--no-wait'], person);
+  assert.equal(r3.code, 0, r3.all);
+  assert.doesNotMatch(r3.out, /Waiting for the bot|messages you in Discord/);
+  assert.equal(quick.fake.state.looks, 1);
+  const silent = await setup({ api: { joinsAfter: 3 } });
+  t.after(silent.fake.close);
+  const r4 = await silent.run(['connect', '--env-file', silent.envFile, '--no-greeting'], person);
+  assert.match(r4.out, /\+ Spike is in Acme HQ/);
+  assert.doesNotMatch(r4.out, /messages you in Discord|messaged you/);
+  assert.ok(!silent.fake.state.calls.some((c) => c.path === '/users/@me/channels'));
+
+  // A person who doesn't take messages from a server's members: said, and no failure.
+  const closed = await setup({ api: { joinsAfter: 3, denyDm: true } });
+  t.after(closed.fake.close);
+  const r5 = await closed.run(['connect', '--env-file', closed.envFile], person);
+  assert.equal(r5.code, 0, r5.all);
+  assert.match(r5.out, /· Spike couldn't message you in Discord: your privacy settings don't let a server's members message you\./);
+});
+
+test('run from dev, connect says the server starts next, and dev can tell whether a bot is connected', async (t) => {
+  const s = await setup();
+  t.after(s.fake.close);
+  // Before connect, the env file has the token and no more: the bot isn't connected from here.
+  assert.equal(await connected({ envFile: s.envFile, env: {} }), false);
+  const r = await s.run(['connect', '--from-dev', '--env-file', s.envFile, '--yes']);
+  assert.equal(r.code, 0, r.all);
+  assert.match(r.out, /Your server starts next: dev holds the connection Discord sends messages over/);
+  assert.doesNotMatch(r.out, /Then start your server with/);
+  assert.equal(await connected({ envFile: s.envFile, env: {} }), true);
+  // Where the values are in the environment, as on a host that sets them there.
+  assert.equal(await connected({ env: { DISCORD_BOT_TOKEN: 'a', DISCORD_PUBLIC_KEY: 'b', DISCORD_APPLICATION_ID: 'c' } }), true);
+  assert.equal(await connected({ env: { DISCORD_BOT_TOKEN: 'a', DISCORD_PUBLIC_KEY: 'b' } }), false);
+  assert.equal(await connected({ envFile: `${s.envFile}.missing`, env: {} }), false);
 });
 
 test('a key or a project that is wrong is said before anyone is sent to make an application', async (t) => {
@@ -739,6 +825,12 @@ test("listen holds Discord's connection for the server on this machine, with the
   assert.match(l.out.at(-1), /= connected to Discord as support-bot: what people write reaches your server at http:\/\/127\.0\.0\.1:3000\/api\/discord/);
   assert.match(l.err.at(-1), /! discord: Failed to forward Gateway event/);
   assert.ok(![...l.out, ...l.err].join('\n').includes(BOT_TOKEN));
+  // The first message that gets through is said, once: the proof that it works from end to end.
+  started.onForwarded('GATEWAY_TYPING_START');
+  assert.doesNotMatch(l.out.join('\n'), /first message/);
+  started.onForwarded('GATEWAY_MESSAGE_CREATE');
+  started.onForwarded('GATEWAY_MESSAGE_CREATE');
+  assert.equal(l.out.filter((line) => line === '= the first message from Discord reached your server').length, 1, l.out.join('\n'));
   l.stop.abort();
   await l.done;
 });
