@@ -35,6 +35,12 @@ const VF_KEY = 'VF.DM.teams-connect-test';
 const PUBLIC = 'https://bot.example.com';
 const VARIABLES = Object.keys(CONTEXT_VARIABLES).length;
 const APP = 'aaaaaaaa-0000-4000-8000-000000000001';
+/**
+ * The environment of someone at their own machine's screen, whatever machine the tests run on: Linux says there is
+ * a screen with DISPLAY, and a Mac or Windows always has one. Without it a test that expects a browser to open
+ * passes on a laptop and fails on a CI runner.
+ */
+const DESKTOP = { DISPLAY: ':0' };
 /** A picture of one colour, as a PNG. */
 const png = (side, colour = [61, 130, 246, 255]) =>
   encodePng({ width: side, height: side, rgba: Uint8Array.from({ length: side * side * 4 }, (_, i) => colour[i % 4]) });
@@ -218,7 +224,7 @@ test("a person who is there signs in, in Microsoft's own command, and connect go
   const here = await connect(t, '--no-open');
   assert.equal(here.code, 3, 'not interactive: it waits');
   t.microsoft.taken();
-  const { code, out, all } = await t.run(['connect', '--env-file', t.envFile], { ...io, env: {} });
+  const { code, out, all } = await t.run(['connect', '--env-file', t.envFile], { ...io, env: DESKTOP });
   assert.equal(code, 0, all);
   assert.match(out, /Sign in to Microsoft 365, with the account you use Teams with\./);
   const calls = t.microsoft.taken();
@@ -567,7 +573,7 @@ test('point says what it waits on: connect not run, or Microsoft 365 signed out'
   assert.ok(!out.microsoft.taken().some((call) => call.startsWith('login')), 'nobody is signed in on their behalf');
 
   // A sign-in runs out in time. A person who is there (dev was started by one) signs in again, and it goes on.
-  const third = await out.run(['point', '--public-url', PUBLIC, '--env-file', out.envFile], { interactive: true });
+  const third = await out.run(['point', '--public-url', PUBLIC, '--env-file', out.envFile], { interactive: true, env: DESKTOP });
   assert.equal(third.code, 0, third.all);
   assert.match(third.out, /Sign in to Microsoft 365, with the account you use Teams with\./);
   assert.ok(out.microsoft.taken().includes('login (shown)'));
