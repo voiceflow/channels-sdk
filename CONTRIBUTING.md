@@ -23,7 +23,7 @@ packages support.
 | `packages/slack` | `@voiceflow/channelkit-slack`: Slack's native features, its tools, and `connect slack` |
 | `packages/<channel>` | A channel's package: `@voiceflow/channelkit-discord`, `-teams`, `-telegram` and the rest. [Adding a channel](#adding-a-channel) |
 | `scripts/channels.mjs` | Writes the channel packages that share one template, and the README's table of channels |
-| `packages/create` | `create-voiceflow-channelkit`: the starter, `npm create voiceflow-channelkit` |
+| `packages/create` | `@voiceflow/create-channelkit`: the starter, `npm create @voiceflow/channelkit` |
 | `examples/` | Apps that use the packages, such as a Next.js Slack bot. The starter writes this app |
 | `docs/` | How a conversation works, and how this project tracks Vercel Chat SDK |
 | `.changeset/` | Pending changesets and the release configuration |
@@ -95,12 +95,12 @@ npx changeset
   examples need none. CI's `changeset` check says when one is missing.
 - **Which bump:** `patch` for a fix, `minor` for something new, `major` for a
   change that breaks existing code. Before 1.0, a breaking change is `minor`.
-- **The example is the starter's app.** `create-voiceflow-channelkit` writes
+- **The example is the starter's app.** `@voiceflow/create-channelkit` writes
   `examples/nextjs-slack`, so a change there changes what the starter makes:
-  add a changeset for `create-voiceflow-channelkit`. The check can't tell, since
+  add a changeset for `@voiceflow/create-channelkit`. The check can't tell, since
   examples need no changeset of their own.
 - **One version:** `@voiceflow/channelkit`, `@voiceflow/channelkit-slack` and
-  `create-voiceflow-channelkit` share a version number, so a changeset for one
+  `@voiceflow/create-channelkit` share a version number, so a changeset for one
   moves all three. The starter writes that version into the apps it makes.
 - **Releasing:** when changesets reach `main`, the `release` workflow opens a
   "chore(release): version packages" pull request with the new versions and

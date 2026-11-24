@@ -1,5 +1,5 @@
 {
-  "name": "create-voiceflow-channelkit",
+  "name": "@voiceflow/create-channelkit",
   "version": "0.0.0",
   "private": true,
   "description": "Start a Voiceflow agent in Slack, or any other channel, with one command: a Next.js app with its route and its env file.",
@@ -35,7 +35,7 @@
     "node": ">=22"
   },
   "bin": {
-    "create-voiceflow-channelkit": "./dist/cli.js"
+    "create-channelkit": "./dist/cli.js"
   },
   "exports": {
     ".": {

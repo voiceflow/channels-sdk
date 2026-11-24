@@ -1,4 +1,4 @@
-// The starter, run as `npm create voiceflow-channelkit` runs it, into a temporary
+// The starter, run as `npm create @voiceflow/channelkit` runs it, into a temporary
 // folder: what it writes, what it refuses, and what it runs. Nothing is
 // installed and no git repository is made: the commands it would run are recorded.
 
@@ -235,7 +235,7 @@ test('a mistake in the command is an answer and an exit code, with nothing writt
   }
   const help = await start(['--help']);
   assert.equal(help.code, 0);
-  assert.match(help.out, /^Usage:\n {2}npm create voiceflow-channelkit@latest \[name\]/);
+  assert.match(help.out, /^Usage:\n {2}npm create @voiceflow\/channelkit@latest \[name\]/);
   assert.deepEqual(await readdir(help.cwd), []);
 });
 

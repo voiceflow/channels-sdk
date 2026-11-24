@@ -19,7 +19,7 @@
       "@voiceflow/channelkit-twilio",
       "@voiceflow/channelkit-whatsapp",
       "@voiceflow/channelkit-x",
-      "create-voiceflow-channelkit"
+      "@voiceflow/create-channelkit"
     ]
   ],
   "linked": [],

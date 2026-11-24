@@ -138,7 +138,7 @@ this app.
 A Voiceflow agent in ${name}, served by one Next.js route:
 [\`app/api/${slug}/route.ts\`](app/api/${slug}/route.ts).
 
-Made with [\`create-voiceflow-channelkit\`](https://github.com/voiceflow/channelkit).
+Made with [\`@voiceflow/create-channelkit\`](https://github.com/voiceflow/channelkit).
 
 ## Run it
 

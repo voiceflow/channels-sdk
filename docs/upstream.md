@@ -358,20 +358,32 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 ## 7. Before the public release
 
 - [x] License: MIT (matches Chat SDK)
-- [ ] Settle the names, then reserve them on npm: `@voiceflow/channelkit`,
-      one `@voiceflow/channelkit-<channel>` for each of the 14 channels in the
-      README's table, and `create-voiceflow-channelkit`. And `voiceflow-channelkit`,
-      the command's own name: `npx voiceflow-channelkit` run where the core isn't
-      installed looks that name up on npm, and whoever owns it decides what
-      runs. None of the 17 was taken on 2026-11-24. The names were settled
-      that day as ChannelKit (they were "Voiceflow Channels", with a core
-      called `channels-sdk`): the name for channels whose surface Voiceflow
-      doesn't own. Every one is under the `@voiceflow` scope or starts
-      `voiceflow-`, because the bare name `channelkit` on npm is someone
-      else's package, a messaging gateway: `npx channelkit` would run theirs.
-      The repository was renamed the same day, from `channels-sdk` to
-      `channelkit`: GitHub sends the old address on to the new one
-- [x] A starter (2026-11-23): `npm create voiceflow-channelkit@latest` makes the
+- [x] The names are settled (2026-11-24), and every one is under the
+      `@voiceflow` scope, which only Voiceflow's npm organization can publish
+      to: `@voiceflow/channelkit`, one `@voiceflow/channelkit-<channel>` for
+      each of the 14 channels in the README's table, and
+      `@voiceflow/create-channelkit`, the starter
+      (`npm create @voiceflow/channelkit`). They were "Voiceflow Channels",
+      with a core called `channels-sdk`, until that day. ChannelKit is the
+      name for channels whose surface Voiceflow doesn't own. The repository
+      was renamed with them, from `channels-sdk` to `channelkit`: GitHub
+      sends the old address on to the new one
+- [x] Two names outside the scope are held on npm as guards (2026-11-24),
+      and nothing here tells anyone to install either. `voiceflow-channelkit`
+      is the command's name, which comes with `@voiceflow/channelkit`: where
+      the core isn't installed, `npx voiceflow-channelkit` looks that name up
+      on npm, and whoever owns it decides what runs.
+      `create-voiceflow-channelkit` was the starter's name for a day. Each was
+      published as a placeholder that only says ChannelKit isn't released
+      yet. npm staged them: until a maintainer approves each on npmjs.com,
+      what is public under the name is npm's own stub, version `0.0.0-stage`.
+      Either way the name has an owner. An unscoped name can only belong to
+      people's accounts, never to an organization, which is why what people
+      install is all under the scope. The bare name `channelkit` is someone
+      else's package, a messaging gateway
+- [ ] Give the two guard names more than one owner (`npm owner add`): each
+      has the one account that published it
+- [x] A starter (2026-11-23): `npm create @voiceflow/channelkit@latest` makes the
       app, as `npm create chat-sdk` does for Chat SDK. CI makes one from the
       packed packages, builds it and sends it what Slack sends
 - [x] Connect reads the server's env file (2026-11-23): the agent's key,
