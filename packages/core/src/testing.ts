@@ -326,3 +326,5 @@ export async function runFunction(code: string, inputVars: Record<string, unknow
   const result = await main({ inputVars: JSON.parse(JSON.stringify(inputVars)) });
   return JSON.parse(JSON.stringify(result ?? {}));
 }
+
+export { type ChannelContractOptions, type ChannelHarness, type ChannelStandIn, channelContract, channelHarness, type SentItem } from './contract.js';

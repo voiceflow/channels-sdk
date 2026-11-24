@@ -1,0 +1,13 @@
+{
+  "addressGoes": "Linear's Settings → API → Create webhook, with Comments among its events; its signing secret is LINEAR_WEBHOOK_SECRET",
+  "settings": [
+    {
+      "key": "LINEAR_BOT_USERNAME",
+      "description": "The bot's name in Linear, as people @mention it."
+    }
+  ],
+  "why": {
+    "addressGoes": "The adapter makes no call that registers a webhook. Its README has a workspace admin make one by hand (Settings > API > Create webhook), with Comments under its data change events. Linear's API can make one too (the webhookCreate mutation: url, resourceTypes, a team or allPublicTeams, and the secret), with an admin's key.",
+    "settings": "The adapter answers only a comment that mentions its userName, which is LINEAR_BOT_USERNAME or else the made-up linear-bot."
+  }
+}

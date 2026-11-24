@@ -1,17 +1,20 @@
 // `npm create voiceflow-channels@latest my-bot`: a new app for a Voiceflow
-// agent in Slack, Discord or Teams, ready for `connect`. It writes a small Next.js app
-// (the channel's example app, which CI builds), a package.json with the versions
-// that app is tested with, an env file, and the steps that come next.
+// agent in Slack, Discord, Teams or any other channel there is a package for,
+// ready for `connect`. It writes a small Next.js app (the channel's example
+// app, which CI builds), a package.json with the versions that app is tested
+// with, an env file, and the steps that come next.
 //
 // It writes only inside the folder you name, runs only your package manager's
 // install and `git init`, and asks for no secret: the app's `connect` command
 // asks for your Voiceflow API key, unseen, or you put it in .env.local yourself.
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { chmod, cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { type ChannelInfo, channelStarter } from './channel.js';
 import { discord } from './discord.js';
 import { type ChannelStarter, PACKAGE_MANAGERS, type PackageManager } from './shared.js';
 import { slack } from './slack.js';
@@ -34,24 +37,36 @@ export interface CreateIO {
   run?: (command: string, args: string[], cwd: string) => Promise<number>;
 }
 
-export const CHANNELS = ['slack', 'discord', 'teams'] as const;
-const STARTERS: Record<(typeof CHANNELS)[number], ChannelStarter> = { slack, discord, teams };
-/** "slack, discord and teams": the starters there are, as a sentence says them. */
-const CHANNEL_LIST = `${CHANNELS.slice(0, -1).join(', ')} and ${CHANNELS.at(-1)}`;
-
 const DEFAULT_NAME = 'my-bot';
 const TEMPLATES = new URL('../template/', import.meta.url);
+
+/** Every channel there is a starter for, with what the starter says of it: written beside the templates when this is built. */
+const INFO = JSON.parse(readFileSync(new URL('channels.json', TEMPLATES), 'utf8')) as Record<string, ChannelInfo>;
+export const CHANNELS: readonly string[] = Object.keys(INFO);
+/** The channels whose setup has words of its own; every other channel's are the same, with its name and settings in. */
+const OWN: Record<string, ChannelStarter> = { slack, discord, teams };
+const starterOf = (channel: string): ChannelStarter => OWN[channel] ?? channelStarter(channel, INFO[channel]!);
+/** "slack, discord, … and x": the starters there are, as a sentence says them. */
+const CHANNEL_LIST = `${CHANNELS.slice(0, -1).join(', ')} and ${CHANNELS.at(-1)}`;
+/** The same, wrapped to sit under an option in the usage text. */
+const CHANNEL_LINES = CHANNELS.reduce<string[]>((lines, channel, i) => {
+  const word = `${channel}${i < CHANNELS.length - 1 ? ',' : ''}`;
+  if (lines.length && `${lines.at(-1)} ${word}`.length <= 52) lines[lines.length - 1] += ` ${word}`;
+  else lines.push(word);
+  return lines;
+}, []).join(`\n${' '.repeat(26)}`);
 
 const USAGE = `Usage:
   npm create voiceflow-channels@latest [name] [options]
 
-Makes a new app for a Voiceflow agent in Slack, Discord or Teams: a Next.js server
-with the route the channel calls, its env file, and a connect script that sets
-the channel up.
+Makes a new app for a Voiceflow agent in Slack, Discord, Teams or another
+channel: a Next.js server with the route the channel calls, its env file, and
+a connect script that sets the channel up.
 
 Options:
   [name]                  the app's folder, and its name (default: ${DEFAULT_NAME})
-  --channel <channel>     the channel to start with: slack (the default), discord or teams
+  --channel <channel>     the channel to start with (default: slack):
+                          ${CHANNEL_LINES}
   --project <id>          your Voiceflow project's ID, written to .env.local
   --environment <alias>   the Voiceflow environment the bot talks to (default: development)
   --pm <manager>          the package manager to install with: npm, pnpm, yarn or bun
@@ -154,9 +169,9 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
     err(`One name at a time: got ${positionals.join(', ')}.`);
     return 2;
   }
-  if (!(CHANNELS as readonly string[]).includes(o.channel)) {
+  if (!CHANNELS.includes(o.channel)) {
     err(
-      `There's no starter for "${o.channel}" yet: there is one for ${CHANNEL_LIST}. Any other Chat SDK adapter works with the core by hand: https://github.com/voiceflow/channels-sdk/blob/main/docs/how-it-works.md#any-chat-sdk-adapter`,
+      `There's no starter for "${o.channel}": there is one for ${CHANNEL_LIST}. Any other Chat SDK adapter works with the core by hand: https://github.com/voiceflow/channels-sdk/blob/main/docs/how-it-works.md#any-chat-sdk-adapter`,
     );
     return 2;
   }
@@ -197,7 +212,7 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
 
   const pm = (o.pm as PackageManager | undefined) ?? packageManagerOf(env.npm_config_user_agent);
   const environment = o.environment ?? 'development';
-  const starter = STARTERS[o.channel as (typeof CHANNELS)[number]];
+  const starter = starterOf(o.channel);
   const TEMPLATE = new URL(`${o.channel}/`, TEMPLATES);
   const app = JSON.parse(await readFile(new URL('app.json', TEMPLATE), 'utf8')) as {
     dependencies: Record<string, string>;

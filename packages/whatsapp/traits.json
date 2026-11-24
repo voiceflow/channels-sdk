@@ -1,0 +1,22 @@
+{
+  "maxTextLength": 4000,
+  "notes": ["**A button's label** longer than 20 characters is cut short by the adapter, with an ellipsis. The click still sends the whole choice."],
+  "settings": [
+    {
+      "key": "WHATSAPP_VERIFY_TOKEN",
+      "description": "The token Meta sends back when it checks your server's address: any text of your own, entered as the webhook's Verify token.",
+      "make": true
+    }
+  ],
+  "addressGoes": "the Meta app's dashboard → WhatsApp → Configuration → Callback URL, with WHATSAPP_VERIFY_TOKEN as the Verify token, subscribed to messages",
+  "capabilities": {
+    "maxButtons": 3
+  },
+  "why": {
+    "maxTextLength": "WhatsApp refuses a text of more than 4,096 characters. The adapter splits a longer one itself (WHATSAPP_MESSAGE_LIMIT), but only at a line break: text with none is cut at the 4,096th character, through the middle of a word. 4,000 is within the limit, so the cut is made here, where the text breaks.",
+    "notes": "truncateWithEllipsis(btn.label, MAX_BUTTON_TITLE_LENGTH).",
+    "settings": "The verify token is the caller's own choice: Meta is given it with the address, and sends it back in the GET it checks the address with (hub.verify_token), which the adapter compares with this setting.",
+    "addressGoes": "The adapter makes no call that registers the webhook: a person enters the address and the verify token on Meta's page, and Meta checks it with a GET the adapter answers, so the server has to be running.",
+    "capabilities": "WhatsApp shows three reply buttons on a message. The adapter sends the first three and drops the rest, and says nothing (extractReplyButtons: buttons.slice(0, MAX_REPLY_BUTTONS))."
+  }
+}

@@ -146,6 +146,8 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
   const client = createVoiceflowClient(options.voiceflow);
   const extensions = new Map((options.extensions ?? []).map((e) => [e.slug, e]));
   const extensionOf = (thread: AnyThread) => extensions.get(thread.adapter.name);
+  /** What the thread's platform can show: the catalog's word, and the channel's own where it knows better. */
+  const capsOf = (thread: AnyThread): ChannelCapabilities => ({ ...capabilitiesOf(thread), ...extensionOf(thread)?.capabilities });
   let attached: Chat<any, any> | undefined;
   if (typeof options.toolSecret === 'string' && options.toolSecret.length < 32) throw new TypeError('`toolSecret` must be 32 or more random characters.');
   if (options.approvalTimeoutMs !== undefined && !(options.approvalTimeoutMs > 0)) throw new TypeError('`approvalTimeoutMs` must be more than 0.');
@@ -181,7 +183,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
     requireApproval: options.requireApproval,
     approvalTtlMs: options.approvalTimeoutMs,
     bot: () => attached,
-    capabilities: capabilitiesOf,
+    capabilities: capsOf,
     report,
   });
 
@@ -208,7 +210,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
   /** Shows a turn's messages again without their buttons. Never throws: a failed edit is reported. */
   async function retire(ctx: TurnContext, messages: readonly ShownMessage[], picked: number | null): Promise<void> {
     const { thread } = ctx;
-    const caps = capabilitiesOf(thread);
+    const caps = capsOf(thread);
     for (const message of messages) {
       try {
         await thread.adapter.editMessage(thread.id, message.messageId, retired(message, picked, caps) as AdapterPostableMessage);
@@ -224,7 +226,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
    */
   async function runTurn(ctx: TurnContext, action: VoiceflowAction, { pin, picked }: { pin?: PinPrompts; picked?: number } = {}): Promise<void> {
     const { thread } = ctx;
-    const caps = capabilitiesOf(thread);
+    const caps = capsOf(thread);
     const extension = extensionOf(thread);
     let retiring: Promise<void> = Promise.resolve();
     let turnId: string | undefined;
@@ -271,6 +273,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
         onRefused: (error) => report(new ChannelsError('post_refused', 'The channel refused a post; its text form was sent instead.', { cause: error }), ctx),
         ...(extension?.maxTextLength ? { maxText: extension.maxTextLength, measureText: measureOf(thread) } : {}),
         ...(extension?.text ? { shapeText: (markdown: string) => extension.text!(markdown) } : {}),
+        ...(extension?.plainText ? { plain: true } : {}),
       };
       const custom = (type: string) => type in traces;
 
@@ -309,7 +312,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
     async reply(thread, message) {
       const text = withoutBotMention(message.text ?? '', thread.adapter, options.userName);
       // Where a channel has no buttons, a request for approval is answered in words.
-      if (!capabilitiesOf(thread).buttons && (await toolServer.typed(thread, message.author?.userId, text))) return;
+      if (!capsOf(thread).buttons && (await toolServer.typed(thread, message.author?.userId, text))) return;
       const state = await readState(thread);
       const picked = state.choices?.length ? matchTypedChoice(text, state.choices) : null;
       await runTurn(
@@ -355,10 +358,19 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
       attached = bot;
       // A direct message with no DM handler counts as a mention, so this covers DMs too.
       bot.onNewMention(async (thread, message) => {
-        await thread.subscribe();
+        // Where a conversation is a whole room, the bot answers a mention and doesn't go on to answer everyone in it.
+        if (extensionOf(thread)?.follow !== false) await thread.subscribe();
         await agent.reply(thread, message);
       });
-      bot.onSubscribedMessage((thread, message) => agent.reply(thread, message));
+      bot.onSubscribedMessage(async (thread, message) => {
+        // A conversation followed before the channel was told not to follow: it is let go, and from then on only
+        // what is said to the bot is answered there, as in one it never followed.
+        if (extensionOf(thread)?.follow === false) {
+          await thread.unsubscribe().catch(() => {});
+          if (!message.isMention && !thread.isDM) return;
+        }
+        await agent.reply(thread, message);
+      });
       bot.onAction((event) => agent.choose(event));
       for (const extension of extensions.values()) extension.attach?.(bot, host(extension));
     },

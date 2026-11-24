@@ -2,7 +2,7 @@
   "name": "@voiceflow/channels-slack",
   "version": "0.0.0",
   "private": true,
-  "description": "A Voiceflow agent in Slack at full fidelity: Slack's native features, and Slack's tools installed on the agent.",
+  "description": "A Voiceflow agent in Slack: Slack's native features, and Slack's tools installed on the agent.",
   "keywords": [
     "voiceflow",
     "slack",

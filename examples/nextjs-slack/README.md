@@ -1,6 +1,6 @@
 # Voiceflow in Slack, on Next.js
 
-A Voiceflow agent in Slack at full fidelity, served by one Next.js route:
+A Voiceflow agent in Slack, with everything Slack has, served by one Next.js route:
 [`app/api/slack/route.ts`](app/api/slack/route.ts). Mentions, direct messages,
 the assistant panel, buttons, forms and `/ask` all arrive there.
 

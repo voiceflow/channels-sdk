@@ -47,6 +47,10 @@
       "types": "./dist/setup.d.ts",
       "import": "./dist/setup.js"
     },
+    "./connect": {
+      "types": "./dist/connect.d.ts",
+      "import": "./dist/connect.js"
+    },
     "./dev": {
       "types": "./dist/dev.d.ts",
       "import": "./dist/dev.js"

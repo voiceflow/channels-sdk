@@ -1,8 +1,8 @@
 # Build, typecheck and test every package on each supported Node version and
 # against the oldest Chat SDK the packages support; lint; make an app with the
 # starter from the packed packages and run it; and check that a pull request
-# changing a package says how in a changeset. The tests run against fakes of
-# Slack and Voiceflow: no secrets, no network beyond npm's registry. "all
+# changing a package says how in a changeset. The tests run against stand-ins
+# for each platform and for Voiceflow: no secrets, no network beyond npm's registry. "all
 # checks" passes only when every job does: it's the one check branch
 # protection requires.
 name: ci
@@ -73,6 +73,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      # The channel packages written from one template are as the template writes them.
+      - run: node scripts/channels.mjs --check
 
   oldest-chat:
     name: oldest chat
@@ -90,15 +92,18 @@ jobs:
         run: |
           floor=$(node -p "require('./packages/core/package.json').peerDependencies.chat.match(/>=\s*([\d.]+)/)[1]")
           echo "Chat SDK $floor"
-          npm install --no-save --no-audit --no-fund "chat@$floor" "@chat-adapter/catalog@$floor" "@chat-adapter/slack@$floor" "@chat-adapter/discord@$floor" "@chat-adapter/teams@$floor" "@chat-adapter/state-memory@$floor"
-      - run: npm run build -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w @voiceflow/channels-discord -w @voiceflow/channels-teams
-      - run: npm run typecheck -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w @voiceflow/channels-discord -w @voiceflow/channels-teams
-      - run: npm test -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w @voiceflow/channels-discord -w @voiceflow/channels-teams
+          # Chat SDK itself and every adapter this repository is tested with, each at the floor.
+          npm install --no-save --no-audit --no-fund $(node -p "Object.keys(require('./package.json').devDependencies).filter((name) => name === 'chat' || name.startsWith('@chat-adapter/')).map((name) => name + '@$floor').join(' ')")
+          # The core and every channel's package: not the starter or the examples, which pin the newest.
+          echo "PACKAGES=$(node -p "require('./package.json').workspaces.filter((dir) => dir.startsWith('packages/') && dir !== 'packages/create').map((dir) => '-w ' + dir).join(' ')")" >> "$GITHUB_ENV"
+      - run: npm run build $PACKAGES
+      - run: npm run typecheck $PACKAGES
+      - run: npm test $PACKAGES
 
   starter:
     name: starter
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -106,9 +111,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run build -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w @voiceflow/channels-discord -w @voiceflow/channels-teams -w create-voiceflow-channels
+      - run: npm run build $(node -p "require('./package.json').workspaces.filter((dir) => dir.startsWith('packages/')).map((dir) => '-w ' + dir).join(' ')")
       # Each app installs the packages as npm would deliver them, builds, and answers a request signed as its channel signs one.
-      - name: The starter makes apps that install, build and answer Slack, Discord and Teams
+      - name: The starter makes apps that install, build and answer their channels
         run: node packages/create/scripts/smoke.mjs
 
   all-checks:

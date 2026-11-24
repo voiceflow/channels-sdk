@@ -1,0 +1,12 @@
+{
+  "maxTextLength": 1500,
+  "addressGoes": "Console → Phone Numbers → Active numbers → your number → A message comes in",
+  "plainText": true,
+  "notes": ["**A picture with no words** is not passed on: the adapter takes a message with an empty body for a delivery report."],
+  "why": {
+    "maxTextLength": "Twilio refuses a body of more than 1,600 characters (error 21617), and the adapter cuts a longer one short before sending it and says nothing (TWILIO_MESSAGE_LIMIT). 1,500 is within that, with room.",
+    "addressGoes": "A number's webhook is set on the number's own page in the Twilio Console, as a webhook by HTTP POST. Twilio's API can set it too (the number's SmsUrl), so a command could: none does yet.",
+    "plainText": "A text message shows text as it is typed. The adapter sends Markdown as its source, so a person would read **Plan A** and [link](url).",
+    "notes": "chunk-V6VOK4O2.js: an inbound message with an empty Body and SmsStatus=received is handled as a status callback."
+  }
+}

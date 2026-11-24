@@ -1,0 +1,69 @@
+{
+  "name": "@voiceflow/channels-telegram",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Voiceflow agent in Telegram, with one command to set it up.",
+  "keywords": [
+    "voiceflow",
+    "telegram",
+    "chat-sdk",
+    "vercel-chat",
+    "chatbot",
+    "bot",
+    "ai-agent",
+    "conversational-ai"
+  ],
+  "author": "Braden Ream",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voiceflow/channels-sdk.git",
+    "directory": "packages/telegram"
+  },
+  "homepage": "https://github.com/voiceflow/channels-sdk/tree/main/packages/telegram#readme",
+  "bugs": {
+    "url": "https://github.com/voiceflow/channels-sdk/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./connect": {
+      "types": "./dist/connect/index.d.ts",
+      "import": "./dist/connect/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@voiceflow/channels-sdk": "0.0.0"
+  },
+  "peerDependencies": {
+    "chat": ">=4.44.0 <5",
+    "@chat-adapter/catalog": ">=4.44.0 <5",
+    "@chat-adapter/telegram": ">=4.44.0 <5",
+    "@chat-adapter/state-memory": ">=4.44.0 <5"
+  },
+  "peerDependenciesMeta": {
+    "@chat-adapter/state-memory": {
+      "optional": true
+    }
+  }
+}

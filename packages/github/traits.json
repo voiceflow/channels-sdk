@@ -1,0 +1,22 @@
+{
+  "maxTextLength": 65000,
+  "addressGoes": "the repository's Settings → Webhooks → Add webhook, with content type application/json and GITHUB_WEBHOOK_SECRET from your env file as its Secret, or the GitHub App's Webhook URL and secret",
+  "settings": [
+    {
+      "key": "GITHUB_BOT_USERNAME",
+      "description": "The bot's GitHub username, as people @mention it: the account the token is for, or the GitHub App's name with [bot]."
+    },
+    {
+      "key": "GITHUB_WEBHOOK_SECRET",
+      "description": "The secret GitHub signs each request with: any text of your own, entered as the webhook's Secret.",
+      "make": true
+    }
+  ],
+  "notes": ["**Each reply is a comment of its own** on the issue or pull request."],
+  "why": {
+    "maxTextLength": "GitHub refuses a comment longer than 65,536 characters (422, \"Body is too long\"), and the adapter sends a reply whole whatever its length. 65,000 is within it.",
+    "addressGoes": "The adapter never gives GitHub the address. With a personal access token it is a webhook on the repository or organization, with the secret and the events Issue comments and Pull request review comments; a GitHub App has one Webhook URL in its own settings. The default content type, form-encoded, is one the adapter can't read.",
+    "settings": "The adapter answers only a comment that mentions its userName, which is GITHUB_BOT_USERNAME or else the made-up github-bot: it never reads the account's login from GitHub. The webhook secret is the caller's own choice, typed into the webhook's form.",
+    "notes": "postMessage creates a comment per post."
+  }
+}

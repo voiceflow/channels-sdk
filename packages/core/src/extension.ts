@@ -5,6 +5,7 @@
 // package (@voiceflow/channels-slack, …) ships one; the core knows none.
 import type { Chat, Message, SentMessage, Thread } from 'chat';
 import type { Feedback } from './agent.js';
+import type { ChannelCapabilities } from './catalog.js';
 import type { Post } from './render.js';
 import type { ServerTool } from './server-tools.js';
 import type { Choice } from './translate.js';
@@ -82,6 +83,26 @@ export interface ChannelExtension {
    * on a conversation's first turn (where earlier messages can be caught up).
    */
   input?(text: string, ctx: TurnContext & { isNew: boolean }): string | Promise<string>;
+  /**
+   * What the platform can show, where the channel's package knows it better
+   * than Chat SDK's catalog does: buttons the catalog is unsure of that work
+   * (Telegram's), buttons that don't (`buttons: false`), or the most a
+   * message shows before the adapter drops the rest (`maxButtons`; WhatsApp:
+   * three). Each one given here is used in place of the catalog's.
+   */
+  readonly capabilities?: Partial<ChannelCapabilities>;
+  /**
+   * True where the platform shows text as it is typed (a text message,
+   * Messenger): the agent's Markdown is then sent as plain words, a list still
+   * numbered and a link's address written out.
+   */
+  readonly plainText?: boolean;
+  /**
+   * Whether the bot goes on answering a conversation it was mentioned in,
+   * without being mentioned again. Default: `true`. `false` where a
+   * conversation is a whole room, and everyone in it would be answered.
+   */
+  readonly follow?: boolean;
   /**
    * Rewrites the agent's text into what the platform shows, before it is
    * posted: a message of text alone, whole (not one being streamed). Teams

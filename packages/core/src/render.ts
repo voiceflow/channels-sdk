@@ -88,7 +88,9 @@ export function createRenderer(caps: ChannelCapabilities, options: RenderOptions
   const firstOf = (offered: Offered) => offered[0]?.index ?? choices.length;
 
   // A link the channel can't attach to a button would be lost, so a group with one goes as text.
-  const canButton = (list: readonly Choice[]) => caps.buttons && (caps.linkButtons || list.every((c) => !c.url));
+  // And where the platform shows only so many buttons, a longer list goes as text: the rest would be dropped unseen.
+  const canButton = (list: readonly Choice[]) =>
+    caps.buttons && (caps.linkButtons || list.every((c) => !c.url)) && (caps.maxButtons === undefined || list.length <= caps.maxButtons);
   // A long list is a menu where the channel has one. A menu can't open a link, so a list with one keeps its buttons.
   const asMenu = (list: readonly Choice[]) => caps.selectMenus && list.length > (options.maxButtons ?? DEFAULT_MAX_BUTTONS) && list.every((c) => !c.url);
 

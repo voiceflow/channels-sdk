@@ -1,5 +1,5 @@
 // The one-call setup: a Chat SDK bot with the named channels, answered by a
-// Voiceflow agent. Every adapter comes from the catalog (tier 1); a channel
+// Voiceflow agent. Every adapter comes from Chat SDK's catalog; a channel's
 // package (`slack()` from @voiceflow/channels-slack) adds its extension.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { type Adapter, Chat, type ChatConfig, type StateAdapter, type WebhookOptions } from 'chat';
@@ -58,7 +58,9 @@ export async function createChannels(options: ChannelsOptions): Promise<Channels
   for (const spec of options.channels) {
     const { slug, options: adapterOptions, adapter, module, extension } = typeof spec === 'string' ? { slug: spec } : (spec as Extract<ChannelSpec, object>);
     // The channel's defaults sit under the caller's own options; with neither, the adapter reads its env vars.
-    const merged = extension?.adapterDefaults ? { ...extension.adapterDefaults, ...adapterOptions } : adapterOptions;
+    // An option the caller left undefined is one they didn't set: it takes no default away.
+    const set = Object.fromEntries(Object.entries(adapterOptions ?? {}).filter(([, value]) => value !== undefined));
+    const merged = extension?.adapterDefaults ? { ...extension.adapterDefaults, ...set } : adapterOptions;
     adapters[slug] = adapter ?? (await loadAdapter(slug, { options: merged, module, importer: options.importer }));
     if (extension) extensions.push(extension);
   }

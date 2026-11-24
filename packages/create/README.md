@@ -1,6 +1,7 @@
 # create-voiceflow-channels
 
-Start a Voiceflow agent in Slack, Discord or Microsoft Teams with one command.
+Start a Voiceflow agent in Slack, Discord, Microsoft Teams or any other
+channel with one command.
 
 > **Status:** pre-release, local only. Not published. The package name is not final.
 
@@ -33,7 +34,10 @@ which this repository builds on every change. With `--channel discord` it is
 calls, a second route that keeps a deployed bot connected, and its schedule.
 Its README and `AGENTS.md` have Discord's own steps. With `--channel teams`
 it is [`examples/nextjs-teams`](../../examples/nextjs-teams): the route Teams
-calls, with Teams' own steps.
+calls, with Teams' own steps. Every other channel
+(`--channel telegram`, `--channel whatsapp`, …) gets the app in
+[`examples/nextjs-telegram`](../../examples/nextjs-telegram) with its own
+name, package and settings in, and its own steps.
 
 ## After it runs
 
@@ -55,7 +59,7 @@ The new app's README has each step in full.
 | Option | What it does |
 |---|---|
 | `[name]` | The app's folder, and its name. Default: `my-bot`. |
-| `--channel <channel>` | The channel to start with: `slack` (the default), `discord` or `teams`. |
+| `--channel <channel>` | The channel to start with: `slack` (the default), or any channel in the [table of channels](../../README.md#channels), by its package's name: `discord`, `teams`, `telegram`, `whatsapp`, … |
 | `--project <id>` | Your Voiceflow project's ID, written to `.env.local`. |
 | `--environment <alias>` | The Voiceflow environment the bot talks to. Default: `development`. |
 | `--pm <manager>` | Install with `npm`, `pnpm`, `yarn` or `bun`. Default: the one that ran this. |

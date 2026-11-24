@@ -1,5 +1,5 @@
-// Tier 1: build any catalog adapter without platform code. The catalog names
-// the package and its factory; the adapter reads its own env vars (the ones
+// Builds any adapter in Chat SDK's catalog. The catalog names the package
+// and its factory; the adapter reads its own env vars (the ones
 // the catalog lists) when no options are given, so a self-hosted bot needs
 // nothing but those env vars set.
 import type { Adapter } from 'chat';
@@ -28,7 +28,8 @@ export async function loadAdapter(slug: string, { options, module, importer = de
   const entry = platformEntry(slug);
   let mod: Record<string, unknown>;
   try {
-    mod = module ?? (await importer(entry.packageName));
+    // An adapter can live at a path within a package that holds another's (X Chat, in X's): the catalog says where.
+    mod = module ?? (await importer((entry as { importPath?: string }).importPath ?? entry.packageName));
   } catch (cause) {
     throw new ChannelsError(
       'adapter_not_installed',

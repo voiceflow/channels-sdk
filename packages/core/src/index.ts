@@ -7,6 +7,7 @@ export {
   withoutBotMention,
 } from './agent.js';
 export { type ChannelCapabilities, capabilities, credentialVars, listChannels, platformEntry, secretVars } from './catalog.js';
+export { type ChannelOptions, type ChannelTraits, channel, contextVariables, createChannelExtension } from './channel.js';
 export { type ChannelSpec, type Channels, type ChannelsOptions, createChannels } from './channels.js';
 export {
   type CustomTrace,
@@ -29,6 +30,7 @@ export type {
 } from './extension.js';
 export { type Importer, type LoadAdapterOptions, loadAdapter } from './loader.js';
 export { mintPass, type PassClaims, passKey, readPass } from './pass.js';
+export { toPlain } from './plain.js';
 export { createRedactor, type Redactor, redact } from './redact.js';
 export {
   type ButtonsShown,
@@ -62,7 +64,7 @@ export {
   type ToolResult,
   type ToolTurn,
 } from './server-tools.js';
-export { type Measure, splitMarkdown } from './split.js';
+export { type Measure, splitMarkdown, splitText } from './split.js';
 export { APPROVE_ACTION, type ApprovalPolicy, CANCEL_ACTION, isToolCall, MAX_APPROVAL_TEXT } from './tool-server.js';
 export { DEFAULT_PATHS, functionSource, requirementsOf, type ToolDefinition, type ToolInput, type ToolSet } from './tools.js';
 export { type CardData, type Choice, type Reply, type Source, sourcesOf, type TranslateOptions, type Translation, translate } from './translate.js';

@@ -1,0 +1,8 @@
+{
+  "maxTextLength": 950000,
+  "addressGoes": "the project's or group's Settings → Webhooks → Add new webhook → URL, with the Comments trigger",
+  "why": {
+    "maxTextLength": "The adapter sends a comment's text whole, whatever its length (postMessage), and GitLab refuses a comment over 1,000,000 characters, so the whole reply would be lost. A reply is measured as Chat SDK would write its markdown (renderFormatted) but sent as the agent wrote it (renderPostable), which can be a little longer: 950,000 leaves room for that.",
+    "addressGoes": "The adapter makes no call that registers a webhook. Its README has it done on GitLab's page for the project or group, with the Comments trigger. GitLab's API can add one (POST /projects/:id/hooks, with url and note_events), but it needs the project's ID, which is not one of the adapter's settings."
+  }
+}
