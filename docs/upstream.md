@@ -51,7 +51,9 @@ stays compatible as upstream ships.
    An image goes as a card's own image (`Card({ imageUrl })`), the way a card with a picture
    does: Discord's adapter drops an image inside a card. And a channel's extension can say
    the longest text its platform shows (`maxTextLength`): a longer reply goes as several
-   messages (`packages/core/src/split.ts`), counted as the adapter formats it.
+   messages (`packages/core/src/split.ts`), counted as the adapter formats it. It can also
+   put a text reply into what its platform shows before it's sent (`text`): Teams has no
+   headings, so its package makes each a bold line.
 5. `streaming` (`packages/core/src/deliver.ts`): a full `yes` streams the turn from
    `/v4/interact/stream` into one live message, `markdown_text` chunks for text and a
    `task_update` chunk per tool call. Anything else posts whole replies from
@@ -218,6 +220,69 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       A bot can be given a name and a picture through the API, and an application an icon; an
       application's name can't (Discord answers 200 and leaves it), so the name on the page
       that adds the bot is the one typed in the portal.
+  - **Teams (`@chat-adapter/teams` 4.45.0), found building `@voiceflow/channels-teams` and
+    running it in Teams itself (2026-11-23, a new Microsoft 365 trial organization):**
+    - **A failed call is logged with the bot's access token.** `Teams API: send failed` is
+      logged with the error the adapter caught, which is its HTTP client's: the whole request
+      rides on it, `Authorization: Bearer …` included, with a stack of some sixty lines. A
+      test here proves it with the Chat SDK's own console logger
+      (`packages/teams/test/teams.contract.test.mjs`). This package's logger prints the
+      error's name, message, status and what Teams answered (`packages/teams/src/log.ts`).
+      Ask for the request to be left out at the source. Report it privately first.
+    - The adapter always passes `skipAuth` to Microsoft's SDK, which prints
+      `[DEPRECATED] skipAuth is deprecated. Use dangerouslyAllowUnauthenticatedRequests
+      instead.` on every start. And it doesn't hand its `logger` to the SDK, so the SDK's own
+      lines (a request with no token, a token it refuses with a stack) go to the console
+      whatever logger the adapter is given: only `LOG_LEVEL` in the environment reaches
+      them. Ask for the option to be passed only when set, and for the logger to be passed on.
+    - The bot's own mention is taken out of a message only when the adapter's `userName` is
+      the bot's display name, which a server doesn't know. Teams says which mention is the
+      bot's (the entity whose `mentioned.id` is the activity's recipient) and under what
+      words: this package takes it out by that (`withoutOwnMention`,
+      `packages/teams/src/text.ts`). Ask for the adapter to do the same.
+    - A heading is sent as its words alone, and `~~struck~~` as written, which Teams shows
+      as plain text. This package makes a heading a bold line (`forTeams`); strikethrough
+      is left. Ask for both in the adapter's converter.
+    - No limit on a message's size. Teams refused one of 110,000 characters whole (HTTP
+      413), and the person got the apology in place of the answer; 60,000 went through.
+      Microsoft documents about 28 KB. The core sends a long reply as several messages
+      (`maxTextLength`, 20,000 for Teams). Ask for the adapter to split, or to say its limit.
+    - The sender lookup (`getMemberById`) goes to the activity's `serviceUrl`, not to
+      `apiUrl`, so a test that only sets `apiUrl` reaches Microsoft. The stand-in here puts
+      itself in each activity's `serviceUrl` (`packages/teams/test/helpers/fake-teams.mjs`),
+      and the tests fail if anything is reached beyond this machine.
+    - `getUser` asks Microsoft Graph (`/users/{id}`), which a bot may not read without an
+      admin's consent, where the sender of a message is looked up through the conversation's
+      members, which needs none. So a click by someone the bot has had no message from has no
+      name or email (`teams_user_name` is empty), and each such person costs one refused call.
+      Ask for `getUser` to try the members API first.
+    - A file (`files: [{ data, filename, mimeType }]`) is sent as a data URI, which Teams
+      refused with 400 in a chat and in a channel. The core sends no files today. Not looked
+      into further.
+    - `adapter.stream` outside a turn posts once at the end; `app` (Microsoft's SDK) is
+      protected, so there is no public way to its client.
+    - **Settled by that run:** a bot Microsoft's command makes with no Azure account
+      ("Teams-managed") sends and receives; `teams login` asked the organization's admin for
+      no consent (a non-admin is untried); `teams app update --endpoint` takes effect for an
+      app already added, in about twenty seconds, with no reinstall, though the command says
+      `needsReinstall`; choices as an Adaptive Card of buttons alone render; a click arrives
+      as a message with a `value`; a 25-second turn is answered once; reactions, edits and
+      targeted ("only you can see this") messages work; with `ChannelMessage.Read.Group` in
+      the manifest before the first install, a thread's replies arrive with no mention, no
+      extra consent was asked of the team's owner, and Graph thread history reads (200).
+    - **Not ours, and worth knowing when it's reported:** custom app upload was off in the
+      new organization (`teams status --json` says so, and connect stops with where an admin
+      turns it on). A permission added AFTER the app was first installed made Teams refuse to
+      add it again ("AppDefinitionDoesntExist"), three times, with the app removed from
+      everywhere first: so connect sets everything as it makes the app, and never changes an
+      app's permissions afterwards. Microsoft's command takes an icon only at exactly 192 by
+      192 pixels (`packages/teams/src/connect/icon.ts` makes one). Each `--endpoint` update
+      adds the new host to the manifest's `validDomains` and keeps the old ones: a long-lived
+      development app's list grows by one per `dev` start. Seventeen were taken when tried, and
+      `teams app manifest update <id> --set-json 'validDomains=["*.botframework.com"]' --yes`
+      empties it, should it ever be refused. The install link opens "use the desktop app" first,
+      every time. Microsoft's app secrets have a `~` in them, which the core's env-file
+      writer refused until it was taught where a `~` is safe (`BARE`, `packages/core/src/setup.ts`).
 - **Chat SDK's own agent tools** (`createChatTools`, in `chat/ai`). They run in
   the app with the bot's access, are confined to the conversation being handled
   (`scope`), and ask for approval before writes. Our server tools follow the same
@@ -258,7 +323,7 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 
 - [x] License: MIT (matches Chat SDK)
 - [ ] Reserve `@voiceflow/channels-sdk`, `@voiceflow/channels-slack`,
-      `@voiceflow/channels-discord` and `create-voiceflow-channels` on npm. And `voiceflow-channels`, the
+      `@voiceflow/channels-discord`, `@voiceflow/channels-teams` and `create-voiceflow-channels` on npm. And `voiceflow-channels`, the
       command's own name: `npx voiceflow-channels` run where the core isn't
       installed looks that name up on npm, and nobody owns it
 - [x] A starter (2026-11-23): `npm create voiceflow-channels@latest` makes the
@@ -299,6 +364,16 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       channel's connect module can export `listen` for that. What every
       channel's command shares moved into the core
       (`@voiceflow/channels-sdk/setup`). The starter takes `--channel discord`
+- [x] A third channel (2026-11-23): Microsoft Teams. Its package adds
+      `teams_*` variables, takes the bot's mention out of what people write,
+      and keeps a failed call's access token out of the log. `connect teams`
+      runs Microsoft's own Teams command, so it needs a Microsoft 365 sign-in
+      and no Azure account; what it can't do (an admin allowing custom apps,
+      the click on Add) it says. The core gained a way for a channel to
+      reshape text before it's sent (`text`). The starter takes
+      `--channel teams`. Run in Teams itself the same day: a bot made by
+      `connect`, started with `dev`, answering a chat, a mention and a
+      thread's replies
 - [x] Discord, run in Discord itself (2026-11-23): a new application, `connect`,
       `dev` through a tunnel, then a mention and its thread, a follow-up with no
       mention, a direct message, buttons and a click, and `/ask`. Two things

@@ -270,6 +270,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
         onButtons: caps.editMessages ? (message) => shown.push(message) : undefined,
         onRefused: (error) => report(new ChannelsError('post_refused', 'The channel refused a post; its text form was sent instead.', { cause: error }), ctx),
         ...(extension?.maxTextLength ? { maxText: extension.maxTextLength, measureText: measureOf(thread) } : {}),
+        ...(extension?.text ? { shapeText: (markdown: string) => extension.text!(markdown) } : {}),
       };
       const custom = (type: string) => type in traces;
 

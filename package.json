@@ -20,6 +20,7 @@
     "packages/core",
     "packages/slack",
     "packages/discord",
+    "packages/teams",
     "packages/create",
     "examples/*"
   ],
@@ -41,6 +42,7 @@
     "@chat-adapter/discord": "4.45.0",
     "@chat-adapter/slack": "4.45.0",
     "@chat-adapter/state-memory": "4.45.0",
+    "@chat-adapter/teams": "4.45.0",
     "@types/node": "22.20.5",
     "chat": "4.45.0",
     "typescript": "5.9.3"

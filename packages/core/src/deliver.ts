@@ -32,6 +32,8 @@ export interface DeliveryOptions extends RenderOptions {
   maxText?: number;
   /** How long a text is as the channel counts it. Default: its characters. */
   measureText?: Measure;
+  /** Rewrites a text post into what the channel shows, before it is measured and sent. */
+  shapeText?: (markdown: string) => string;
 }
 
 /** What a custom trace's handler can do in the turn: post below what's shown, or close the streamed message. */
@@ -53,14 +55,18 @@ function plainText(post: Post): string | null {
 }
 
 /**
- * Posts a post. Text longer than the channel shows in one message goes as several, in order: some adapters cut
- * a long message short and say nothing, and the end of an answer would be lost. Returns the last message sent.
+ * Posts a post. Text is first put into what the channel shows (`shapeText`). Text longer than the channel shows
+ * in one message goes as several, in order: some adapters cut a long message short and say nothing, and the end
+ * of an answer would be lost. Returns the last message sent.
  */
 async function postFitting(thread: AnyThread, post: Post, options: DeliveryOptions): Promise<SentMessage> {
-  const text = options.maxText ? plainText(post) : null;
-  if (text === null) return thread.post(post);
-  const parts = splitMarkdown(text, options.maxText!, options.measureText);
-  if (parts.length === 1) return thread.post(post);
+  const written = options.maxText || options.shapeText ? plainText(post) : null;
+  if (written === null) return thread.post(post);
+  const text = options.shapeText ? options.shapeText(written) : written;
+  const whole: Post = text === written ? post : { markdown: text };
+  if (!options.maxText) return thread.post(whole);
+  const parts = splitMarkdown(text, options.maxText, options.measureText);
+  if (parts.length === 1) return thread.post(whole);
   let sent!: SentMessage;
   for (const markdown of parts) sent = await thread.post({ markdown });
   return sent;

@@ -220,7 +220,7 @@ test('a name that can be a package, or the default: a person is asked, a script 
 
 test('a mistake in the command is an answer and an exit code, with nothing written', async () => {
   for (const [argv, said] of [
-    [['my-bot', '--channel', 'teams'], /There's no starter for "teams" yet/],
+    [['my-bot', '--channel', 'whatsapp'], /There's no starter for "whatsapp" yet/],
     [['my-bot', '--pm', 'pip'], /--pm is one of npm, pnpm, yarn, bun, not "pip"/],
     [['my-bot', '--project', 'abc\nSLACK_BOT_TOKEN=x'], /--project is letters, digits/],
     [['my-bot', '--environment', '$(rm -rf ~)'], /--environment is letters, digits/],
@@ -356,8 +356,81 @@ test("the Discord app carries its own notes: the token is the person's to copy, 
   assert.doesNotMatch(readme, /Slack|slack/);
 });
 
+const TEAMS_EXAMPLE = new URL('../../../examples/nextjs-teams/', import.meta.url);
+
+test('--channel teams makes the Teams app: its route, its env file, and its own steps', async () => {
+  const { code, out, err, app } = await start(['my-bot', '--channel', 'teams']);
+  assert.equal(code, 0, err);
+  assert.deepEqual(await tree(app), [
+    '.env.example',
+    '.env.local',
+    '.gitignore',
+    'AGENTS.md',
+    'CLAUDE.md',
+    'README.md',
+    'app/api/teams/bot.ts',
+    'app/api/teams/route.ts',
+    'app/layout.tsx',
+    'app/page.tsx',
+    'next.config.ts',
+    'package.json',
+    'tsconfig.json',
+  ]);
+  // One copy of the app: the example, which CI builds.
+  for (const path of ['app/api/teams/bot.ts', 'app/api/teams/route.ts', 'next.config.ts']) {
+    assert.equal(await read(app, path), await readFile(new URL(path, TEAMS_EXAMPLE), 'utf8'), path);
+  }
+  const pkg = JSON.parse(await read(app, 'package.json'));
+  assert.equal(pkg.description, 'A Voiceflow agent in Microsoft Teams, served by a Next.js route.');
+  assert.equal(pkg.scripts.connect, 'voiceflow-channels connect teams --env-file .env.local');
+  assert.equal(pkg.scripts.dev, 'voiceflow-channels dev --env-file .env.local -- next dev');
+  assert.ok(pkg.dependencies['@voiceflow/channels-teams'] && pkg.dependencies['@chat-adapter/teams']);
+  assert.ok(!Object.keys(pkg.dependencies).some((dep) => /slack|discord/.test(dep)), 'a Teams app depends on nothing of Slack or Discord');
+
+  // One command: the first time, dev sets Teams up before it starts.
+  assert.match(out, /Created my-bot: a Voiceflow agent in Microsoft Teams/);
+  assert.match(out, /Start it:\n {7}npm run dev\n {5}The first time, it sets Teams up before it starts\./);
+  assert.match(out, /sign in to Microsoft 365, with\n {5}the account you use Teams with: no Azure account is needed\./);
+  assert.match(out, /opens the page that adds it in Teams:\n {5}click Add there\./);
+  assert.match(out, /\(npm run connect does the setting up alone\.\)/);
+  assert.doesNotMatch(out, /Slack|Discord/);
+
+  // The env file names what the server needs, with nothing in it.
+  const env = await read(app, '.env.local');
+  for (const name of ['TEAMS_APP_ID', 'TEAMS_APP_PASSWORD', 'TEAMS_APP_TENANT_ID', 'VOICEFLOW_API_KEY']) assert.match(env, new RegExp(`^${name}=$`, 'm'));
+  assert.doesNotMatch(env, /SLACK|DISCORD/);
+  assert.equal((await stat(join(app, '.env.local'))).mode & 0o777, 0o600);
+});
+
+test("the Teams app carries its own notes: the sign-in and the click are the person's, and the app is never changed by hand", async () => {
+  const { app } = await start(['my-bot', '--channel', 'teams', '--pm', 'pnpm', '--environment', 'staging']);
+  const notes = await read(app, 'AGENTS.md');
+  assert.equal(await read(app, 'CLAUDE.md'), '@AGENTS.md\n');
+  assert.match(notes, /`pnpm connect --dry-run`/);
+  assert.match(notes, /`pnpm connect --yes`/);
+  assert.match(notes, /`pnpm dev`, as a background process/);
+  assert.match(notes, /it stops with code 3: nobody is signed in to Microsoft 365/);
+  assert.match(notes, /npx @microsoft\/teams\.cli@3 login --device-code/);
+  assert.match(notes, /Don't ask for their password, and don't enter the code\s+for them/);
+  assert.match(notes, /Give them the link it prints/);
+  assert.match(notes, /An admin of their\s+organization turns that on, once/);
+  assert.match(notes, /Don't ask them to paste it to you/);
+  assert.match(notes, /a change to\s+its permissions can make Teams refuse to add it again/);
+  assert.match(notes, /agent's\s+`staging` environment/);
+  assert.match(notes, /Don't pass `--publish` unless the person asks for exactly that/);
+  assert.match(notes, /grep -c '\^TEAMS_APP_PASSWORD=\.' \.env\.local/);
+  assert.doesNotMatch(notes, /Slack|slack|Discord|discord/);
+  const readme = await read(app, 'README.md');
+  assert.match(readme, /```bash\n {3}pnpm connect\n/);
+  assert.match(readme, /No Azure account is needed/);
+  assert.match(readme, /A personal Microsoft\s+account can't have a bot/);
+  assert.match(readme, /`pnpm connect --mentions-only`/);
+  assert.match(readme, /`pnpm connect --public-url https:\/\/<your deployment>`/);
+  assert.doesNotMatch(readme, /Slack|slack|Discord|discord/);
+});
+
 test('a channel with no starter is said, with the ones there are', async () => {
-  const { code, err } = await start(['my-bot', '--channel', 'teams']);
+  const { code, err } = await start(['my-bot', '--channel', 'whatsapp']);
   assert.equal(code, 2);
-  assert.match(err, /There's no starter for "teams" yet: there is one for slack and discord\./);
+  assert.match(err, /There's no starter for "whatsapp" yet: there is one for slack, discord and teams\./);
 });

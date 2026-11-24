@@ -1,11 +1,11 @@
 // The starter, end to end, the way someone meets it: the command makes an app,
 // the app installs the packages as npm would deliver them (packed tarballs, not
 // links into this repository), builds, and answers its channel. Once for each
-// channel the starter has: Slack and Discord. It catches what the
+// channel the starter has: Slack, Discord and Teams. It catches what the
 // unit tests can't: a file missing from a package, an export that doesn't
 // resolve, a generated app that doesn't compile.
 //
-//   npm run build && node packages/create/scripts/smoke.mjs [--keep] [slack|discord]
+//   npm run build && node packages/create/scripts/smoke.mjs [--keep] [slack|discord|teams]
 //
 // It installs from the npm registry (Next.js, React, Chat SDK), so it needs the
 // network, and takes a minute or two. Nothing here is a real credential.
@@ -46,11 +46,22 @@ const CHANNELS = {
     help: /voiceflow-channels connect discord \[--public-url/,
     check: checkDiscord,
   },
+  teams: {
+    env: {
+      TEAMS_APP_ID: '11111111-1111-4111-8111-111111111111',
+      TEAMS_APP_PASSWORD: 'smoke-test-teams-secret',
+      TEAMS_APP_TENANT_ID: '22222222-2222-4222-8222-222222222222',
+    },
+    help: /voiceflow-channels connect teams --env-file <path> \[--public-url/,
+    check: checkTeams,
+  },
 };
 
 try {
   step('pack the packages, as a publish would');
-  await run('npm', ['pack', '--pack-destination', work, '-w', 'packages/core', '-w', 'packages/slack', '-w', 'packages/discord'], { cwd: root });
+  await run('npm', ['pack', '--pack-destination', work, '-w', 'packages/core', '-w', 'packages/slack', '-w', 'packages/discord', '-w', 'packages/teams'], {
+    cwd: root,
+  });
   const tarballs = (await readdir(work)).filter((f) => f.endsWith('.tgz'));
   const tarball = (name) => {
     const file = tarballs.find((f) => f.startsWith(`${name}-`));
@@ -217,4 +228,20 @@ async function checkDiscord(url, log) {
   const gateway = await fetch(`${url}/gateway`);
   if (gateway.status !== 401) throw new Error(`the gateway route without its secret got ${gateway.status}, not 401`);
   console.log('signed check 200 · forged 401 · event with the token 200 · with another 401 · gateway route without its secret 401');
+}
+
+async function checkTeams(url, log) {
+  // Teams signs what it sends with a token of Microsoft's, which nothing here can make: so what's checked is
+  // that the route is there, runs the adapter, and takes nothing that isn't Microsoft's.
+  const send = (headers = {}) =>
+    fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ type: 'message', text: 'hello', from: { id: '29:someone' }, conversation: { id: 'a:1' } }),
+    });
+  const bare = await send();
+  if (bare.status !== 401) throw new Error(`a Teams request with no token got ${bare.status}, not 401\n${log()}`);
+  const forged = await send({ authorization: 'Bearer not-a-token-of-microsofts' });
+  if (forged.status !== 401) throw new Error(`a Teams request with a made-up token got ${forged.status}, not 401\n${log()}`);
+  console.log('no token 401 · a made-up token 401');
 }
