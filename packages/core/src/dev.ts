@@ -8,7 +8,9 @@
 // answer `cli(['point', '--public-url', <address>, '--local-url', <the server here>, …])`.
 // It is given the local address so that it can check the server answers, with a
 // request signed as its platform signs one, before the platform is pointed at it.
-// Node only.
+// A channel whose platform sends over a standing connection (Discord's Gateway)
+// also exports `listen`: dev holds that connection open beside the server, and
+// closes it when it stops. Node only.
 import { type ChildProcess, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,6 +46,17 @@ export interface DevServer {
   stop(): Promise<void>;
 }
 
+/** What a channel's connect module gives `dev`. */
+export interface ChannelCommands {
+  /** The channel's command: `dev` runs its `point`. */
+  cli(argv: string[]): Promise<number>;
+  /**
+   * Holds the platform's standing connection open, passing what arrives to the
+   * server at `localUrl`, until `signal` aborts. Rejects if it can't.
+   */
+  listen?(options: { localUrl: string; envFile?: string; signal: AbortSignal; out: (line: string) => void; err: (line: string) => void }): Promise<void>;
+}
+
 /** What `dev` reads, writes and runs, for a test or a program that runs it. */
 export interface DevIO {
   out?: (line: string) => void;
@@ -54,8 +67,8 @@ export interface DevIO {
   ask?: (question: string) => Promise<string>;
   /** Starts the server's command. */
   serve?: (command: string, args: string[], env: Record<string, string | undefined>) => DevServer;
-  /** A channel's `point`, by name: by default its connect module's `cli`. */
-  channel?: (name: string) => Promise<(argv: string[]) => Promise<number>>;
+  /** A channel's commands, by name: by default its connect module. A bare function is its `cli`. */
+  channel?: (name: string) => Promise<ChannelCommands | ((argv: string[]) => Promise<number>)>;
   tunnel?: Partial<TunnelHost>;
   fetch?: typeof fetch;
   wait?: (ms: number) => Promise<void>;
@@ -124,7 +137,12 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
 
   let tunnel: Tunnel | undefined;
   let server: DevServer | undefined;
+  // Standing connections a channel asked dev to hold: closed first, so nothing arrives for a server that's going.
+  const listening = new AbortController();
+  const listeners: Promise<void>[] = [];
   const stop = async () => {
+    listening.abort();
+    await Promise.allSettled(listeners);
     await server?.stop();
     await tunnel?.close();
   };
@@ -173,12 +191,27 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
       }
     }
 
+    let lost: (code: number) => void = () => {};
+    const connectionLost = new Promise<number>((resolve) => {
+      lost = resolve;
+    });
     for (const name of channels) {
-      const point = await (io.channel ?? channelCli)(name);
-      const code = await point(['point', '--public-url', url, '--local-url', local, ...(o['env-file'] ? ['--env-file', o['env-file']] : [])]);
+      const loaded = await (io.channel ?? channelCli)(name);
+      const commands: ChannelCommands = typeof loaded === 'function' ? { cli: loaded } : loaded;
+      const code = await commands.cli(['point', '--public-url', url, '--local-url', local, ...(o['env-file'] ? ['--env-file', o['env-file']] : [])]);
       if (code !== 0) {
         err(`\n${name} wasn't pointed at ${url}, so dev is stopping.`);
         return code;
+      }
+      if (commands.listen) {
+        listeners.push(
+          commands.listen({ localUrl: local, ...(o['env-file'] ? { envFile: o['env-file'] } : {}), signal: listening.signal, out, err }).catch((error) => {
+            // A connection that ends because dev is stopping is no failure. One that drops while it runs is: nothing would arrive.
+            if (listening.signal.aborted) return;
+            err(`\n${name} lost its connection, so dev is stopping: ${error instanceof Error ? error.message : String(error)}`);
+            lost(error instanceof NeedsYou ? 3 : 1);
+          }),
+        );
       }
     }
     out(`\n${channels.join(', ')}: pointed at ${url}. Stop with Ctrl-C.`);
@@ -192,7 +225,7 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
         process.once('SIGTERM', end);
       }
     });
-    return await Promise.race([ended, ...(server ? [server.exited] : [])]);
+    return await Promise.race([ended, connectionLost, ...(server ? [server.exited] : [])]);
   } finally {
     await stop();
   }
@@ -211,9 +244,9 @@ function channelsOf(cwd: string): string[] {
     .filter((name): name is string => Boolean(name) && name !== 'sdk');
 }
 
-async function channelCli(name: string): Promise<(argv: string[]) => Promise<number>> {
+async function channelCli(name: string): Promise<ChannelCommands> {
   const module = `@voiceflow/channels-${name}/connect`;
-  let loaded: { cli?: (argv: string[]) => Promise<number> };
+  let loaded: Partial<ChannelCommands>;
   try {
     loaded = await import(module);
   } catch (error) {
@@ -223,7 +256,7 @@ async function channelCli(name: string): Promise<(argv: string[]) => Promise<num
     throw error;
   }
   if (typeof loaded.cli !== 'function') throw new Error(`@voiceflow/channels-${name} has no command to point it with.`);
-  return loaded.cli;
+  return { cli: loaded.cli, ...(typeof loaded.listen === 'function' ? { listen: loaded.listen } : {}) };
 }
 
 function serve(command: string, args: string[], env: Record<string, string | undefined>): DevServer {

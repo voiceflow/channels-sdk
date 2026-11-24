@@ -1,6 +1,6 @@
 node_modules/
 dist/
-# Built from examples/nextjs-slack by packages/create/scripts/template.mjs.
+# Built from examples/nextjs-<channel> by packages/create/scripts/template.mjs.
 packages/create/template/
 .env
 .env.*

@@ -90,7 +90,11 @@ test('a pass says which thread and person, and only the key that made it can', (
   const [v, body, sig] = pass.split('.');
   const forged = Buffer.from(JSON.stringify({ t: 'slack:C2:9.9', u: 'U9', n: 't1', e: claims.expires })).toString('base64url');
   assert.equal(readPass(key, `${v}.${forged}.${sig}`), null, 'another thread and person under the same signature');
-  assert.equal(readPass(key, `${v}.${body}.${sig.slice(0, -2)}AA`), null, 'a changed signature');
+  // One bit of the signature flipped, in its bytes. Changing its text instead can change nothing: a signature
+  // that already ends in the characters put there is left as it was, about once in a thousand runs.
+  const flipped = Buffer.from(sig, 'base64url');
+  flipped[flipped.length - 1] ^= 1;
+  assert.equal(readPass(key, `${v}.${body}.${flipped.toString('base64url')}`), null, 'a changed signature');
   assert.equal(readPass(key, `${v}.${body}`), null);
   assert.equal(readPass(key, ''), null);
   assert.equal(readPass(key, 'not a pass'), null);

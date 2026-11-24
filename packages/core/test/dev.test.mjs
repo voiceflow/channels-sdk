@@ -364,3 +364,43 @@ test("a server that stops on its own ends dev with the server's code", async () 
   assert.equal(await dev(['--', 'next', 'dev'], a.io), 5);
   assert.deepEqual(a.events.slice(-2), ['stop server', 'stop tunnel']);
 });
+
+test("dev holds a channel's standing connection open beside the server, and closes it first when it stops", async () => {
+  const a = await app();
+  const heard = [];
+  a.io.channel = async (name) => ({
+    cli: async (argv) => {
+      a.events.push(`${name}: ${argv.join(' ')}`);
+      return 0;
+    },
+    listen: ({ localUrl, envFile, signal }) =>
+      new Promise((resolve) => {
+        a.events.push(`${name} listens for ${localUrl} (${envFile})`);
+        heard.push(signal);
+        signal.addEventListener('abort', () => {
+          a.events.push(`${name} stops listening`);
+          resolve();
+        });
+        // Once it's listening, the test's Ctrl-C.
+        queueMicrotask(() => a.stop.abort());
+      }),
+  });
+  assert.equal(await dev(['--env-file', '.env.local', '--', 'next', 'dev'], a.io), 0, a.err.join('\n'));
+  assert.deepEqual(a.events.slice(-5), [
+    `slack: point --public-url ${URL_} --local-url http://127.0.0.1:3000 --env-file .env.local`,
+    'slack listens for http://127.0.0.1:3000 (.env.local)',
+    'slack stops listening',
+    'stop server',
+    'stop tunnel',
+  ]);
+  assert.equal(heard[0].aborted, true);
+
+  // A connection that drops while dev runs stops dev: nothing would arrive, and saying nothing would hide it.
+  const dropped = await app();
+  const never = new AbortController();
+  dropped.io.signal = never.signal;
+  dropped.io.channel = async () => ({ cli: async () => 0, listen: async () => Promise.reject(new Error('Discord closed the connection: 4004')) });
+  assert.equal(await dev(['--', 'next', 'dev'], dropped.io), 1);
+  assert.match(dropped.err.join('\n'), /slack lost its connection, so dev is stopping: Discord closed the connection: 4004/);
+  assert.deepEqual(dropped.events.slice(-2), ['stop server', 'stop tunnel']);
+});

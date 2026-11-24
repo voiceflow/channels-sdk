@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # The build includes examples/nextjs-slack.
+  # The build includes the example apps.
   NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
@@ -90,10 +90,10 @@ jobs:
         run: |
           floor=$(node -p "require('./packages/core/package.json').peerDependencies.chat.match(/>=\s*([\d.]+)/)[1]")
           echo "Chat SDK $floor"
-          npm install --no-save --no-audit --no-fund "chat@$floor" "@chat-adapter/catalog@$floor" "@chat-adapter/slack@$floor" "@chat-adapter/state-memory@$floor"
-      - run: npm run build -w @voiceflow/channels-sdk -w @voiceflow/channels-slack
-      - run: npm run typecheck -w @voiceflow/channels-sdk -w @voiceflow/channels-slack
-      - run: npm test -w @voiceflow/channels-sdk -w @voiceflow/channels-slack
+          npm install --no-save --no-audit --no-fund "chat@$floor" "@chat-adapter/catalog@$floor" "@chat-adapter/slack@$floor" "@chat-adapter/discord@$floor" "@chat-adapter/state-memory@$floor"
+      - run: npm run build -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w @voiceflow/channels-discord
+      - run: npm run typecheck -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w @voiceflow/channels-discord
+      - run: npm test -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w @voiceflow/channels-discord
 
   starter:
     name: starter
@@ -106,9 +106,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run build -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w create-voiceflow-channels
-      # The app installs the packages as npm would deliver them, builds, and answers a signed Slack request.
-      - name: The starter makes an app that installs, builds and answers Slack
+      - run: npm run build -w @voiceflow/channels-sdk -w @voiceflow/channels-slack -w @voiceflow/channels-discord -w create-voiceflow-channels
+      # Each app installs the packages as npm would deliver them, builds, and answers a request signed as its channel signs one.
+      - name: The starter makes apps that install, build and answer Slack and Discord
         run: node packages/create/scripts/smoke.mjs
 
   all-checks:

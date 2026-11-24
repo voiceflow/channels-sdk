@@ -371,7 +371,7 @@ test('running connect again reuses the app, changing only what is missing', asyn
 
 const AVATAR = 'https://assets.example.com/1768-agent%20face.png';
 const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
-const VOICEFLOW_ICON = new Uint8Array(await readFile(new URL('../assets/voiceflow-icon.png', import.meta.url)));
+const VOICEFLOW_ICON = new Uint8Array(await readFile(new URL('../../core/assets/voiceflow-icon.png', import.meta.url)));
 const isVoiceflowIcon = async (file) =>
   file.name === 'voiceflow-icon.png' && file.type === 'image/png' && Buffer.from(await file.arrayBuffer()).equals(VOICEFLOW_ICON);
 const withAvatar = (slack = {}) => ({
@@ -846,9 +846,14 @@ test('an error the command prints never carries a secret it holds, whichever ser
 });
 
 test('a mistake in the command line is an answer and an exit code, never a stack trace', async (t) => {
+  // A script that doesn't say which environment is waiting on someone who knows: that's a 3, not a mistake.
   const missing = await runCli(t, ['connect', '--project', 'proj1']);
-  assert.equal(missing.code, 2);
-  assert.match(missing.err, /Missing --environment \(or VOICEFLOW_ENVIRONMENT\)\./);
+  assert.equal(missing.code, 3);
+  assert.match(missing.err, /No Voiceflow environment: set VOICEFLOW_ENVIRONMENT or pass --environment \(development, say\)\./);
+  // A person who was asked and answered nothing made a mistake.
+  const blank = await runCli(t, ['connect', '--project', 'proj1'], { answers: { environment: '  ' } });
+  assert.equal(blank.code, 2);
+  assert.match(blank.err, /Missing --environment \(or VOICEFLOW_ENVIRONMENT\)\./);
   // An address is connect's to find, with a tunnel. To point, and for an app you made, it's yours to give.
   const nowhere = await runCli(t, ['point', '--project', 'proj1', '--environment', 'sdk-test']);
   assert.equal(nowhere.code, 2);
@@ -943,11 +948,16 @@ test('a key typed for a plan that is only shown is saved nowhere', async (t) => 
 });
 
 test("a script with nothing to go on is told what's missing, by name, and is asked nothing", async (t) => {
+  // Which agent, and its key: all of it in the one stop, so whoever ran this hands it over once.
   const nothing = await runCli(t, FROM_FILE, { env: {} });
-  assert.equal(nothing.code, 2);
-  assert.match(
+  assert.equal(nothing.code, 3, 'waiting on a person');
+  assert.equal(
     nothing.err,
-    /Missing --project \(or VOICEFLOW_PROJECT_ID\) and --environment \(or VOICEFLOW_ENVIRONMENT\), in the environment or in \.env\.local\./,
+    [
+      "No Voiceflow project: set VOICEFLOW_PROJECT_ID, here or in .env.local, or pass --project. It's your agent's project ID in Voiceflow.",
+      'No Voiceflow environment: set VOICEFLOW_ENVIRONMENT, here or in .env.local, or pass --environment (development, say).',
+      'No Voiceflow API key: set VOICEFLOW_API_KEY, here or in .env.local, or pass --key-file.',
+    ].join('\n\n'),
   );
   assert.deepEqual(nothing.asked, []);
   assert.deepEqual(nothing.slack.calls, [], 'and nothing was called');
@@ -1623,4 +1633,37 @@ test("point asks your server Slack's signed check first: a server that's down, o
   assert.equal(unsigned.code, 0, unsigned.err);
   assert.match(unsigned.out, /· no SLACK_SIGNING_SECRET here, so your server at http:\/\/127\.0\.0\.1:3000\/api\/slack wasn't checked first/);
   assert.equal(updates(), 2);
+});
+
+test('a plan only shown also says what a publish would carry, so one answer can cover the plan and the publish', async (t) => {
+  const dry = await runCli(t, [...CONNECT, '--dry-run'], { draft: [AGENTS_OWN] });
+  assert.equal(dry.code, 0, dry.err);
+  assert.match(
+    dry.out,
+    /sdk-test's draft holds a change that isn't live \(1 updated\):\n {2}~ agent Support\nA publish would carry these too, with what's above: its whole draft goes live\./,
+  );
+  assert.deepEqual(dry.slack.writes(), []);
+  assert.deepEqual(dry.vf.writes(), [], 'reading the draft changes nothing');
+
+  const clean = await runCli(t, [...CONNECT, '--dry-run']);
+  assert.match(clean.out, /sdk-test's draft holds nothing else that isn't live: a publish would carry only what's above\./);
+
+  // Told there'll be no publish, or with no tools for one to carry, the draft isn't read.
+  for (const flag of ['--no-publish', '--no-tools']) {
+    const quiet = await runCli(t, [...CONNECT, '--dry-run', flag], { draft: [AGENTS_OWN] });
+    assert.equal(quiet.code, 0, quiet.err);
+    assert.ok(!quiet.vf.state.calls.some((c) => c.path.endsWith('/diff')), flag);
+    assert.doesNotMatch(quiet.out, /A publish would carry/);
+  }
+
+  // An app you made gets the same preview.
+  const own = await runCli(t, [...MANUAL, '--dry-run'], {
+    env: {},
+    files: { '.env.local': OWN },
+    slack: fakeSlack({ botScopes: NEEDED }),
+    slackCli: NO_CLI,
+    draft: [AGENTS_OWN],
+  });
+  assert.equal(own.code, 0, own.err);
+  assert.match(own.out, /A publish would carry these too/);
 });

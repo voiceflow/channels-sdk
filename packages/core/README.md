@@ -6,8 +6,8 @@ The core of Voiceflow Channels: a Voiceflow agent inside any
 > **Status:** pre-release, local only. Not published. The package name is not final.
 
 It loads any adapter the catalog lists; Slack is the one tested live so far. A channel package
-(`@voiceflow/channels-slack`) adds what only that channel has: its native
-behaviours, its tools, and the `connect` command that makes its app.
+(`@voiceflow/channels-slack`, `@voiceflow/channels-discord`) adds what only that channel has: its
+native behaviours, its tools, and the `connect` command that sets it up.
 
 ## Entry points
 
@@ -38,6 +38,10 @@ A channel package gives `createChannels` an extension (`ChannelExtension`):
 - `tools`: the channel's [server tools](#server-tools), callable only from its own conversations.
 - `attach`: the bot's own events (the assistant panel, reactions, slash commands).
 - `adapterDefaults`: the adapter options the channel turns on.
+- `maxTextLength`: the longest text the platform shows in one message. A longer
+  reply goes as several, cut between paragraphs, lines, sentences or words (and a
+  code block cut in two is closed and opened again). Set it where the adapter
+  would otherwise cut a long message short.
 
 ## Server tools
 

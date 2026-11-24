@@ -7,13 +7,14 @@
 // Whatever only one platform has comes from that channel's extension
 // (`ChannelExtension`), matched to a thread by its adapter's name.
 import { createHash } from 'node:crypto';
-import type { ActionEvent, AdapterPostableMessage, Author, Chat, Message, Thread } from 'chat';
+import { type ActionEvent, type AdapterPostableMessage, type Author, type Chat, type Message, parseMarkdown, type Thread } from 'chat';
 import { type ChannelCapabilities, capabilities } from './catalog.js';
 import { type CustomTrace, type DeliveryOptions, deliverStream, deliverWhole, type ShownMessage } from './deliver.js';
 import { ChannelsError } from './errors.js';
 import type { ChannelExtension, ExtensionHost, PinPrompts, RunOptions, TurnContext } from './extension.js';
 import { createRenderer, matchTypedChoice, parseActionId, type RenderOptions, retired } from './render.js';
 import { PASS_VARIABLE, type ServerTool } from './server-tools.js';
+import type { Measure } from './split.js';
 import { type ApprovalPolicy, createToolServer } from './tool-server.js';
 import { type Choice, type Translation, translate } from './translate.js';
 import { createVoiceflowClient, DEFAULT_TIMEOUT_MS, type SessionStore, type VoiceflowAction, type VoiceflowConfig } from './voiceflow.js';
@@ -268,6 +269,7 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
         // Where messages can't be edited (WhatsApp), old buttons stay, and a click on one is refused as stale.
         onButtons: caps.editMessages ? (message) => shown.push(message) : undefined,
         onRefused: (error) => report(new ChannelsError('post_refused', 'The channel refused a post; its text form was sent instead.', { cause: error }), ctx),
+        ...(extension?.maxTextLength ? { maxText: extension.maxTextLength, measureText: measureOf(thread) } : {}),
       };
       const custom = (type: string) => type in traces;
 
@@ -384,6 +386,20 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
   }
 
   return agent;
+}
+
+/**
+ * How long a text is once the channel's adapter has put it in the platform's own format: that, not what was
+ * written, is what the platform counts. Where the adapter can't say, it is the text's own length.
+ */
+function measureOf(thread: AnyThread): Measure {
+  return (markdown) => {
+    try {
+      return thread.adapter.renderFormatted(parseMarkdown(markdown)).length;
+    } catch {
+      return markdown.length;
+    }
+  };
 }
 
 function capabilitiesOf(thread: AnyThread): ChannelCapabilities {

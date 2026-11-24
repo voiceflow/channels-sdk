@@ -1,6 +1,6 @@
 // `npm create voiceflow-channels@latest my-bot`: a new app for a Voiceflow
-// agent in Slack, ready for `connect`. It writes a small Next.js app (the one
-// in examples/nextjs-slack, which CI builds), a package.json with the versions
+// agent in Slack or Discord, ready for `connect`. It writes a small Next.js app
+// (the channel's example app, which CI builds), a package.json with the versions
 // that app is tested with, an env file, and the steps that come next.
 //
 // It writes only inside the folder you name, runs only your package manager's
@@ -12,6 +12,11 @@ import { basename, join, relative, resolve } from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { discord } from './discord.js';
+import { type ChannelStarter, PACKAGE_MANAGERS, type PackageManager } from './shared.js';
+import { slack } from './slack.js';
+
+export { PACKAGE_MANAGERS } from './shared.js';
 
 /** What the command reads, writes and runs, for a test or a program that calls it: by default the console, this process and its folder. */
 export interface CreateIO {
@@ -28,22 +33,22 @@ export interface CreateIO {
   run?: (command: string, args: string[], cwd: string) => Promise<number>;
 }
 
-export const CHANNELS = ['slack'] as const;
-export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const;
-type PackageManager = (typeof PACKAGE_MANAGERS)[number];
+export const CHANNELS = ['slack', 'discord'] as const;
+const STARTERS: Record<(typeof CHANNELS)[number], ChannelStarter> = { slack, discord };
 
 const DEFAULT_NAME = 'my-bot';
-const TEMPLATE = new URL('../template/', import.meta.url);
+const TEMPLATES = new URL('../template/', import.meta.url);
 
 const USAGE = `Usage:
   npm create voiceflow-channels@latest [name] [options]
 
-Makes a new app for a Voiceflow agent in Slack: a Next.js server with the
-route Slack calls, its env file, and a connect script that makes the Slack app.
+Makes a new app for a Voiceflow agent in Slack or Discord: a Next.js server
+with the route the channel calls, its env file, and a connect script that sets
+the channel up.
 
 Options:
   [name]                  the app's folder, and its name (default: ${DEFAULT_NAME})
-  --channel <channel>     the channel to start with (default and only one so far: slack)
+  --channel <channel>     the channel to start with: slack (the default) or discord
   --project <id>          your Voiceflow project's ID, written to .env.local
   --environment <alias>   the Voiceflow environment the bot talks to (default: development)
   --pm <manager>          the package manager to install with: npm, pnpm, yarn or bun
@@ -80,12 +85,6 @@ export function packageManagerOf(userAgent: string | undefined): PackageManager 
   return (PACKAGE_MANAGERS as readonly string[]).includes(name ?? '') ? (name as PackageManager) : 'npm';
 }
 
-/** How each package manager runs a script with arguments: only npm needs the `--`. */
-function runScript(pm: PackageManager, script: string, args = ''): string {
-  const run = pm === 'npm' || pm === 'bun' ? `${pm} run ${script}` : `${pm} ${script}`;
-  return args ? `${run}${pm === 'npm' ? ' --' : ''} ${args}` : run;
-}
-
 /** Why a name can't be a package's, or nothing when it can. */
 function nameProblem(name: string): string | undefined {
   if (name.length > 214) return 'it is longer than 214 characters';
@@ -108,82 +107,6 @@ async function exists(path: string): Promise<boolean> {
     () => true,
     () => false,
   );
-}
-
-function readme(name: string, pm: PackageManager, environment: string): string {
-  const connect = runScript(pm, 'connect');
-  const deployed = runScript(pm, 'connect', '--public-url https://<your deployment>');
-  return `# ${name}
-
-A Voiceflow agent in Slack, served by one Next.js route:
-[\`app/api/slack/route.ts\`](app/api/slack/route.ts). Mentions, direct messages,
-the assistant panel, buttons, forms and \`/ask\` all arrive there, and so do the
-calls the agent's Slack tools make.
-
-Made with [\`create-voiceflow-channels\`](https://github.com/voiceflow/channels-sdk).
-
-## Run it
-
-You need Node.js 22 or later, a Voiceflow agent with an API key, and a Slack
-workspace where you can create apps. Two tools are used on the way, and each
-is offered to you when you don't have it: the
-[Slack CLI](https://tools.slack.dev/slack-cli), to sign you in to Slack, and
-[cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/),
-for the tunnel that gives this machine a public address. Neither needs an
-account of its own.
-
-1. Make the Slack app. Run this before the server, so that connect can answer
-   Slack's check of the address itself:
-
-   \`\`\`bash
-   ${connect}
-   \`\`\`
-
-   It signs you in to Slack (it runs \`slack login\` for you, and offers to
-   install the Slack CLI first when you don't have it). It reads your agent's
-   details from \`.env.local\` and asks for what isn't there: your Voiceflow
-   API key, in a hidden prompt, and your project's ID. It shows its plan and
-   asks before it changes anything. Then it makes and
-   installs the app, installs Slack's tools on the agent, and fills in
-   \`.env.local\`: the app's \`SLACK_BOT_TOKEN\` and \`SLACK_SIGNING_SECRET\`,
-   and what it asked you for. The bot token stays on this server: it never
-   goes to Voiceflow.
-
-   The bot runs the published version of the agent's \`${environment}\`
-   environment, so connect then shows what that environment's draft holds and
-   asks whether to publish it. The whole draft goes live, not only these
-   tools: say no to publish it in Voiceflow yourself. The new app's bot then
-   messages you in Slack.
-
-2. Start the server:
-
-   \`\`\`bash
-   ${pm} run dev
-   \`\`\`
-
-   It opens a tunnel to port 3000, starts the server, and points the Slack app
-   and the agent's tools at the tunnel's address, which is new each time. That
-   needs no publish. Stop it with Ctrl-C. For another port, set \`PORT\`.
-
-Mention the app in a channel, send it a direct message, or open it from
-Slack's assistant panel.
-
-## Deploy it
-
-- Set the same environment variables on your host, with \`REDIS_URL\` pointing at
-  a Redis database: conversations live in memory without it, and end when the
-  server restarts or a request reaches another instance.
-- Run connect again with your deployment's address: \`${deployed}\`. It
-  reuses the app it made and points it there. \`${pm} run start\` runs the server
-  with no tunnel.
-
-## Learn more
-
-- [Voiceflow Channels](https://github.com/voiceflow/channels-sdk): every Slack
-  option, the tools, and tools of your own.
-- [Voiceflow's documentation](https://www.voiceflow.com/docs), for building the
-  agent itself.
-`;
 }
 
 const GITIGNORE = `node_modules/
@@ -230,7 +153,7 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
   }
   if (!(CHANNELS as readonly string[]).includes(o.channel)) {
     err(
-      `There's no starter for "${o.channel}" yet: Slack is the one channel with its own package so far. Any other Chat SDK adapter works with the core by hand: https://github.com/voiceflow/channels-sdk/blob/main/docs/how-it-works.md#any-chat-sdk-adapter`,
+      `There's no starter for "${o.channel}" yet: there is one for ${CHANNELS.join(' and ')}. Any other Chat SDK adapter works with the core by hand: https://github.com/voiceflow/channels-sdk/blob/main/docs/how-it-works.md#any-chat-sdk-adapter`,
     );
     return 2;
   }
@@ -271,6 +194,8 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
 
   const pm = (o.pm as PackageManager | undefined) ?? packageManagerOf(env.npm_config_user_agent);
   const environment = o.environment ?? 'development';
+  const starter = STARTERS[o.channel as (typeof CHANNELS)[number]];
+  const TEMPLATE = new URL(`${o.channel}/`, TEMPLATES);
   const app = JSON.parse(await readFile(new URL('app.json', TEMPLATE), 'utf8')) as {
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;
@@ -284,15 +209,16 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
     );
 
   await mkdir(target, { recursive: true });
-  // The app itself: its route, its page, and its Next.js and TypeScript settings.
-  for (const entry of ['app', 'next.config.ts', 'tsconfig.json']) {
+  // The app itself: its routes, its page, and its settings. Everything in the template but the two files read here.
+  for (const entry of await readdir(TEMPLATE)) {
+    if (entry === 'app.json' || entry === 'env.example') continue;
     await cp(fileURLToPath(new URL(entry, TEMPLATE)), join(target, entry), { recursive: true, force: true });
   }
   const pkg = {
     name,
     version: '0.1.0',
     private: true,
-    description: 'A Voiceflow agent in Slack, served by a Next.js route.',
+    description: `A Voiceflow agent in ${starter.label}, served by a Next.js route.`,
     engines: { node: '>=22' },
     scripts: app.scripts,
     dependencies: versioned(app.dependencies),
@@ -300,7 +226,16 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
   };
   await writeFile(join(target, 'package.json'), `${JSON.stringify(pkg, null, 2)}\n`);
   await writeFile(join(target, '.gitignore'), GITIGNORE);
-  await writeFile(join(target, 'README.md'), readme(name, pm, environment));
+  await writeFile(join(target, 'README.md'), starter.readme(name, pm, environment));
+  // For a coding agent asked to set the app up. Ones that are already there are yours, and are left as they are.
+  const forAgents: [file: string, text: string][] = [
+    ['AGENTS.md', starter.agentsMd(name, pm, environment)],
+    // Claude Code reads CLAUDE.md: this sends it to the same notes.
+    ['CLAUDE.md', '@AGENTS.md\n'],
+  ];
+  for (const [file, text] of forAgents) {
+    if (!(await exists(join(target, file)))) await writeFile(join(target, file), text);
+  }
 
   let envExample = await readFile(new URL('env.example', TEMPLATE), 'utf8');
   envExample = setEnv(envExample, 'VOICEFLOW_ENVIRONMENT', environment);
@@ -311,7 +246,7 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
     await writeFile(envLocal, o.project ? setEnv(envExample, 'VOICEFLOW_PROJECT_ID', o.project) : envExample, { mode: 0o600 });
     await chmod(envLocal, 0o600);
   }
-  say(`Created ${name}: a Voiceflow agent in Slack, on Next.js.`);
+  say(`Created ${name}: a Voiceflow agent in ${starter.label}, on Next.js.`);
 
   if (!o['no-git']) {
     // A repository of its own, unless it's inside one already. Git being missing is no reason to stop.
@@ -335,15 +270,9 @@ export async function create(argv: string[], io: CreateIO = {}): Promise<number>
       'Next:',
       ...(where === '.' ? [] : [`  cd ${where}`]),
       ...(installed ? [] : [`  ${pm} install`]),
-      '  1. Make the Slack app:',
-      `       ${runScript(pm, 'connect')}`,
-      `     It signs you in to Slack, asks for your Voiceflow API key${o.project ? '' : ' and project ID'}, and saves ${o.project ? 'it' : 'them'} in .env.local.`,
-      `     Then it asks whether to publish the ${environment} environment, and the bot messages you in Slack.`,
-      '  2. Start it:',
-      `       ${runScript(pm, 'dev')}`,
-      '     It opens a tunnel, starts the server, and points Slack at it.',
+      ...starter.next(pm, environment, Boolean(o.project)),
       '',
-      'README.md has each step in full.',
+      'README.md has each step in full. AGENTS.md has them for a coding agent: ask yours to set this up.',
     ].join('\n'),
   );
   // The app was made either way; a failed install is the one thing left to do, and the exit code says so.

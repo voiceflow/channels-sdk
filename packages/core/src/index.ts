@@ -62,6 +62,7 @@ export {
   type ToolResult,
   type ToolTurn,
 } from './server-tools.js';
+export { type Measure, splitMarkdown } from './split.js';
 export { APPROVE_ACTION, type ApprovalPolicy, CANCEL_ACTION, isToolCall, MAX_APPROVAL_TEXT } from './tool-server.js';
 export { DEFAULT_PATHS, functionSource, requirementsOf, type ToolDefinition, type ToolInput, type ToolSet } from './tools.js';
 export { type CardData, type Choice, type Reply, type Source, sourcesOf, type TranslateOptions, type Translation, translate } from './translate.js';

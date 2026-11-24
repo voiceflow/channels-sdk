@@ -69,6 +69,12 @@ export interface ChannelExtension {
   readonly adapterDefaults?: Record<string, unknown>;
   /** The action ID the channel's native feedback buttons send. */
   readonly feedbackActionId?: string;
+  /**
+   * The longest text the platform shows in one message, as the platform counts
+   * it. A longer reply goes as several messages, cut where the text breaks. Set
+   * it where the adapter would otherwise cut a long message short (Discord's does).
+   */
+  readonly maxTextLength?: number;
   /** Variables set on the Voiceflow session for each turn, under the agent's own `variables`. */
   variables?(ctx: TurnContext): Record<string, unknown> | Promise<Record<string, unknown>>;
   /**

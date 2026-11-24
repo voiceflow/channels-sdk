@@ -1,6 +1,6 @@
 # create-voiceflow-channels
 
-Start a Voiceflow agent in Slack with one command.
+Start a Voiceflow agent in Slack or Discord with one command.
 
 > **Status:** pre-release, local only. Not published. The package name is not final.
 
@@ -28,9 +28,16 @@ README.md                Each step from here to a working bot
 ```
 
 The app is the one in [`examples/nextjs-slack`](../../examples/nextjs-slack),
-which this repository builds on every change.
+which this repository builds on every change. With `--channel discord` it is
+[`examples/nextjs-discord`](../../examples/nextjs-discord): the route Discord
+calls, a second route that keeps a deployed bot connected, and its schedule.
+Its README and `AGENTS.md` have Discord's own steps.
 
 ## After it runs
+
+The app has an `AGENTS.md`, so a coding agent asked to "set this up" knows
+the two commands, how to read what they answer, and what to hand back to you:
+your Voiceflow key, the Slack sign-in, and whether to publish. By hand:
 
 1. Make the Slack app: `npm run connect`. It signs you in to Slack, asks for
    your Voiceflow API key and project ID, and saves them in `.env.local`.
@@ -46,7 +53,7 @@ The new app's README has each step in full.
 | Option | What it does |
 |---|---|
 | `[name]` | The app's folder, and its name. Default: `my-bot`. |
-| `--channel <channel>` | The channel to start with. `slack` is the default, and the only one so far. |
+| `--channel <channel>` | The channel to start with: `slack` (the default) or `discord`. |
 | `--project <id>` | Your Voiceflow project's ID, written to `.env.local`. |
 | `--environment <alias>` | The Voiceflow environment the bot talks to. Default: `development`. |
 | `--pm <manager>` | Install with `npm`, `pnpm`, `yarn` or `bun`. Default: the one that ran this. |

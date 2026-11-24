@@ -10,16 +10,23 @@
 // alone, and never to Voiceflow.
 // Every line this prints, an error's included, is first cleaned of the secrets
 // it holds: a server that repeats one back in an error can't put it on screen.
-import { randomUUID } from 'node:crypto';
-import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
-import { basename, dirname, join } from 'node:path';
-import readline from 'node:readline';
-import { StringDecoder } from 'node:string_decoder';
 import { parseArgs } from 'node:util';
 import { createRedactor } from '@voiceflow/channels-sdk';
 import { checkTunnelTool, startTunnel, type Tunnel, type TunnelHost } from '@voiceflow/channels-sdk/dev';
-import { type DraftChanges, draftChanges, formatDraftChanges, publishEnvironment } from '@voiceflow/channels-sdk/install';
+import {
+  hidden,
+  previewPublish,
+  publishPlanLine,
+  publishStep,
+  question,
+  readEnvFile,
+  resolveAgent,
+  type Say,
+  saveEnv,
+  voiceflowKey,
+  writeEnvFile,
+} from '@voiceflow/channels-sdk/setup';
 import { slackCliLogins } from './api.js';
 import {
   type ConnectResult,
@@ -82,7 +89,9 @@ and changes nothing else: \`voiceflow-channels dev\` runs it on each start.
 Slack checks the address as it takes it, so your server has to be answering.
 
 It exits 0 when done, 1 on a failure, 2 on a mistake in the command, and 3
-when it's waiting on you: do what it says, then run it again.
+when it's waiting on you: do what it says, then run it again. With nobody at
+the terminal, everything it's waiting on is said in the one stop: which agent,
+its key, the Slack sign-in.
 
 Options:
   --project <id>          the Voiceflow project (agent)
@@ -129,7 +138,8 @@ Options:
                           without asking: its whole draft goes live
   --no-publish            don't publish, and don't ask
   --no-greeting           don't have a new app's bot message you in Slack
-  --dry-run               show the plan and stop
+  --dry-run               show the plan and stop: what would be made in Slack and put
+                          on the agent, and what a publish would carry
   --yes                   don't ask before going ahead (publishing is still yours to
                           answer: see --publish and --no-publish)
   --remove-tools          disconnect: also take Slack's tools off the agent
@@ -173,7 +183,6 @@ export async function cli(argv: string[], io: CliIO = {}): Promise<number> {
   }
 }
 
-type Say = (line: string) => void;
 /** Said wherever a tunnel can't be opened: the way to do without one. */
 const NO_TUNNEL = "Or give connect your server's address: --public-url https://<host>.";
 /** Stands in for a tunnel's address in a plan that is only shown. */
@@ -181,8 +190,6 @@ const NOT_YET = 'https://temporary-tunnel.invalid';
 /** The release a publish by connect makes in Voiceflow. */
 const RELEASE_NAME = 'Slack tools (Channels SDK)';
 const RELEASE_DESCRIPTION = 'Published by `voiceflow-channels connect slack`, on a yes.';
-/** A value that reads the same in every env file parser with no quotes around it. */
-const BARE = /^[\w.:/@+=,-]+$/;
 
 async function run(
   argv: string[],
@@ -260,18 +267,24 @@ async function run(
   const interactive = io.interactive ?? Boolean(process.stdin.isTTY);
   const ask = io.ask ?? question;
   // A flag wins, then the environment, then the env file. A person is asked for what's left.
-  let project = o.project || io.env.VOICEFLOW_PROJECT_ID || inFile.VOICEFLOW_PROJECT_ID || '';
-  let environment = o.environment || io.env.VOICEFLOW_ENVIRONMENT || inFile.VOICEFLOW_ENVIRONMENT || '';
   if (action !== 'disconnect' && !requestUrl && !local) {
     err(
       `Missing --public-url: ${o.manual ? "the address your app's settings point at" : "your server's public address, where Slack sends its requests"}.\n\n${USAGE}`,
     );
     return 2;
   }
-  if (!project && interactive) project = (await ask('Voiceflow project ID: ')).trim();
-  if (!environment && interactive) environment = (await ask('Voiceflow environment to install the tools into (development, say): ')).trim();
-  const missing = [...(project ? [] : ['--project (or VOICEFLOW_PROJECT_ID)']), ...(environment ? [] : ['--environment (or VOICEFLOW_ENVIRONMENT)'])];
-  if (missing.length) {
+  // A flag wins, then the environment, then the env file. A person is asked for what's left.
+  const {
+    project,
+    environment,
+    missing,
+    waiting: agentWaits,
+  } = await resolveAgent(
+    { ...(o.project ? { project: o.project } : {}), ...(o.environment ? { environment: o.environment } : {}) },
+    { env: io.env, inFile, ...(envFile ? { envFile } : {}), interactive, ask },
+  );
+  // A person who was asked and gave nothing made a mistake in the command. A script wasn't asked: it's waiting on someone.
+  if (missing.length && interactive) {
     err(`Missing ${missing.join(' and ')}${envFile ? `, in the environment or in ${envFile}` : ''}.\n\n${USAGE}`);
     return 2;
   }
@@ -279,6 +292,7 @@ async function run(
   const withFetch = io.fetch ? { fetch: io.fetch } : {};
   // With nobody to ask, everything a person has to do is said in one stop, not one thing per run.
   const waiting: string[] = [];
+  waiting.push(...agentWaits);
   const orWait = async <T>(get: () => T | Promise<T>): Promise<T | undefined> => {
     try {
       return await get();
@@ -319,24 +333,9 @@ async function run(
   const apiKey = key.value;
   secrets.add(apiKey);
 
-  /**
-   * Writes to the env file what the server needs and the file doesn't say yet,
-   * once connect has done its work: never over a value that's there. A value an
-   * env file would read back as something else (a space, a quote, a `#`, a `$`)
-   * is yours to write. Returns the names it wrote.
-   */
-  const save = async (values: [name: string, value: string][]): Promise<string[]> => {
-    const absent = envFile ? values.filter(([name, value]) => value && !inFile[name]) : [];
-    const saved = absent.filter(([, value]) => BARE.test(value));
-    if (envFile && saved.length) {
-      await writeEnvFile(envFile, Object.fromEntries(saved));
-      out(`+ saved ${saved.map(([name]) => name).join(', ')} to ${envFile}`);
-    }
-    for (const [name, value] of absent) {
-      if (!BARE.test(value)) err(`! ${name} wasn't saved to ${envFile}: its value needs quoting there. Add it yourself.`);
-    }
-    return saved.map(([name]) => name);
-  };
+  const io2 = { interactive, ask, out, err };
+  const flags = { publish: o.publish, noPublish: o['no-publish'] };
+  const save = (values: [name: string, value: string][]) => saveEnv({ ...(envFile ? { envFile } : {}), inFile }, values, io2);
   const agent: [name: string, value: string][] = [
     ['VOICEFLOW_API_KEY', key.typed ? apiKey : ''],
     ['VOICEFLOW_PROJECT_ID', project],
@@ -364,57 +363,13 @@ async function run(
   /** What happens once the plan is done, said with it: publishing, and a new app's first message. */
   const after = (greets: boolean): string[] => [
     'Then:',
-    tools === false && !o.publish
-      ? `  · ${environment} is left as it is: no tools were installed for a publish to carry`
-      : o['no-publish']
-        ? `  · you're shown what ${environment}'s draft holds; it is not published (--no-publish)`
-        : o.publish
-          ? `  + publish ${environment}: its whole draft goes live (--publish)`
-          : interactive
-            ? `  ? you're shown what ${environment}'s draft holds, and asked whether to publish it`
-            : `  · you're shown what ${environment}'s draft holds; it is published only with --publish`,
+    publishPlanLine(environment, flags, interactive, tools !== false),
     ...(greets ? ["  + the bot messages you in Slack to say it's connected"] : []),
   ];
-  /**
-   * Says what the environment's draft holds that isn't live, and publishes it
-   * when that's wanted: by --publish, or by a person's yes. Publishing makes
-   * the whole draft live, so nothing is published for a script that didn't ask.
-   * The draft is read either way: whether the agent in Slack has the tools is
-   * said from what's there, never assumed.
-   */
-  const publish = async (installed: boolean): Promise<'published' | 'not' | 'failed'> => {
-    if (!installed && !o.publish) return 'not';
-    let waiting: DraftChanges | undefined;
-    try {
-      waiting = await draftChanges(voiceflow);
-    } catch (error) {
-      err(`! Couldn't read what ${environment}'s draft holds: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    if (waiting && waiting.created + waiting.updated + waiting.deleted === 0) {
-      out(`\n= ${environment} is published: nothing in its draft is waiting`);
-      return 'published';
-    }
-    out(`\n${waiting ? formatDraftChanges(environment, waiting).join('\n') : `${environment}'s draft may hold changes that aren't live.`}`);
-    if (o['no-publish']) {
-      out(`${environment} is not published (--no-publish).`);
-      return 'not';
-    }
-    if (!o.publish && !interactive) {
-      out(`${environment} is not published: run this again with --publish, or publish it in Voiceflow.`);
-      return 'not';
-    }
-    if (!o.publish && !/^y(es)?$/i.test((await ask(`\nPublish ${environment} now? Its whole draft goes live, not only these tools. [y/N] `)).trim())) {
-      out(`${environment} is not published.`);
-      return 'not';
-    }
-    try {
-      const { release } = await publishEnvironment({ ...voiceflow, name: RELEASE_NAME, description: RELEASE_DESCRIPTION });
-      out(`+ published ${environment} (release "${release}")`);
-      return 'published';
-    } catch (error) {
-      err(`! Voiceflow didn't publish ${environment}: ${error instanceof Error ? error.message : String(error)}. Publish it in Voiceflow.`);
-      return 'failed';
-    }
+  const publish = (installed: boolean) => publishStep(voiceflow, flags, io2, { name: RELEASE_NAME, description: RELEASE_DESCRIPTION }, installed);
+  /** For a plan that is only shown: what a publish would carry, so one answer can cover the plan and the publish. */
+  const preview = async (installs: boolean) => {
+    if (o['dry-run']) await previewPublish(voiceflow, flags, io2, installs);
   };
 
   if (own) {
@@ -429,7 +384,10 @@ async function run(
       confirm: (plan) => confirm([...plan.lines, ...after(false)]),
       onProgress: out,
     });
-    if (!result.applied) return 0;
+    if (!result.applied) {
+      await preview(tools !== false);
+      return 0;
+    }
     const saved = await save([...own.typed, ...agent]);
     const published = await publish(Boolean(result.install));
     const inPlace = (name: string) => Boolean(envFile && (inFile[name] || saved.includes(name)));
@@ -527,7 +485,10 @@ async function run(
     await tunnel?.close();
   }
   secrets.add(result.botToken, result.signingSecret, result.userToken);
-  if (!result.applied) return 0;
+  if (!result.applied) {
+    await preview(tools !== false);
+    return 0;
+  }
   const saved = await save(agent);
   const published = await publish(Boolean(result.install));
   // A new app says so itself, in Slack: the proof that it's installed and can speak.
@@ -643,87 +604,6 @@ export async function urlChecker(port: number, say: (line: string) => void = con
   return { close: () => (listening ? new Promise<void>((r) => server.close(() => r())) : Promise.resolve()) };
 }
 
-/** Sets these keys in an env file, keeping its other lines, readable only by you. */
-export async function writeEnvFile(path: string, values: Record<string, string | undefined>): Promise<void> {
-  const set = Object.entries(values).filter((e): e is [string, string] => Boolean(e[1]));
-  if (!set.length) return;
-  let lines: string[] = [];
-  try {
-    lines = (await readFile(path, 'utf8')).split('\n');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  if (lines.at(-1) === '') lines.pop();
-  for (const [key, value] of set) {
-    const i = lines.findIndex((l) => l.replace(/^export\s+/, '').startsWith(`${key}=`));
-    if (i >= 0) lines[i] = `${key}=${value}`;
-    else lines.push(`${key}=${value}`);
-  }
-  // A new file, readable only by you from the start, renamed over the old one:
-  // the secrets never go into a file someone else can read.
-  const temporary = join(dirname(path), `.${basename(path)}.${randomUUID()}`);
-  try {
-    await writeFile(temporary, `${lines.join('\n')}\n`, { mode: 0o600, flag: 'wx' });
-    await rename(temporary, path);
-  } catch (error) {
-    await rm(temporary, { force: true });
-    throw error;
-  }
-}
-
-/**
- * The Voiceflow values in an env file, or any others: its `KEY=value` lines,
- * with or without `export` and quotes. A file that isn't there is an empty one.
- */
-export async function readEnvFile(path: string): Promise<Record<string, string>> {
-  let text: string;
-  try {
-    text = await readFile(path, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
-    throw error;
-  }
-  const values: Record<string, string> = {};
-  for (const raw of text.split('\n')) {
-    const line = raw.trim();
-    const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/.exec(line);
-    if (!match) continue;
-    const value = match[2]!.trim();
-    const quoted = /^(["'])(.*)\1$/.exec(value);
-    // Unquoted, a value ends where a comment starts.
-    values[match[1]!] = quoted ? quoted[2]! : value.replace(/\s+#.*$/, '');
-  }
-  return values;
-}
-
-/**
- * The Voiceflow API key: from the file that holds only it, the environment, the
- * server's env file, or (asked of a person) a hidden prompt. `typed` says it
- * came from the prompt, so it can be saved for the server.
- */
-async function voiceflowKey(from: {
-  file?: string;
-  env: Record<string, string | undefined>;
-  inFile: Record<string, string>;
-  envFile?: string;
-  interactive: boolean;
-  secret: (question: string) => Promise<string>;
-}): Promise<{ value: string; typed: boolean }> {
-  if (from.file) {
-    const key = (await readFile(from.file, 'utf8')).trim();
-    if (!key) throw new Error(`${from.file} is empty.`);
-    return { value: key, typed: false };
-  }
-  if (from.env.VOICEFLOW_API_KEY) return { value: from.env.VOICEFLOW_API_KEY, typed: false };
-  if (from.inFile.VOICEFLOW_API_KEY) return { value: from.inFile.VOICEFLOW_API_KEY, typed: false };
-  if (!from.interactive) {
-    throw new NeedsYou(`No Voiceflow API key: set VOICEFLOW_API_KEY${from.envFile ? `, here or in ${from.envFile},` : ''} or pass --key-file.`);
-  }
-  const key = await from.secret('Voiceflow API key (hidden): ');
-  if (!key) throw new Error('No Voiceflow API key entered.');
-  return { value: key, typed: true };
-}
-
 /**
  * The credentials of a Slack app you made by hand: from the environment, the
  * env file, or (asked of a person) hidden prompts. `typed` are the ones that
@@ -759,52 +639,5 @@ async function ownCredentials(from: {
   return { botToken, signingSecret, typed };
 }
 
-/**
- * Reads a line from the terminal without showing it. It reads raw keystrokes and
- * writes only the prompt, so nothing typed reaches the screen: not as it's
- * typed, and not when a terminal would redraw the line (a backspace, a wrap).
- */
-export function hidden(prompt: string, input: NodeJS.ReadStream = process.stdin, output: NodeJS.WritableStream = process.stdout): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const decoder = new StringDecoder('utf8');
-    const wasRaw = input.isRaw;
-    let value = '';
-    // An escape sequence (an arrow key, say) is skipped whole. inEscape: 1 after ESC, 2 inside `ESC [`, 3 after `ESC O`.
-    let inEscape = 0;
-    const finish = (error?: Error) => {
-      input.off('data', onData);
-      input.setRawMode(wasRaw);
-      input.pause();
-      output.write('\n');
-      if (error) reject(error);
-      else resolve(value.trim());
-    };
-    const onData = (chunk: Buffer) => {
-      for (const key of decoder.write(chunk)) {
-        if (inEscape === 1) inEscape = key === '[' ? 2 : key === 'O' ? 3 : 0;
-        else if (inEscape === 2) inEscape = key >= '@' && key <= '~' ? 0 : 2;
-        else if (inEscape === 3) inEscape = 0;
-        else if (key === '\x1b') inEscape = 1;
-        else if (key === '\r' || key === '\n' || key === '\x04') return finish();
-        else if (key === '\x03') return finish(new Error('Cancelled.'));
-        else if (key === '\x7f' || key === '\b') value = Array.from(value).slice(0, -1).join('');
-        else if (key === '\x15') value = '';
-        else if (key >= ' ') value += key;
-      }
-    };
-    output.write(prompt);
-    input.setRawMode(true);
-    input.on('data', onData);
-    input.resume();
-  });
-}
-
-function question(prompt: string): Promise<string> {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(prompt, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
-}
+// The env file and the prompts are core's, shared by every channel's command. They are exported from here as they always were.
+export { hidden, readEnvFile, writeEnvFile };

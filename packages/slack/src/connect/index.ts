@@ -13,7 +13,6 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { redact, TOOLS_URL_SECRET } from '@voiceflow/channels-sdk';
 import {
   type ApiOptions,
@@ -27,6 +26,7 @@ import {
   setSecretValues,
   uninstallTools,
 } from '@voiceflow/channels-sdk/install';
+import { downloadIcon, type IconFile, iconUrl, VOICEFLOW_ICON_NAME, voiceflowIcon } from '@voiceflow/channels-sdk/setup';
 import { type SlackToolsOptions, slackTools } from '../tools/index.js';
 import { createSlackApi, type SlackApi, SlackApiError } from './api.js';
 import { appNameOf, type ManifestChanges, type ManifestOptions, mergeManifest, repointManifest, type SlackManifest, slackManifest } from './manifest.js';
@@ -265,17 +265,17 @@ export async function connectSlack(options: ConnectSlackOptions): Promise<Connec
   if (icon) {
     const settings = `Basic Information, https://api.slack.com/apps/${appId}/general`;
     const doFetch = options.slack.fetch ?? fetch;
-    const what = icon.from === 'agent' ? "the agent's avatar" : icon.from === 'option' ? 'the icon' : DEFAULT_ICON_NAME;
-    const problem = await setAppIcon(slack, appId!, icon.from === 'default' ? defaultIcon() : downloadIcon(icon.url, doFetch));
+    const what = icon.from === 'agent' ? "the agent's avatar" : icon.from === 'option' ? 'the icon' : VOICEFLOW_ICON_NAME;
+    const problem = await setAppIcon(slack, appId!, icon.from === 'default' ? voiceflowIcon() : downloadIcon(icon.url, doFetch));
     // An avatar Slack won't take leaves a new app with Slack's blank icon: Voiceflow's stands in. An icon you named is yours to fix.
-    const fallback = problem && icon.from === 'agent' ? await setAppIcon(slack, appId!, defaultIcon()) : undefined;
+    const fallback = problem && icon.from === 'agent' ? await setAppIcon(slack, appId!, voiceflowIcon()) : undefined;
     const note = !problem
       ? undefined
       : icon.from !== 'agent'
         ? `Slack didn't take ${what} as the app's icon: ${problem}. Set one in ${settings}`
         : fallback
-          ? `Slack didn't take the agent's avatar (${problem}) or ${DEFAULT_ICON_NAME} (${fallback}) as the app's icon. Set one in ${settings}`
-          : `Slack didn't take the agent's avatar as the app's icon: ${problem}. It has ${DEFAULT_ICON_NAME} instead; set another in ${settings}`;
+          ? `Slack didn't take the agent's avatar (${problem}) or ${VOICEFLOW_ICON_NAME} (${fallback}) as the app's icon. Set one in ${settings}`
+          : `Slack didn't take the agent's avatar as the app's icon: ${problem}. It has ${VOICEFLOW_ICON_NAME} instead; set another in ${settings}`;
     if (note) {
       notes.push(note);
       say(`! ${note}`);
@@ -616,44 +616,10 @@ function toolsUrlOf(options: Pick<ConnectSlackOptions, 'toolsUrl' | 'requestUrl'
   return url;
 }
 
-/** Slack refuses icons outside 512 to 2000 pixels (measured: 100 and 3000 refused, 512x512 and 800x500 taken) and anything but an image. */
-const MAX_ICON_BYTES = 10 * 1024 * 1024;
-
 /**
- * Voiceflow's icon, for an agent with no avatar: the brand's butterfly on its
- * blue, as Voiceflow's own agent avatar draws it (made by scripts/make-icon.mjs
- * from the website's mark and colour tokens; 512 pixels, the size Slack's CLI uploads).
+ * Makes the image the app's icon. Returns why it couldn't, or nothing. Slack refuses icons outside 512 to 2000
+ * pixels (measured: 100 and 3000 refused, 512x512 and 800x500 taken) and anything but an image.
  */
-const DEFAULT_ICON = new URL('../../assets/voiceflow-icon.png', import.meta.url);
-const DEFAULT_ICON_NAME = "Voiceflow's icon";
-
-type IconFile = { file: File } | { problem: string };
-
-async function defaultIcon(): Promise<IconFile> {
-  try {
-    return { file: new File([await readFile(fileURLToPath(DEFAULT_ICON))], 'voiceflow-icon.png', { type: 'image/png' }) };
-  } catch (error) {
-    return { problem: `it isn't in this package (${(error as NodeJS.ErrnoException).code ?? (error as Error).message})` };
-  }
-}
-
-/** Downloads an image to be an icon, or says why it couldn't. */
-async function downloadIcon(url: string, doFetch: typeof fetch): Promise<IconFile> {
-  let res: Response;
-  try {
-    res = await doFetch(url);
-  } catch (error) {
-    return { problem: `it couldn't be downloaded (${(error as Error).message})` };
-  }
-  if (!res.ok) return { problem: `it couldn't be downloaded (HTTP ${res.status})` };
-  const bytes = await res.arrayBuffer();
-  if (bytes.byteLength > MAX_ICON_BYTES) return { problem: 'it is larger than 10 MB' };
-  const type = res.headers.get('content-type')?.split(';')[0]?.trim() || 'application/octet-stream';
-  const name = decodeURIComponent(new URL(url).pathname.split('/').pop() || '') || 'icon';
-  return { file: new File([bytes], name, { type }) };
-}
-
-/** Makes the image the app's icon. Returns why it couldn't, or nothing. */
 async function setAppIcon(slack: SlackApi, appId: string, image: Promise<IconFile>): Promise<string | undefined> {
   const icon = await image;
   if ('problem' in icon) return icon.problem;
@@ -665,16 +631,6 @@ async function setAppIcon(slack: SlackApi, appId: string, image: Promise<IconFil
     if (error.error === 'invalid_icon_size') return 'Slack takes icons from 512 to 2000 pixels';
     if (error.error === 'error_bad_format') return 'Slack takes a PNG, JPG or GIF';
     return `Slack answered ${error.error}`;
-  }
-}
-
-/** A URL connect may download an icon from. */
-function iconUrl(value: string): string | undefined {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : undefined;
-  } catch {
-    return undefined;
   }
 }
 
@@ -791,9 +747,9 @@ function planLines(plan: ConnectPlan, options: ConnectSlackOptions): string[] {
     lines.push(`  = app ${app.id} "${app.name}" has everything this package uses`);
   }
   if (app.icon?.from === 'agent')
-    lines.push(`  + set its icon to the agent's avatar in Voiceflow (${DEFAULT_ICON_NAME} if Slack won't take it): ${app.icon.url}`);
+    lines.push(`  + set its icon to the agent's avatar in Voiceflow (${VOICEFLOW_ICON_NAME} if Slack won't take it): ${app.icon.url}`);
   else if (app.icon?.from === 'option') lines.push(`  + set its icon to the image: ${app.icon.url}`);
-  else if (app.icon) lines.push(`  + set its icon to ${DEFAULT_ICON_NAME} (the agent has no avatar in Voiceflow)`);
+  else if (app.icon) lines.push(`  + set its icon to ${VOICEFLOW_ICON_NAME} (the agent has no avatar in Voiceflow)`);
   lines.push(`  + install it in ${plan.team.name} (its bot token is for your server alone: it never goes to Voiceflow)`);
   lines.push(...voiceflowLines(plan, options));
   return lines;

@@ -48,6 +48,10 @@ stays compatible as upstream ships.
    - no `cardFormat`: a card goes as markdown, its choices numbered;
    - no `imagesInCards`: the image goes as its URL;
    - `typingIndicator`: shown while the turn runs.
+   An image goes as a card's own image (`Card({ imageUrl })`), the way a card with a picture
+   does: Discord's adapter drops an image inside a card. And a channel's extension can say
+   the longest text its platform shows (`maxTextLength`): a longer reply goes as several
+   messages (`packages/core/src/split.ts`), counted as the adapter formats it.
 5. `streaming` (`packages/core/src/deliver.ts`): a full `yes` streams the turn from
    `/v4/interact/stream` into one live message, `markdown_text` chunks for text and a
    `task_update` chunk per tool call. Anything else posts whole replies from
@@ -148,6 +152,69 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
     nothing, so "Ask the agent about this message" can't be built without verifying
     Slack's signature ourselves, which this package never does. Ask for an
     `onShortcut` handler (`callbackId`, the message, `triggerId`, the user).
+  - **Discord (`@chat-adapter/discord` 4.45.0), found building `@voiceflow/channels-discord`:**
+    - `apiUrl` (and `DISCORD_API_URL`) isn't used for an interaction's own webhook or for a
+      message with files: those calls go to `https://discord.com/api/v10` whatever it says
+      (`discordInteractionFetch`, `postMessageWithFiles`). Our tests send them to the stand-in
+      by replacing `fetch` while it's up (`packages/discord/test/helpers/fake-discord.mjs`).
+    - `createDiscordThread(channelId, messageId)` is `protected`. The slash command uses it,
+      where it's there, to answer in a thread as a mention does; without it the answer goes in
+      the channel. Ask for a public way to start a thread from a message, with a name: the
+      adapter names every thread "Thread" and the date, and we rename it after the question.
+    - `startGatewayListener` hands back at once and reports a login Discord refuses only
+      through its logger. `forwardGateway` reads the logger to say why a connection ended,
+      and to say when it's up (the line "Discord Gateway connected"). Ask for the promise to
+      reject, and for a connected callback.
+    - In forwarding mode the listener passes on every Gateway packet, not only the three the
+      webhook handles (a message, a reaction added or removed), and the webhook logs each at
+      `info`. We default the adapter's logger to `warn`.
+    - A slash command or a button click that arrives over the Gateway isn't handled once it's
+      forwarded, so a local server still needs an address: `dev` keeps its tunnel for Discord.
+    - **Found running it in Discord itself (2026-11-23)**, each with a fix here and a test
+      against a stand-in that now refuses what Discord refused:
+      - A card of buttons alone (a turn's choices) is sent with an embed that holds only the
+        adapter's colour, and Discord refuses the message: 400, `embeds.0.description: This
+        field is required`. The reply fell back to numbered text. `fitMessages`
+        (`packages/discord/src/adapter.ts`) leaves the empty embed out. Ask for no embed when a
+        card has nothing for one.
+      - A card with no buttons, edited over a message that had them, is sent with no
+        `components` at all, so Discord keeps the old buttons: after a choice they'd stay to be
+        clicked. `fitMessages` sends `components: []`. Ask for the same in `editMessage`.
+      - A slash command is answered "thinking…" in the reply to Discord's request, and its
+        handler starts at once. A post sent straight away reaches Discord before that reply does
+        (always, through `dev`'s tunnel), and is refused: 404, `Unknown Webhook` (10015). The
+        person is left at "thinking…". The slash command's first post is tried again for three
+        seconds (`firstAnswer`, `packages/discord/src/extension.ts`). The adapter marks the first
+        answer sent before it is, so the retry goes as a follow-up, which Discord takes as the
+        edit of "thinking…". Ask for the deferred answer to be sent through the interaction's
+        callback, so the adapter knows when Discord has it.
+      - Text over 2,000 characters is cut there and ended "...", with nothing said to anyone:
+        the end of a long answer was lost. The core now sends a long reply as several messages
+        (`maxTextLength`, 1,900 for Discord). Ask for the adapter to split, or to refuse.
+      - An image inside a card is dropped in the adapter's embeds mode, so an image the agent
+        sent went as an empty embed, which Discord refused, and its link was posted instead.
+        The core now sends an image as the card's own (`imageUrl`), which the adapter keeps.
+        Ask for image children to be kept, and for no embed where there is nothing to put in it.
+      - When a post to an interaction's webhook fails, the adapter logs its path, and the path
+        holds the interaction's token (good for fifteen minutes). Ask for it to be left out.
+      - Renaming a thread leaves "changed the channel name" in it, so every conversation
+        opened with that line. `nameThreads` (`packages/discord/src/adapter.ts`) puts the name
+        in as the adapter asks Discord for the thread: the question for a slash command, and
+        for a mention what the message says, read back from Discord (one more call per new
+        conversation). It goes through `discordFetch`, which isn't public: without it, or
+        where the message can't be read, the thread is renamed afterwards as before. Ask for
+        `createDiscordThread` to take a name, and to be public.
+      - Discord's check of a new address includes a request with a bad signature, which the
+        adapter rightly refuses, and logs as a failure in ten lines on every `dev` start.
+    - **Settled by that run:** the Message Content intent can be turned on through the API;
+      Discord takes a quick tunnel's address; a message in a thread arrives marked as one
+      (`channel_type`), so a follow-up needs no mention; a thread started on a slash command's
+      answer can be named and written in; a click's answer and the buttons' removal both land.
+      Discord's own install link waits forever on "Opening Discord App." while another Discord
+      tab is open in the same browser: nothing of ours, but worth knowing when it's reported.
+      A bot can be given a name and a picture through the API, and an application an icon; an
+      application's name can't (Discord answers 200 and leaves it), so the name on the page
+      that adds the bot is the one typed in the portal.
 - **Chat SDK's own agent tools** (`createChatTools`, in `chat/ai`). They run in
   the app with the bot's access, are confined to the conversation being handled
   (`scope`), and ask for approval before writes. Our server tools follow the same
@@ -187,8 +254,8 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 ## 7. Before the public release
 
 - [x] License: MIT (matches Chat SDK)
-- [ ] Reserve `@voiceflow/channels-sdk`, `@voiceflow/channels-slack` and
-      `create-voiceflow-channels` on npm. And `voiceflow-channels`, the
+- [ ] Reserve `@voiceflow/channels-sdk`, `@voiceflow/channels-slack`,
+      `@voiceflow/channels-discord` and `create-voiceflow-channels` on npm. And `voiceflow-channels`, the
       command's own name: `npx voiceflow-channels` run where the core isn't
       installed looks that name up on npm, and nobody owns it
 - [x] A starter (2026-11-23): `npm create voiceflow-channels@latest` makes the
@@ -216,6 +283,28 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       asks the server the platform's signed check first. A new tunnel's name
       is asked of a public resolver before this machine's own, which remembers
       a miss: found live, where asking too soon cost the whole wait
+- [x] The starter's app carries notes for a coding agent (2026-11-23):
+      `AGENTS.md`, and a `CLAUDE.md` that points to it. They say to show the
+      plan first (`--dry-run`), ask the person to go ahead and whether to
+      publish in one message, and never to show a secret. Tried with fresh
+      agents against a stand-in for the commands that replays their output
+- [x] A second channel, built the same way (2026-11-23): Discord. Its
+      package adds a slash command, thread names and `discord_*` variables to
+      what the core and Chat SDK's adapter do. `connect discord` starts from a
+      bot token (Discord has no way to make an application from a command),
+      and `dev` holds Discord's standing connection beside the server: a
+      channel's connect module can export `listen` for that. What every
+      channel's command shares moved into the core
+      (`@voiceflow/channels-sdk/setup`). The starter takes `--channel discord`
+- [x] Discord, run in Discord itself (2026-11-23): a new application, `connect`,
+      `dev` through a tunnel, then a mention and its thread, a follow-up with no
+      mention, a direct message, buttons and a click, and `/ask`. Two things
+      were broken and are fixed (a turn's buttons were refused, and `/ask`
+      stayed at "thinking…"); section 5 has them, and what is left to ask
+      upstream
+- [x] Discord: a conversation's thread is named when it's made, not after, so
+      it doesn't open with "changed the channel name" (2026-11-23, seen in
+      Discord itself for a mention and for `/ask`)
 - [ ] Uninstall with a key that can't delete functions stops after detaching
       the tool (seen live 2026-11-23, a 401 on the delete): check the key
       first, or finish the step and say what was left

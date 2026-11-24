@@ -43,6 +43,10 @@
       "types": "./dist/install.d.ts",
       "import": "./dist/install.js"
     },
+    "./setup": {
+      "types": "./dist/setup.d.ts",
+      "import": "./dist/setup.js"
+    },
     "./dev": {
       "types": "./dist/dev.d.ts",
       "import": "./dist/dev.js"
@@ -55,6 +59,7 @@
   "files": [
     "dist",
     "src",
+    "assets",
     "README.md",
     "LICENSE"
   ],
