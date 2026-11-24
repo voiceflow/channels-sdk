@@ -42,6 +42,8 @@ export interface ForwardGatewayOptions {
   onConnected?: (bot: string) => void;
   /** Called with each problem the connection reports, cleaned of the bot's token. */
   onProblem?: (problem: string) => void;
+  /** Called each time an event from Discord was passed on and your server took it, with its kind (`GATEWAY_MESSAGE_CREATE`). */
+  onForwarded?: (type: string) => void;
   /** Makes the adapter, in place of `@chat-adapter/discord`'s: for a test. */
   create?: (config: Record<string, unknown>) => GatewayAdapter | Promise<GatewayAdapter>;
   /** How long one connection is held before it's renewed. Default: about three weeks. */
@@ -69,7 +71,9 @@ export async function forwardGateway(options: ForwardGatewayOptions): Promise<vo
   // The adapter reports through its logger and throws nothing: a login Discord refuses is only a line there.
   const logger: GatewayLogger = {
     child: () => logger,
-    debug: () => {},
+    debug: (message, ...args) => {
+      if (/forwarded successfully/i.test(message)) options.onForwarded?.(String((args[0] as { type?: unknown } | undefined)?.type ?? ''));
+    },
     info: (message, ...args) => {
       if (/gateway connected/i.test(message)) options.onConnected?.(String((args[0] as { username?: unknown } | undefined)?.username ?? ''));
     },

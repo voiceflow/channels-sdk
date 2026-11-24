@@ -21,6 +21,8 @@ export async function fakeDiscord(options = {}) {
       id: APP_ID,
       name: 'Support Bot',
       verify_key: publicKey,
+      /** Who made the application. */
+      owner: { id: ADA.id, username: ADA.username },
       flags: options.flags ?? 0,
       interactions_endpoint_url: options.endpoint ?? null,
       /** The application's icon and the bot's picture, as Discord gives them: a hash, or null for none. */
@@ -31,6 +33,11 @@ export async function fakeDiscord(options = {}) {
     },
     /** How many servers the bot is in, as its own list of them says. */
     servers: options.servers ?? 0,
+    /** After this many looks at that list, someone has added the bot to a server. Never, by default. */
+    joinsAfter: options.joinsAfter ?? Number.POSITIVE_INFINITY,
+    looks: 0,
+    /** Whether the application's owner takes direct messages from the bot. */
+    denyDm: options.denyDm ?? false,
     commands: structuredClone(options.commands ?? []),
     /** Threads by ID, with the channel each was started in. */
     threads: new Map(),
@@ -123,11 +130,16 @@ export async function fakeDiscord(options = {}) {
       };
       let m;
       if (req.method === 'GET' && path === '/users/@me') return json(200, state.app.bot);
-      if (req.method === 'GET' && path === '/users/@me/guilds')
+      if (req.method === 'GET' && path === '/users/@me/guilds') {
+        state.looks += 1;
+        if (state.servers === 0 && state.looks > state.joinsAfter) state.servers = 1;
         return json(
           200,
-          Array.from({ length: state.servers }, (_, i) => ({ id: String(BigInt(GUILD) + BigInt(i)), name: `Server ${i + 1}` })),
+          Array.from({ length: state.servers }, (_, i) => ({ id: String(BigInt(GUILD) + BigInt(i)), name: i ? `Server ${i + 1}` : 'Acme HQ' })),
         );
+      }
+      // The bot's own conversation with a person: opened, then written in.
+      if (req.method === 'POST' && path === '/users/@me/channels') return json(200, { id: DM, type: 1, recipients: [{ id: body?.recipient_id }] });
       const invalid = (field, code, message) => json(400, { code: 50035, message: 'Invalid Form Body', errors: { [field]: { _errors: [{ code, message }] } } });
       const image = (data) => /^data:image\/(png|jpeg|gif);base64,[A-Za-z0-9+/]+=*$/.test(data ?? '');
       if (req.method === 'PATCH' && path === '/users/@me') {
@@ -209,6 +221,7 @@ export async function fakeDiscord(options = {}) {
         return found ? json(200, found) : json(404, { message: 'Unknown Message', code: 10008 });
       }
       if (req.method === 'POST' && (m = path.match(/^\/channels\/(\d+)\/messages$/))) {
+        if (m[1] === DM && state.denyDm) return json(403, { message: 'Cannot send messages to this user', code: 50007 });
         if (refused()) return json(400, refused());
         if (empty()) return json(400, { message: 'Cannot send an empty message', code: 50006 });
         return json(200, message(m[1]));

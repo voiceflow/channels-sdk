@@ -42,6 +42,8 @@ export interface DiscordApp {
   hasIcon: boolean;
   /** How many servers the bot is in (counted up to 200), where Discord says. */
   servers?: number;
+  /** Who the application belongs to: the person who made it, or its team's owner. */
+  ownerId?: string;
 }
 
 /** Reads the application the token belongs to. A token Discord refuses is said plainly. */
@@ -57,8 +59,8 @@ export async function readApp(api: DiscordApi): Promise<DiscordApp> {
   }
   // The application's own count of servers is brought up to date once a day: a bot added a minute ago is still
   // "in none" by it. The bot's list of its servers is as things are.
-  const servers = await api<unknown[]>('GET', '/users/@me/guilds?limit=200').then(
-    (list) => (Array.isArray(list) ? list.length : undefined),
+  const servers = await botServers(api).then(
+    (list) => list.length,
     () => undefined,
   );
   return {
@@ -73,6 +75,7 @@ export async function readApp(api: DiscordApi): Promise<DiscordApp> {
     hasAvatar: Boolean(app.bot?.avatar),
     hasIcon: Boolean(app.icon),
     ...(servers !== undefined ? { servers } : {}),
+    ...(app.team?.owner_user_id || app.owner?.id ? { ownerId: String(app.team?.owner_user_id || app.owner.id) } : {}),
   };
 }
 
@@ -120,6 +123,58 @@ async function setPicture(api: DiscordApi, image: Promise<IconFile>, icon: boole
   } catch (error) {
     if (!(error instanceof DiscordApiError)) throw error;
     return { icon: error.message };
+  }
+}
+
+// ── Once the bot is in a server ─────────────────────────────────────────────
+
+export interface DiscordServer {
+  id: string;
+  name: string;
+}
+
+/** The servers the bot is in, as its own list of them says (the first 200). */
+export async function botServers(api: DiscordApi): Promise<DiscordServer[]> {
+  const list = await api<{ id?: unknown; name?: unknown }[]>('GET', '/users/@me/guilds?limit=200');
+  return (Array.isArray(list) ? list : []).map((server) => ({ id: String(server.id ?? ''), name: String(server.name ?? '') }));
+}
+
+/**
+ * Waits for the bot to be added to a server: a person does that, on a page of Discord's. Returns the server,
+ * or nothing when the time is up. A call that fails is tried again: the wait is no place to stop for one.
+ */
+export async function waitForServer(
+  api: DiscordApi,
+  options: { timeoutMs?: number; everyMs?: number; wait?: (ms: number) => Promise<void>; signal?: AbortSignal } = {},
+): Promise<DiscordServer | undefined> {
+  const every = options.everyMs ?? 2000;
+  const wait = options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let waited = 0; waited <= (options.timeoutMs ?? 300_000) && !options.signal?.aborted; waited += every) {
+    const [server] = await botServers(api).catch(() => []);
+    if (server) return server;
+    await wait(every);
+  }
+  return undefined;
+}
+
+/** What a new bot says to whoever made it: that it's there, and what's left before it answers. */
+export function greetingText(bot: { name: string; server: string; command?: string }): string {
+  return `${bot.name} is connected to ${bot.server}. Once your server is running, mention me in a channel there, message me here${bot.command ? `, or use /${bot.command}` : ''}.`;
+}
+
+/**
+ * Has the bot message the person its application belongs to: proof, in Discord, that it is there and can
+ * speak. It can only once it shares a server with them. Returns why it couldn't, when it couldn't: a greeting
+ * that fails is no reason to fail a connect that worked.
+ */
+export async function sendGreeting(api: DiscordApi, options: { userId: string; text: string }): Promise<string | undefined> {
+  try {
+    const dm = await api<{ id: string }>('POST', '/users/@me/channels', { recipient_id: options.userId });
+    await api('POST', `/channels/${dm.id}/messages`, { content: options.text });
+    return undefined;
+  } catch (error) {
+    if (!(error instanceof DiscordApiError)) throw error;
+    return error.code === 50007 ? "your privacy settings don't let a server's members message you" : error.message;
   }
 }
 
@@ -206,6 +261,8 @@ export interface ConnectPlan {
   lines: string[];
   /** Whether the agent gets anything new. */
   installs: boolean;
+  /** The slash command's name, where there is one. */
+  command?: string;
 }
 
 export interface ConnectResult {
@@ -303,7 +360,7 @@ export async function connectDiscord(options: ConnectDiscordOptions): Promise<Co
         ? `  + ${count(newVariables.length, 'variable')} for your agent's prompts (${newVariables.slice(0, 2).join(', ')}${newVariables.length > 2 ? ', …' : ''})\n  ~ compile the environment's draft`
         : `  = ${count(Object.keys(CONTEXT_VARIABLES).length, 'variable')}: there already`,
   ];
-  const plan: ConnectPlan = { app, project, lines, installs: newVariables.length > 0 };
+  const plan: ConnectPlan = { app, project, lines, installs: newVariables.length > 0, ...(wanted ? { command: wanted.name } : {}) };
   if (options.server !== undefined && !isSnowflake(options.server))
     throw new TypeError(`connectDiscord: "${options.server}" isn't a server's ID (17 to 20 digits)`);
   const link = installLink(app.id, options.server ? { server: options.server } : {});

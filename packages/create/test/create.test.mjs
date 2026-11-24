@@ -317,16 +317,13 @@ test('--channel discord makes the Discord app: its routes, the schedule that kee
   assert.ok(pkg.dependencies['@voiceflow/channels-discord'] && pkg.dependencies['@chat-adapter/discord']);
   assert.ok(!Object.keys(pkg.dependencies).some((dep) => /slack/.test(dep)), 'a Discord app depends on nothing of Slack');
 
-  // Two commands. The one step by hand is said with the first: connect opens the page for it.
+  // One command: the first time, dev sets Discord up before it starts. The one step by hand is said with it.
   assert.match(out, /Created my-bot: a Voiceflow agent in Discord/);
-  assert.match(out, /1\. Set it up:\n {7}npm run connect\n/);
-  assert.match(
-    out,
-    /It opens the page for the one step in Discord itself: make the application, open its Bot page,\n {5}click Reset Token, and paste the token at the hidden prompt\./,
-  );
+  assert.match(out, /Start it:\n {7}npm run dev\n {5}The first time, it sets Discord up before it starts\./);
+  assert.match(out, /make the application, open its Bot page, click Reset Token, and paste the\n {5}token at the hidden prompt\./);
   assert.match(out, /opens the page that adds the bot to a server\./);
-  assert.match(out, /2\. Start it:\n {7}npm run dev\n/);
-  assert.doesNotMatch(out, /\n {2}3\. /);
+  assert.match(out, /\(npm run connect does the setting up alone\.\)/);
+  assert.doesNotMatch(out, /\n {2}[12]\. /);
   assert.doesNotMatch(out, /Slack/);
 
   // The env file names what the server needs, with nothing in it.

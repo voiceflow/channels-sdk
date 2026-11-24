@@ -7,7 +7,7 @@ import test from 'node:test';
 import { createMemoryState } from '@chat-adapter/state-memory';
 import { createChannels } from '@voiceflow/channels-sdk';
 import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
-import { CONTEXT_VARIABLES, createDiscordExtension, discord, titleOf } from '../dist/index.js';
+import { CONTEXT_VARIABLES, createDiscordExtension, discord, discordLogger, titleOf, withoutInteractionTokens } from '../dist/index.js';
 import { ADA, APP_ID, BOT_TOKEN, CHANNEL, DM, fakeDiscord, GUILD } from './helpers/fake-discord.mjs';
 
 const URL_ = 'https://bot.example.com/api/discord';
@@ -412,6 +412,69 @@ test("the adapter's own logging is kept to warnings unless you give it a logger"
     printed.map((p) => p[0]),
     ['warn'],
   );
+});
+
+test('a request with a bad signature is one line on the console, and Discord testing the address is said once', async (t) => {
+  // The real adapter with this package's own logger: what a server prints when Discord tests its address,
+  // which it does by sending a request signed wrongly on purpose.
+  const fake = await fakeDiscord();
+  t.after(fake.close);
+  const voiceflow = fakeVoiceflow(() => []);
+  const channels = await createChannels({
+    voiceflow: { apiKey: 'VF.DM.discord-contract', projectID: 'proj1', environment: 'development', fetch: voiceflow.fetch },
+    channels: [discord({ adapter: { botToken: BOT_TOKEN, publicKey: fake.publicKey, applicationId: APP_ID, apiUrl: fake.apiUrl } })],
+    state: createMemoryState(),
+  });
+  const printed = [];
+  const { info, warn, error, log } = console;
+  console.info = console.log = () => {};
+  console.warn = console.error = (...args) => printed.push(args.map(String).join(' '));
+  try {
+    const ping = { type: 1, id: '1', application_id: APP_ID, token: 't', version: 1 };
+    assert.equal((await channels.webhook('discord', fake.signed(URL_, ping, { forged: true }))).status, 401);
+    assert.equal((await channels.webhook('discord', fake.signed(URL_, ping, { forged: true }))).status, 401);
+    assert.equal((await channels.webhook('discord', fake.signed(URL_, ping))).status, 200);
+  } finally {
+    Object.assign(console, { info, warn, error, log });
+  }
+  assert.equal(printed.length, 2, printed.join('\n'));
+  assert.match(printed[0], /Refused a request with a bad signature \(401\)\. Discord sends requests like this itself, to test an address/);
+  assert.match(printed[1], /Refused a request with a bad signature \(401\)\.$/);
+  assert.ok(!printed.join('\n').includes(fake.publicKey.slice(0, 8)), "the key's beginning was printed, as the adapter prints it");
+});
+
+test("an interaction's token is never printed, and other warnings are printed as they were", () => {
+  // Made up, in the shape Discord's are: "interaction:<id>:<random>", in base64.
+  const token = Buffer.from(`interaction:111111111111111111:${'made-up-for-a-test-'.repeat(4)}`).toString('base64url');
+  const printed = [];
+  const base = {
+    child: () => base,
+    debug() {},
+    info() {},
+    warn: (...args) => printed.push(['warn', ...args]),
+    error: (...args) => printed.push(['error', ...args]),
+  };
+  const logger = discordLogger(base);
+  // As the adapter logs an answer Discord refused: the address it answered at, which has the token in it.
+  logger.error('Discord interaction API error', {
+    path: `/webhooks/${APP_ID}/${token}/messages/@original`,
+    method: 'PATCH',
+    status: 404,
+    error: '{"message": "Unknown Webhook"}',
+  });
+  logger.child('x').error(`POST /interactions/123456/${token}/callback failed`, new Error(`at /webhooks/${APP_ID}/${token}`));
+  logger.warn('Invalid gateway token');
+  const text = JSON.stringify(printed, (_, value) => (value instanceof Error ? value.message : value));
+  assert.ok(!text.includes(token), text);
+  assert.deepEqual(printed[0], [
+    'error',
+    'Discord interaction API error',
+    { path: `/webhooks/${APP_ID}/[interaction token]/messages/@original`, method: 'PATCH', status: 404, error: '{"message": "Unknown Webhook"}' },
+  ]);
+  assert.equal(printed[1][1], 'POST /interactions/123456/[interaction token]/callback failed');
+  assert.deepEqual(printed[2], ['warn', 'Invalid gateway token']);
+  // A message's own address has an ID after the channel's, and no token: it's left alone.
+  assert.equal(withoutInteractionTokens('/channels/123/messages/456'), '/channels/123/messages/456');
 });
 
 test('a title is the question on one line, without its mention, cut at a word', () => {

@@ -119,6 +119,15 @@ offered to you when you don't have it:
 [cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/),
 for the tunnel that gives this machine a public address. It needs no account.
 
+Start it:
+
+\`\`\`bash
+${pm} run dev
+\`\`\`
+
+The first time, that sets Discord up before it starts the server, and then
+both steps below happen in the one run. To set it up alone, run step 1 by itself.
+
 1. Set it up:
 
    \`\`\`bash
@@ -147,8 +156,10 @@ for the tunnel that gives this machine a public address. It needs no account.
    Voiceflow. Nothing is published, and nothing has to be.
 
    Last, it opens the page that adds the bot to a server: pick the server,
-   and authorize. (\`--server <id>\` has the page open with your server
-   chosen, and \`--no-open\` prints the links and opens nothing.)
+   and authorize. Connect waits for that, says which server the bot is in,
+   and has the bot message you in Discord. (\`--server <id>\` has the page
+   open with your server chosen, and \`--no-open\` prints the links and
+   opens nothing.)
 
 2. Start the server:
 
@@ -201,13 +212,13 @@ export const discord: ChannelStarter = {
   readme,
   agentsMd,
   next: (pm, _environment, hasProject) => [
-    '  1. Set it up:',
-    `       ${runScript(pm, 'connect')}`,
-    '     It opens the page for the one step in Discord itself: make the application, open its Bot page,',
-    '     click Reset Token, and paste the token at the hidden prompt.',
-    `     It asks for your Voiceflow API key${hasProject ? '' : ' and project ID'}, adds the /ask command, and opens the page that adds the bot to a server.`,
-    '  2. Start it:',
+    '  Start it:',
     `       ${runScript(pm, 'dev')}`,
-    '     It opens a tunnel, starts the server, and connects it to Discord.',
+    '     The first time, it sets Discord up before it starts. It opens the page for the one step in',
+    '     Discord itself: make the application, open its Bot page, click Reset Token, and paste the',
+    '     token at the hidden prompt.',
+    `     It asks for your Voiceflow API key${hasProject ? '' : ' and project ID'}, adds the /ask command, and opens the page that adds the bot to a server.`,
+    '     Then it opens a tunnel, starts the server, and connects it to Discord.',
+    `     (${runScript(pm, 'connect')} does the setting up alone.)`,
   ],
 };
