@@ -49,7 +49,7 @@ a tool's code is its functions' text, so restyling it would change the tool.
 | `packages/slack/src/connect/` | `connect slack` and `point slack`: manifest, Slack CLI login, app creation, the Voiceflow install |
 | `packages/slack/test/helpers/fake-slack.mjs` | A fake of Slack's Web API and events |
 | `packages/slack/scripts/live/` | The live harness: real Slack, real Voiceflow (see below) |
-| `packages/create` | `create-voiceflow-channelkit`: the starter. Its templates are built from the example apps (`scripts/template.mjs`), so there is one copy of each app; a channel with no example of its own gets `examples/nextjs-telegram` with its name in |
+| `packages/create` | `@voiceflow/create-channelkit`: the starter. Its templates are built from the example apps (`scripts/template.mjs`), so there is one copy of each app; a channel with no example of its own gets `examples/nextjs-telegram` with its name in |
 | `examples/` | Apps that use the packages; workspaces named `example-*`, never published |
 | `docs/` | How a conversation works; how this project tracks Vercel Chat SDK |
 

@@ -21,13 +21,13 @@ commands. Built on [Vercel Chat SDK](https://chat-sdk.dev).
 One command makes the app:
 
 ```bash
-npm create voiceflow-channelkit@latest my-bot
+npm create @voiceflow/channelkit@latest my-bot
 ```
 
 It writes a small Next.js server with the route Slack calls, an env file, and
 a README with the steps from there: add your Voiceflow API key, run connect,
 publish, and start the server. For another channel, name it:
-`npm create voiceflow-channelkit@latest my-bot -- --channel telegram`.
+`npm create @voiceflow/channelkit@latest my-bot -- --channel telegram`.
 
 ### Or add it to an app you have
 
@@ -119,7 +119,7 @@ Each package's README has its settings, its options and its variables.
 |---|---|
 | [`@voiceflow/channelkit`](packages/core) | The core: a Voiceflow agent on any Chat SDK adapter, the extension API, the tool installer, and the `voiceflow-channelkit` CLI. |
 | `@voiceflow/channelkit-<channel>` | A channel: its adapter, its variables, what only its platform has, and `connect <channel>`. One for each [channel above](#channels). |
-| [`create-voiceflow-channelkit`](packages/create) | The starter: `npm create voiceflow-channelkit@latest` makes a new app, for any channel. |
+| [`@voiceflow/create-channelkit`](packages/create) | The starter: `npm create @voiceflow/channelkit@latest` makes a new app, for any channel. |
 
 ## Features
 

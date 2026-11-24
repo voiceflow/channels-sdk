@@ -105,7 +105,7 @@ A Voiceflow agent in Discord, served by one Next.js route:
 [\`app/api/discord/route.ts\`](app/api/discord/route.ts). Mentions, threads,
 direct messages, buttons and \`/ask\` all arrive there.
 
-Made with [\`create-voiceflow-channelkit\`](https://github.com/voiceflow/channelkit).
+Made with [\`@voiceflow/create-channelkit\`](https://github.com/voiceflow/channelkit).
 
 ## Run it
 

@@ -121,7 +121,7 @@ A Voiceflow agent in Microsoft Teams, served by one Next.js route:
 [\`app/api/teams/route.ts\`](app/api/teams/route.ts). Chats, channel threads,
 mentions, buttons and cards all arrive there.
 
-Made with [\`create-voiceflow-channelkit\`](https://github.com/voiceflow/channelkit).
+Made with [\`@voiceflow/create-channelkit\`](https://github.com/voiceflow/channelkit).
 
 ## Run it
 

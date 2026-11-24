@@ -111,7 +111,7 @@ A Voiceflow agent in Slack, served by one Next.js route:
 the assistant panel, buttons, forms and \`/ask\` all arrive there, and so do the
 calls the agent's Slack tools make.
 
-Made with [\`create-voiceflow-channelkit\`](https://github.com/voiceflow/channelkit).
+Made with [\`@voiceflow/create-channelkit\`](https://github.com/voiceflow/channelkit).
 
 ## Run it
 

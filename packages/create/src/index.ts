@@ -1,4 +1,4 @@
-// `npm create voiceflow-channelkit@latest my-bot`: a new app for a Voiceflow
+// `npm create @voiceflow/channelkit@latest my-bot`: a new app for a Voiceflow
 // agent in Slack, Discord, Teams or any other channel there is a package for,
 // ready for `connect`. It writes a small Next.js app (the channel's example
 // app, which CI builds), a package.json with the versions that app is tested
@@ -59,7 +59,7 @@ const CHANNEL_LINES = CHANNELS.reduce<string[]>((lines, channel, i) => {
 }, []).join(`\n${' '.repeat(26)}`);
 
 const USAGE = `Usage:
-  npm create voiceflow-channelkit@latest [name] [options]
+  npm create @voiceflow/channelkit@latest [name] [options]
 
 Makes a new app for a Voiceflow agent in Slack, Discord, Teams or another
 channel: a Next.js server with the route the channel calls, its env file, and
