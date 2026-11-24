@@ -246,11 +246,16 @@ Options:
         )}\nThey come from ${platform}'s own pages: ${guide}\nPut ${lacking.length === 1 ? 'it' : 'them'} ${where}, never in a chat or a command line. Then run this again: it does the rest.`;
     /** The secrets connect made in this run: what gives the platform the address needs them. */
     const madeNow: Record<string, string> = {};
-    /** Every setting as this command reads one: the environment's, then the env file's, then what was made in this run. */
+    /**
+     * Every setting as this command reads one: the env file's, then the environment's over it, then what was made
+     * in this run. One that is there and empty says nothing: an empty line in the env file, which is how a new
+     * app's file names a setting, never stands in for a secret that was just made.
+     */
     const settings = (): Record<string, string | undefined> => {
-      const all: Record<string, string | undefined> = { ...madeNow, ...inFile };
-      // A variable that is set and empty says nothing: the env file's value stands.
-      for (const [key, set] of Object.entries(io.env)) if (set) all[key] = set;
+      const all: Record<string, string | undefined> = {};
+      for (const from of [inFile, io.env, madeNow]) {
+        for (const [key, set] of Object.entries(from)) if (set) all[key] = set;
+      }
       return all;
     };
     /** Gives the platform the address, or says where a person does. */

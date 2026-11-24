@@ -79,6 +79,8 @@ const silent = { child: () => silent, debug() {}, info() {}, warn() {}, error() 
 /** What a test is given by `setup`: the platform's stand-in, the scripted agent, and a way to send the bot a request. */
 export interface ChannelHarness {
   platform: ChannelStandIn;
+  /** The bot's state: pass it, with `platform`, to set up a second bot that carries on from this one. */
+  state: StateAdapter;
   voiceflow: ReturnType<typeof fakeVoiceflow>;
   /** What reached `onError`. */
   errors: unknown[];
@@ -129,10 +131,22 @@ export function channelHarness(options: Pick<ChannelContractOptions, 'slug' | 'c
 
   async function setup(
     answer?: (action: { type: string; payload?: unknown }) => Trace[],
-    channelOptions: { context?: boolean; follow?: boolean; adapter?: Record<string, unknown> } = {},
+    {
+      state = options.state(),
+      platform: given,
+      ...channelOptions
+    }: {
+      context?: boolean;
+      follow?: boolean;
+      adapter?: Record<string, unknown>;
+      /** The state of a bot set up before, to carry on from. */
+      state?: StateAdapter;
+      /** And its platform. */
+      platform?: ChannelStandIn;
+    } = {},
   ) {
-    const platform = await options.start();
-    started.push(platform);
+    const platform = given ?? (await options.start());
+    if (!given) started.push(platform);
     const errors: unknown[] = [];
     const voiceflow = fakeVoiceflow(
       (answer ??
@@ -150,7 +164,7 @@ export function channelHarness(options: Pick<ChannelContractOptions, 'slug' | 'c
     const channels = await createChannels({
       voiceflow: { apiKey: `VF.DM.${slug}-contract`, projectID: 'proj1', environment: 'development', fetch: voiceflow.fetch },
       channels: [options.channel({ ...channelOptions, adapter: { logger: silent, ...platform.adapter, ...channelOptions.adapter } })],
-      state: options.state(),
+      state,
       onError: (error) => errors.push(error),
     });
     const wait = waiter();
@@ -167,7 +181,7 @@ export function channelHarness(options: Pick<ChannelContractOptions, 'slug' | 'c
       }
       return response;
     };
-    return { platform, voiceflow, errors, send, said: () => voiceflow.interacts.map((turn) => turn.action) } satisfies ChannelHarness;
+    return { platform, state, voiceflow, errors, send, said: () => voiceflow.interacts.map((turn) => turn.action) } satisfies ChannelHarness;
   }
   return { setup, started };
 }
@@ -235,6 +249,26 @@ export function channelContract(options: ChannelContractOptions): void {
     assert.deepEqual(off.voiceflow.interacts.at(-1)?.variables ?? {}, {}, 'context: false sets none');
   });
 
+  test(`${name}: told not to follow, the bot still answers what is said to it, in a conversation it followed before too`, async () => {
+    const fresh = await setup(undefined, { follow: false });
+    await fresh.send(fresh.platform.message('hello'));
+    await fresh.send(fresh.platform.message('and again'));
+    assert.equal(fresh.voiceflow.interacts.length, 2, 'every message said to the bot is answered');
+    assert.deepEqual(fresh.errors, []);
+
+    // A bot that followed the conversation, then one that is told not to, on the same state: as a deployment
+    // whose setting was changed finds it.
+    const before = await setup(undefined, { follow: true });
+    await before.send(before.platform.message('hello'));
+    assert.equal(before.voiceflow.interacts.length, 1);
+    const after = await setup(undefined, { follow: false, state: before.state, platform: before.platform });
+    await after.send(after.platform.message('are you there?'));
+    assert.equal(after.voiceflow.interacts.length, 1, 'the first thing said to it there is answered');
+    await after.send(after.platform.message('and again'));
+    assert.equal(after.voiceflow.interacts.length, 2, 'and the next');
+    assert.deepEqual(after.errors, []);
+  });
+
   test(`${name}: what isn't said to the bot is answered only in a conversation it is following`, async (context) => {
     const probe = await options.start();
     started.push(probe);
@@ -253,6 +287,26 @@ export function channelContract(options: ChannelContractOptions): void {
       assert.equal((await t.platform.sent()).length > 0, follow);
       assert.deepEqual(t.errors, []);
     }
+
+    // A conversation followed before the bot was told not to follow is let go: what was kept of it doesn't decide.
+    const before = await setup(undefined, { follow: true });
+    await before.send(before.platform.message('hello'));
+    await before.send(before.platform.unaddressed!('and another thing'));
+    assert.equal(before.voiceflow.interacts.length, 2, 'followed, at first');
+    const shared = { state: before.state, platform: before.platform };
+    const after = await setup(undefined, { follow: false, ...shared });
+    await after.send(after.platform.unaddressed!('still there?'));
+    assert.equal(after.voiceflow.interacts.length, 0, 'told not to follow, the bot no longer answers what is not said to it there');
+    await after.send(after.platform.message('are you there?'));
+    assert.equal(after.voiceflow.interacts.length, 1, 'a mention there is still answered');
+    await after.send(after.platform.unaddressed!('and again'));
+    assert.equal(after.voiceflow.interacts.length, 1, 'and the conversation is not followed again');
+    assert.deepEqual(after.errors, []);
+    // Let go for good: told to follow again, the bot waits for a mention as in any conversation it isn't in.
+    const again = await setup(undefined, { follow: true, ...shared });
+    await again.send(again.platform.unaddressed!('anyone?'));
+    assert.equal(again.voiceflow.interacts.length, 0, 'what was let go is not picked up where it was left');
+
     // Left alone, the channel does what its platform calls for.
     const t = await setup();
     await t.send(t.platform.message('hello'));

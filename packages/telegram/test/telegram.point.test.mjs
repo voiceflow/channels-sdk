@@ -23,7 +23,11 @@ async function app(t, { token } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'telegram-point-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const envFile = join(dir, '.env.local');
-  await writeFile(envFile, `TELEGRAM_BOT_TOKEN=${token ?? platform.adapter.botToken}\nTELEGRAM_API_BASE_URL=${platform.adapter.apiUrl}\n`);
+  // As the starter writes it: the secret connect makes is named, on a line with nothing after it.
+  await writeFile(
+    envFile,
+    `TELEGRAM_BOT_TOKEN=${token ?? platform.adapter.botToken}\nTELEGRAM_WEBHOOK_SECRET_TOKEN=\nTELEGRAM_API_BASE_URL=${platform.adapter.apiUrl}\n`,
+  );
   const api = fakeVoiceflowApi({ project: { id: 'proj1', name: 'Acme Support', workspaceID: 'ws1' }, apiKey: VF_KEY });
   // Voiceflow's API is the fake; Telegram is the stand-in on this machine.
   const fetch = (input, init) => (String(input).startsWith('http://127.0.0.1') ? globalThis.fetch(input, init) : api.fetch(input, init));
@@ -55,7 +59,8 @@ test('connect gives Telegram the address with a secret it made, and the server t
   assert.match(secret, /^[0-9a-f]{64}$/, 'a secret was made and saved');
   const webhook = a.platform.webhook();
   assert.equal(webhook.url, 'https://bot.example.com/api/telegram');
-  assert.equal(webhook.secret_token, secret, 'Telegram was given the same secret');
+  assert.equal(webhook.secret_token, secret, 'Telegram was given the same secret, not the empty line that stood for it');
+  assert.equal((await readFile(a.envFile, 'utf8')).match(/^TELEGRAM_WEBHOOK_SECRET_TOKEN=/gm).length, 1, 'which was written on that line');
   for (const kind of ['message', 'callback_query']) assert.ok(webhook.allowed_updates.includes(kind), `Telegram is asked to send ${kind}`);
   assert.match(said, /\+ Telegram sends your bot's messages to https:\/\/bot\.example\.com\/api\/telegram/);
   assert.ok(!said.includes(secret) && !said.includes(a.platform.adapter.botToken), 'neither the secret nor the token is printed');

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { channelCommands, missingSettings, toMake } from '../dist/connect.js';
-import { channel, contextVariables, createChannelExtension, loadAdapter, render, toPlain } from '../dist/index.js';
+import { channel, contextVariables, createChannelExtension, loadAdapter, render, splitText, toPlain } from '../dist/index.js';
 import { fakeVoiceflowApi } from '../dist/testing.js';
 
 test("Markdown as plain words keeps what a person needs: the words, a list's numbers, a link's address", () => {
@@ -22,6 +22,14 @@ test("Markdown as plain words keeps what a person needs: the words, a list's num
   );
   assert.equal(toPlain('Write to [help@example.com](mailto:help@example.com)'), 'Write to help@example.com', 'an address written as itself is said once');
   assert.equal(toPlain('![A chart](https://example.com/c.png)'), 'A chart (https://example.com/c.png)');
+  // Written by reference, with where it leads on a line of its own: the address goes beside the words all the same.
+  assert.equal(
+    toPlain('See [our site][site] and [the FAQ].\n\n[site]: https://example.com/returns\n[the faq]: https://example.com/faq'),
+    'See our site (https://example.com/returns) and the FAQ (https://example.com/faq).',
+  );
+  assert.equal(toPlain('![A chart][chart]\n\n[chart]: https://example.com/c.png'), 'A chart (https://example.com/c.png)');
+  assert.equal(toPlain('![][chart]\n\n[chart]: https://example.com/c.png'), 'https://example.com/c.png', 'a picture with no words is its address');
+  assert.equal(toPlain('A [link] with nowhere to lead.'), 'A [link] with nowhere to lead.');
   assert.equal(toPlain('> quoted **text**'), 'quoted text');
   assert.equal(toPlain('```js\nconst a = 1;\n```'), 'const a = 1;');
   assert.equal(toPlain('| a | b |\n|---|---|\n| 1 | 2 |'), 'a | b\n1 | 2');
@@ -29,6 +37,21 @@ test("Markdown as plain words keeps what a person needs: the words, a list's num
   assert.equal(toPlain('5\\. Not a list, 2 * 3 = 6'), '5. Not a list, 2 * 3 = 6', 'what was escaped is read as written');
   assert.equal(toPlain('Just words.'), 'Just words.');
   assert.equal(toPlain(''), '');
+});
+
+test('text sent as it is written is cut by its own length, and a line of backticks in it is only that', () => {
+  const line = 'Use [the form](https://example.com/form) and **press send**.';
+  const long = Array.from({ length: 40 }, () => line).join('\n');
+  const parts = splitText(long, 500);
+  assert.ok(parts.length > 4, `${parts.length} parts`);
+  assert.ok(
+    parts.every((part) => part.length <= 500),
+    'each within the limit, every mark counted',
+  );
+  assert.equal(parts.join('\n'), long, 'and nothing added or lost');
+  const fenced = `\`\`\`\n${Array.from({ length: 30 }, (_, i) => `line ${i} of what looks like code`).join('\n')}`;
+  assert.equal(splitText(fenced, 200).join('\n'), fenced, 'no fence is closed or opened: the text is not Markdown any more');
+  assert.deepEqual(splitText('short', 500), ['short']);
 });
 
 test("a channel is the adapter's module, its variables, and what its package says of the platform", () => {
@@ -277,7 +300,8 @@ test('the platform is given the address with the secret connect just made, and n
     settings: [{ key: 'HOOK_SECRET', description: 'x', make: true }],
     point: async ({ url, env }) => (given.push([url, env.HOOK_SECRET]), `+ pointed with ${env.TELEGRAM_BOT_TOKEN}`),
   };
-  const c = await commands(t, setup);
+  // The env file as a new app has it: the secret's name on a line, with nothing after it yet.
+  const c = await commands(t, setup, 'TELEGRAM_BOT_TOKEN=110:made-up\nHOOK_SECRET=\n');
   const early = await c.run(['point', '--public-url', 'https://bot.example.com']);
   assert.equal(early.code, 3, early.said);
   assert.match(
@@ -289,7 +313,12 @@ test('the platform is given the address with the secret connect just made, and n
   const done = await c.run(['connect', '--yes', '--public-url', 'https://bot.example.com']);
   assert.equal(done.code, 0, done.said);
   const secret = /^HOOK_SECRET=([0-9a-f]{64})$/m.exec(await c.read())?.[1];
-  assert.deepEqual(given, [['https://bot.example.com/api/telegram', secret]], 'the secret made in this run went with the address');
+  assert.deepEqual(
+    given,
+    [['https://bot.example.com/api/telegram', secret]],
+    'the secret made in this run went with the address, not the empty line that stood for it',
+  );
+  assert.equal((await c.read()).match(/^HOOK_SECRET=/gm).length, 1, 'and it was written on that line, not on another');
   assert.match(done.said, /\+ pointed with /);
   assert.ok(!done.said.includes('110:made-up'), "a line a channel's own code prints is cleaned of secrets too");
 

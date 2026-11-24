@@ -6,7 +6,7 @@
 import type { SentMessage, StreamChunk, Thread } from 'chat';
 import { toPlain } from './plain.js';
 import { type ButtonsShown, type Post, type Renderer, type RenderOptions, withSources } from './render.js';
-import { type Measure, splitMarkdown } from './split.js';
+import { type Measure, splitMarkdown, splitText } from './split.js';
 import { type Choice, type Reply, type Source, sourcesOf, translate } from './translate.js';
 import type { Trace } from './voiceflow.js';
 
@@ -71,7 +71,8 @@ async function postFitting(thread: AnyThread, post: Post, options: DeliveryOptio
     // A string is sent as it is: no adapter reads it as Markdown, or writes it back with marks of its own.
     const words = toPlain(text);
     let sent!: SentMessage;
-    for (const part of options.maxText ? splitMarkdown(words, options.maxText, options.measureText) : [words]) sent = await thread.post(part);
+    // And it is as long as it is written: measured as Markdown, marks in it that are only text would not be counted.
+    for (const part of options.maxText ? splitText(words, options.maxText) : [words]) sent = await thread.post(part);
     return sent;
   }
   const whole: Post = text === written ? post : { markdown: text };

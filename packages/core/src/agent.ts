@@ -362,7 +362,15 @@ export function createVoiceflowAgent(options: VoiceflowAgentOptions): VoiceflowA
         if (extensionOf(thread)?.follow !== false) await thread.subscribe();
         await agent.reply(thread, message);
       });
-      bot.onSubscribedMessage((thread, message) => agent.reply(thread, message));
+      bot.onSubscribedMessage(async (thread, message) => {
+        // A conversation followed before the channel was told not to follow: it is let go, and from then on only
+        // what is said to the bot is answered there, as in one it never followed.
+        if (extensionOf(thread)?.follow === false) {
+          await thread.unsubscribe().catch(() => {});
+          if (!message.isMention && !thread.isDM) return;
+        }
+        await agent.reply(thread, message);
+      });
       bot.onAction((event) => agent.choose(event));
       for (const extension of extensions.values()) extension.attach?.(bot, host(extension));
     },

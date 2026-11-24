@@ -16,7 +16,7 @@ const BREAK_FROM = 0.5;
 const FENCE = /^[ \t]*(```+|~~~+)(.*)$/;
 
 /** The line that opened the code block `text` ends inside of, or `null` when it ends outside any. */
-function openFence(text: string): string | null {
+function fenceOpenIn(text: string): string | null {
   let open: { marker: string; line: string } | null = null;
   for (const line of text.split('\n')) {
     const fence = FENCE.exec(line);
@@ -26,8 +26,6 @@ function openFence(text: string): string | null {
   }
   return open?.line ?? null;
 }
-
-const closed = (text: string) => (openFence(text) ? `${text}\n\`\`\`` : text);
 
 /** A line that leads into what follows it: a heading, or a line ending in a colon. Short, and not a finished sentence. */
 const leadsIn = (block: string) => !block.includes('\n') && block.length <= 80 && !/[.!?…]["')\]*_]*$/.test(block.trimEnd());
@@ -77,6 +75,20 @@ function breakBefore(text: string, limit: number): number {
  * Text that fits comes back as it was.
  */
 export function splitMarkdown(markdown: string, max: number, measure: Measure = (text) => text.length): string[] {
+  return split(markdown, max, measure, true);
+}
+
+/**
+ * The same for text that is sent as it is written, mark for mark: it is as long as its characters, and a line of
+ * backticks in it is only that, so nothing is added to close or open a code block.
+ */
+export function splitText(text: string, max: number): string[] {
+  return split(text, max, (part) => part.length, false);
+}
+
+function split(markdown: string, max: number, measure: Measure, fences: boolean): string[] {
+  const openFence = fences ? fenceOpenIn : () => null;
+  const closed = (text: string) => (openFence(text) ? `${text}\n\`\`\`` : text);
   if (!(max >= MIN_LIMIT) || measure(markdown) <= max) return [markdown];
   const parts: string[] = [];
   let rest = markdown;
