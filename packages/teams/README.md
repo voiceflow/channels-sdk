@@ -143,10 +143,11 @@ mention.
 | `context` | `true` | Set who and where as `teams_*` variables on every turn. |
 | `headings` | `true` | Send a heading as a bold line. |
 
-The adapter logs a failed call to Teams with the request that made it, the
-bot's access token included. By default this package's logger prints only
-warnings and errors, each a line, with no token in it: pass
-`adapter: { logger }` for your own.
+By default the adapter's warnings and errors are printed, each a line. A
+failed call to Teams is its name, its message, its status and what Teams
+answered: never the request, which carries the bot's access token. Pass
+`adapter: { logger }` for a logger of your own: it gets the same lines, with
+the token and the app's secret taken out the same way.
 
 ### Variables
 

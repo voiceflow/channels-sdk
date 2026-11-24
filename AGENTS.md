@@ -42,6 +42,7 @@ a tool's code is its functions' text, so restyling it would change the tool.
 | `packages/slack/src/tools/` | What goes on the agent: `presentation.ts` (functions that show native Slack UI) and the install set |
 | `packages/slack/src/workspace.ts` | The workspace tools (act in Slack): server tools, run with the adapter's own client |
 | `packages/core/src/channel.ts`, `connect.ts`, `contract.ts`, `plain.ts` | What every channel's package is built from: `channel()`, the `connect`/`point`/`disconnect` commands, the conversation contract every channel's tests run, and Markdown as plain words |
+| `packages/core/src/log.ts` | What every adapter logs goes through `cleanLogger` first: no access token, no secret of the channel's, and no request an error carries reaches a log. `createChannels` gives it to every adapter it makes |
 | `packages/<channel>` | A channel's package. Discord and Teams are written by hand like Slack; the rest are written by `scripts/channels.mjs` from one template, with what a platform needs beyond it in the package's `traits.json`, `src/platform.ts`, `src/connect/point.ts` and `test/stand-in.mjs` (never written by the script) |
 | `scripts/channels.mjs` | Writes those packages and the README's table of channels. `--check` fails when one was edited by hand. Change the template, then run it |
 | `packages/core/src/dev.ts`, `tunnel.ts` | `voiceflow-channels dev`: a tunnel, your server, and each channel pointed at it |
@@ -87,6 +88,9 @@ a tool's code is its functions' text, so restyling it would change the tool.
   assert this; extend them when you add output. A command prints only through
   its redactor (`createRedactor` in `packages/core/src/redact.ts`), and an
   error built from a server's words is cleaned with `redact` before it is cut.
+  The same holds for what an adapter logs on a server: it goes through the
+  core's `cleanLogger`, and the shared tests fail if a credential a stand-in
+  was given turns up in any line.
 - **The person comes from the verified event, never from the model.** A tool
   that acts for someone is a server tool: it reads them from `turn.userId`,
   which the server took from the turn's pass, and acts only where that person

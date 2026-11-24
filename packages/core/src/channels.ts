@@ -7,6 +7,7 @@ import { createVoiceflowAgent, type VoiceflowAgent, type VoiceflowAgentOptions }
 import { ChannelsError } from './errors.js';
 import type { ChannelExtension } from './extension.js';
 import { type Importer, loadAdapter } from './loader.js';
+import { adapterLogger } from './log.js';
 import { isToolCall } from './tool-server.js';
 
 export type ChannelSpec =
@@ -61,7 +62,9 @@ export async function createChannels(options: ChannelsOptions): Promise<Channels
     // An option the caller left undefined is one they didn't set: it takes no default away.
     const set = Object.fromEntries(Object.entries(adapterOptions ?? {}).filter(([, value]) => value !== undefined));
     const merged = extension?.adapterDefaults ? { ...extension.adapterDefaults, ...set } : adapterOptions;
-    adapters[slug] = adapter ?? (await loadAdapter(slug, { options: merged, module, importer: options.importer }));
+    // Whatever the adapter logs goes through a logger that keeps the channel's secrets, and any access token, out
+    // of it: its own where it was given one, the console otherwise. An adapter passed whole logs as it was made.
+    adapters[slug] = adapter ?? (await loadAdapter(slug, { options: { ...merged, logger: adapterLogger(slug, merged) }, module, importer: options.importer }));
     if (extension) extensions.push(extension);
   }
 

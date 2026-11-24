@@ -44,8 +44,8 @@ export function createTeamsExtension(options: TeamsOptions = {}): ChannelExtensi
   return {
     slug: SLUG,
     // The adapter logs each request and each call, and logs a failed call with the request that made it, the bot's
-    // access token included. So only its warnings and errors are printed, each a line, with no token in it:
-    // unless you give it a logger of your own.
+    // access token included. So only its warnings and errors are printed, each a line, with no token in it. A
+    // logger of your own gets every line instead, cleaned by the core as every channel's is.
     adapterDefaults: { logger: teamsLogger() },
     maxTextLength: MAX_TEXT,
 
