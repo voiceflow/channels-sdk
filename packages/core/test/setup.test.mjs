@@ -1,9 +1,12 @@
 // What every channel's command shares that isn't covered through a channel's own tests: when a page may be
-// opened in a browser, and what may be opened.
+// opened in a browser, what may be opened, and which values are written to an env file as they are.
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import { canOpenBrowser, openInBrowser } from '../dist/setup.js';
+import { BARE, canOpenBrowser, openInBrowser, readEnvFile, saveEnv } from '../dist/setup.js';
 
 test("a page is opened only where the browser would be the person's own", () => {
   assert.equal(canOpenBrowser({}, 'darwin'), true);
@@ -61,4 +64,31 @@ test('only a web page is ever opened, and failing to is an answer, not an error'
     }),
     false,
   );
+});
+
+test('a value with a "~" is saved as it is, except where a shell would read the "~" as a home folder', async () => {
+  // Microsoft's app secrets have a "~" in the middle: every env file parser, and a shell, reads it as written.
+  for (const value of ['abc8Q~def-GHI_jkl.mno', 'a~b~c', 'key=va~lue']) assert.ok(BARE.test(value), value);
+  // First, or after a colon, a shell makes it a home folder; a space, a quote, a "#" or a "$" each read as something else.
+  for (const value of ['~abc', 'path:~/bin', 'two words', 'say"hi"', 'a#b', 'cost$5', '']) assert.ok(!BARE.test(value), value);
+
+  const dir = await mkdtemp(join(tmpdir(), 'setup-env-'));
+  const envFile = join(dir, '.env.local');
+  await writeFile(envFile, 'KEPT=as-it-was\n');
+  const out = [];
+  const err = [];
+  const saved = await saveEnv(
+    { envFile, inFile: { KEPT: 'as-it-was' } },
+    [
+      ['SECRET', 'abc8Q~def-GHI_jkl.mno'],
+      ['KEPT', 'something-else'],
+      ['HOME_LIKE', '~abc'],
+      ['EMPTY', ''],
+    ],
+    { out: (line) => out.push(line), err: (line) => err.push(line) },
+  );
+  assert.deepEqual(saved, ['SECRET']);
+  assert.deepEqual(await readEnvFile(envFile), { KEPT: 'as-it-was', SECRET: 'abc8Q~def-GHI_jkl.mno' });
+  assert.deepEqual(out, [`+ saved SECRET to ${envFile}`]);
+  assert.deepEqual(err, [`! HOME_LIKE wasn't saved to ${envFile}: its value needs quoting there. Add it yourself.`]);
 });

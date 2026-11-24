@@ -16,8 +16,11 @@ import { type DraftChanges, draftChanges, type EnvironmentOptions, formatDraftCh
 
 export type Say = (line: string) => void;
 
-/** A value that reads the same in every env file parser with no quotes around it. */
-export const BARE = /^[\w.:/@+=,-]+$/;
+/**
+ * A value that reads the same in every env file parser with no quotes around it. A `~` is one of its characters
+ * (Microsoft's app secrets have one) except where a shell would read it as a home folder: first, or after a colon.
+ */
+export const BARE = /^(?!~)(?!.*:~)[\w.:/@+=,~-]+$/;
 
 /** Sets these keys in an env file, keeping its other lines, readable only by you. */
 export async function writeEnvFile(path: string, values: Record<string, string | undefined>): Promise<void> {

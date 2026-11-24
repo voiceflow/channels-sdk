@@ -6,7 +6,7 @@ The core of Voiceflow Channels: a Voiceflow agent inside any
 > **Status:** pre-release, local only. Not published. The package name is not final.
 
 It loads any adapter the catalog lists; Slack is the one tested live so far. A channel package
-(`@voiceflow/channels-slack`, `@voiceflow/channels-discord`) adds what only that channel has: its
+(`@voiceflow/channels-slack`, `@voiceflow/channels-discord`, `@voiceflow/channels-teams`) adds what only that channel has: its
 native behaviours, its tools, and the `connect` command that sets it up.
 
 ## Entry points
@@ -134,8 +134,8 @@ command, for any channel:
   `point --public-url <address> --local-url <the server here>`.
 - **It connects a channel that never was**, before anything is started, when
   a person is there: a channel's connect module can export `connected`, and
-  dev runs its `connect --from-dev` when that says no. Discord's does, so its
-  first `dev` is its setup too.
+  dev runs its `connect --from-dev` when that says no. Discord's and Teams'
+  do, so their first `dev` is their setup too.
 - **It holds a standing connection** for a channel whose platform sends over
   one (Discord's Gateway): the connect module exports `listen`.
 - **Stopping it stops all of it.** `--public-url` uses an address of your own

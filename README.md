@@ -13,8 +13,9 @@ any platform it has an adapter for.
 
 > **Status:** pre-release, local only. Not published; package names are not final.
 > Slack is supported and tested end to end, in Slack itself as well as in the
-> tests. Discord has a package of its own, tested the same two ways. Other
-> adapters load through the same catalog, but none has been tried live yet.
+> tests. Discord and Microsoft Teams each have a package of their own, tested
+> the same two ways. Other adapters load through the same catalog, but none
+> has been tried live yet.
 
 ## Quickstart
 
@@ -92,6 +93,7 @@ run.
 | [`@voiceflow/channels-sdk`](packages/core) | The core: a Voiceflow agent on any Chat SDK adapter, the extension API, the tool installer, and the `voiceflow-channels` CLI. |
 | [`@voiceflow/channels-slack`](packages/slack) | Slack at full fidelity: its native features, its tools, and `connect slack`. |
 | [`@voiceflow/channels-discord`](packages/discord) | Discord: mentions, threads, direct messages, buttons, `/ask`, and `connect discord`. |
+| [`@voiceflow/channels-teams`](packages/teams) | Microsoft Teams: chats, channel threads, mentions, buttons, cards, and `connect teams`, with no Azure account. |
 | [`create-voiceflow-channels`](packages/create) | The starter: `npm create voiceflow-channels@latest` makes a new app. |
 
 ## Features
@@ -138,6 +140,8 @@ run.
   Slack option, the tools, and the `slack_*` variables.
 - [`@voiceflow/channels-discord`](packages/discord/README.md): `connect discord`,
   how Discord reaches your server, the options, and the `discord_*` variables.
+- [`@voiceflow/channels-teams`](packages/teams/README.md): `connect teams`, what
+  Microsoft has to allow, the options, and the `teams_*` variables.
 - [`@voiceflow/channels-sdk`](packages/core/README.md): the API, server tools,
   channel extensions, and installing tools.
 - [Staying current with Chat SDK](docs/upstream.md).

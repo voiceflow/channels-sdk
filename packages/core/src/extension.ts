@@ -82,6 +82,12 @@ export interface ChannelExtension {
    * on a conversation's first turn (where earlier messages can be caught up).
    */
   input?(text: string, ctx: TurnContext & { isNew: boolean }): string | Promise<string>;
+  /**
+   * Rewrites the agent's text into what the platform shows, before it is
+   * posted: a message of text alone, whole (not one being streamed). Teams
+   * shows no headings, so its package makes each a bold line.
+   */
+  text?(markdown: string): string;
   /** Called as a turn starts. Never fails the turn. */
   turnStarted?(ctx: TurnContext): void | Promise<void>;
   /** Called when a turn has ended, whether or not it failed. Never fails the turn. */

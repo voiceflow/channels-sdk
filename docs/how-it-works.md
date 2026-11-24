@@ -77,11 +77,12 @@ turn's own stream, and your server shows it.
 
 ## Any Chat SDK adapter
 
-A channel package (`@voiceflow/channels-slack`, `@voiceflow/channels-discord`)
+A channel package (`@voiceflow/channels-slack`, `@voiceflow/channels-discord`,
+`@voiceflow/channels-teams`)
 brings what only its platform has. Any other platform in
 [Chat SDK's catalog](https://chat-sdk.dev/adapters) loads through the core on
-its own, with the replies fitted to what the platform can show. Only Slack has
-been tried live so far.
+its own, with the replies fitted to what the platform can show. Slack, Discord
+and Teams have been tried live so far.
 
 Install its adapter, and name it in `channels`:
 

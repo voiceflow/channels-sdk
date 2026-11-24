@@ -6,7 +6,7 @@
 import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-const CHANNELS = ['slack', 'discord'];
+const CHANNELS = ['slack', 'discord', 'teams'];
 const templates = new URL('../template/', import.meta.url);
 
 await rm(templates, { recursive: true, force: true });
