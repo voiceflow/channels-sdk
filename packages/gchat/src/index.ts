@@ -1,10 +1,10 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // A Voiceflow agent in Google Chat. Everything channel-neutral comes from
-// @voiceflow/channels-sdk; this package brings Chat SDK's Google Chat adapter.
+// @voiceflow/channelkit; this package brings Chat SDK's Google Chat adapter.
 import * as adapter from '@chat-adapter/gchat';
-import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channels-sdk';
+import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channelkit';
 
-export type { ChannelOptions as GchatOptions } from '@voiceflow/channels-sdk';
+export type { ChannelOptions as GchatOptions } from '@voiceflow/channelkit';
 
 /** Every variable this channel sets, with what it holds. `connect gchat` creates them on the agent. */
 export const CONTEXT_VARIABLES: Record<string, string> = contextVariables('gchat');

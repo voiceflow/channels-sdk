@@ -1,7 +1,7 @@
 // Voiceflow agents in Slack. Everything channel-neutral
-// comes from @voiceflow/channels-sdk; this package adds what only Slack has.
+// comes from @voiceflow/channelkit; this package adds what only Slack has.
 import * as slackAdapter from '@chat-adapter/slack';
-import type { ChannelSpec } from '@voiceflow/channels-sdk';
+import type { ChannelSpec } from '@voiceflow/channelkit';
 import { createSlackExtension, type SlackOptions } from './extension.js';
 
 export type { SlackAdapterLike } from './adapter.js';

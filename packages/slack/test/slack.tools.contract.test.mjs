@@ -6,8 +6,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createMemoryState } from '@chat-adapter/state-memory';
-import { createChannels, PASS_VARIABLE, TOOL_CALL_HEADER } from '@voiceflow/channels-sdk';
-import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
+import { createChannels, PASS_VARIABLE, TOOL_CALL_HEADER } from '@voiceflow/channelkit';
+import { fakeVoiceflow, waiter } from '@voiceflow/channelkit/testing';
 import { slack as slackChannel } from '../dist/index.js';
 import { BOT_TOKEN, SIGNING_SECRET, slackAction, slackEvent, startFakeSlack } from './helpers/fake-slack.mjs';
 

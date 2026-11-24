@@ -1,7 +1,7 @@
 // Discord sends what people write over a standing connection (its Gateway),
 // never to an address. This holds that connection open and passes each event
 // on to your server's Discord route, where the adapter takes it as it takes
-// any request. `voiceflow-channels dev` runs it beside your server; a server
+// any request. `voiceflow-channelkit dev` runs it beside your server; a server
 // that stays up can run it too. Slash commands and button clicks don't come
 // this way once Discord has your server's address: it sends those there.
 //

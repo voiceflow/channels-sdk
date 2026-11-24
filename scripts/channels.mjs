@@ -126,16 +126,16 @@ function files(slug) {
   const header = `// Written by scripts/channels.mjs: change the template there, not this file.`;
 
   const pkg = {
-    name: `@voiceflow/channels-${slug}`,
+    name: `@voiceflow/channelkit-${slug}`,
     version: '0.0.0',
     private: true,
     description: `A Voiceflow agent in ${name}, with one command to set it up.`,
-    keywords: ['voiceflow', slug, 'chat-sdk', 'vercel-chat', 'chatbot', 'bot', 'ai-agent', 'conversational-ai'],
+    keywords: ['voiceflow', 'channelkit', slug, 'chat-sdk', 'vercel-chat', 'chatbot', 'bot', 'ai-agent', 'conversational-ai'],
     author: 'Braden Ream',
     license: 'MIT',
-    repository: { type: 'git', url: 'git+https://github.com/voiceflow/channels-sdk.git', directory: dir },
-    homepage: `https://github.com/voiceflow/channels-sdk/tree/main/${dir}#readme`,
-    bugs: { url: 'https://github.com/voiceflow/channels-sdk/issues' },
+    repository: { type: 'git', url: 'git+https://github.com/voiceflow/channelkit.git', directory: dir },
+    homepage: `https://github.com/voiceflow/channelkit/tree/main/${dir}#readme`,
+    bugs: { url: 'https://github.com/voiceflow/channelkit/issues' },
     publishConfig: { access: 'public' },
     type: 'module',
     engines: { node: '>=22' },
@@ -145,7 +145,7 @@ function files(slug) {
     },
     files: ['dist', 'src', 'README.md', 'LICENSE'],
     scripts: { build: 'tsc -p tsconfig.json', test: 'npm run build && node --test test/*.test.mjs', typecheck: 'tsc -p tsconfig.json --noEmit' },
-    dependencies: { '@voiceflow/channels-sdk': '0.0.0' },
+    dependencies: { '@voiceflow/channelkit': '0.0.0' },
     peerDependencies: {
       chat: '>=4.44.0 <5',
       '@chat-adapter/catalog': '>=4.44.0 <5',
@@ -157,11 +157,11 @@ function files(slug) {
 
   const index = `${header}
 // A Voiceflow agent in ${name}. Everything channel-neutral comes from
-// @voiceflow/channels-sdk; this package brings Chat SDK's ${name} adapter.
+// @voiceflow/channelkit; this package brings Chat SDK's ${name} adapter.
 import * as adapter from '${packageName}';
-import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channels-sdk';
+import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channelkit';
 ${fromPlatform.length ? `import { ${fromPlatform.join(', ')} } from './platform.js';\n` : ''}
-export type { ChannelOptions as ${pascal(slug)}Options } from '@voiceflow/channels-sdk';
+export type { ChannelOptions as ${pascal(slug)}Options } from '@voiceflow/channelkit';
 
 /** Every variable this channel sets, with what it holds. \`connect ${slug}\` creates them on the agent. */
 export const CONTEXT_VARIABLES: Record<string, string> = contextVariables('${slug}');
@@ -178,8 +178,8 @@ export function ${slug}(options: ChannelOptions = {}): ChannelSpec {
 
   const connect = `${header}
 // \`connect ${slug}\`, \`point ${slug}\` and \`disconnect ${slug}\`. Node only: import it
-// from \`@voiceflow/channels-${slug}/connect\`.
-import { channelCommands } from '@voiceflow/channels-sdk/connect';
+// from \`@voiceflow/channelkit-${slug}/connect\`.
+import { channelCommands } from '@voiceflow/channelkit/connect';
 ${hasPoint ? `import { point${hasRemove ? ', remove' : ''} } from './point.js';\n` : ''}
 export const { cli, connected, settings } = channelCommands('${slug}'${setupLiteral});
 `;
@@ -190,7 +190,7 @@ export const { cli, connected, settings } = channelCommands('${slug}'${setupLite
 // (./stand-in.mjs) and a scripted Voiceflow runtime. Every channel runs the
 // same conversation.
 import { createMemoryState } from '@chat-adapter/state-memory';
-import { channelContract } from '@voiceflow/channels-sdk/testing';
+import { channelContract } from '@voiceflow/channelkit/testing';
 import * as commands from '../dist/connect/index.js';
 import { CONTEXT_VARIABLES, ${slug} } from '../dist/index.js';
 import { start } from './stand-in.mjs';
@@ -234,7 +234,7 @@ channelContract({ slug: '${slug}', channel: ${slug}, variables: CONTEXT_VARIABLE
     ...(env.optional ?? []).filter((v) => !extra.some((x) => x.key === v.key)).map((v) => `| \`${v.key}\` | No | ${v.description ?? ''} |`),
   ];
   const variableRows = Object.entries(variablesOf(slug, name)).map(([key, text]) => `| \`${key}\` | ${text} |`);
-  const readme = `# @voiceflow/channels-${slug}
+  const readme = `# @voiceflow/channelkit-${slug}
 
 A Voiceflow agent in ${name}, with one command to set it up.
 
@@ -244,7 +244,7 @@ A Voiceflow agent in ${name}, with one command to set it up.
 ## Connect
 
 \`\`\`bash
-npx voiceflow-channels connect ${slug} --env-file .env.local
+npx voiceflow-channelkit connect ${slug} --env-file .env.local
 \`\`\`
 
 ${name}'s side is made on ${name}'s own pages: its app or bot, and the
@@ -256,11 +256,11 @@ the rest. It shows its whole plan and asks before it changes anything.
 ${made.length ? `- **It makes ${made.map((v) => `\`${v.key}\``).join(' and ')}**, a secret of your own that ${name} sends back with each message, and saves it to the env file.\n` : ''}- **It creates the \`${slug}_*\` variables** on your agent, for its prompts.
 - **It writes the Voiceflow values** it had to ask for to the env file. A
   value already there is never changed.
-- **${hasPoint ? `It gives ${name} your server's address` : `It says what address to give ${name}`}**${hasPoint ? `, when you pass one (\`--public-url\`). \`voiceflow-channels dev\` gives it the tunnel's each time it starts${hasRemove ? ', and `disconnect` takes it back' : ''}.` : `: your server's public address, then \`/api/${slug}\`${traits.addressGoes ? `. It goes in ${traits.addressGoes}` : ''}. \`voiceflow-channels dev\` prints the tunnel's each time it starts.`}
+- **${hasPoint ? `It gives ${name} your server's address` : `It says what address to give ${name}`}**${hasPoint ? `, when you pass one (\`--public-url\`). \`voiceflow-channelkit dev\` gives it the tunnel's each time it starts${hasRemove ? ', and `disconnect` takes it back' : ''}.` : `: your server's public address, then \`/api/${slug}\`${traits.addressGoes ? `. It goes in ${traits.addressGoes}` : ''}. \`voiceflow-channelkit dev\` prints the tunnel's each time it starts.`}
 - **With nobody at the terminal** (a script, a coding agent) connect asks
   nothing. It stops with exit code 3 and says, in the one stop, everything a
   person has to do. Exit 0 is done, 1 a failure, 2 a mistake in the command.
-- **\`voiceflow-channels dev\` runs connect for you** the first time, when a
+- **\`voiceflow-channelkit dev\` runs connect for you** the first time, when a
   person is there. So in an app the starter made, \`npm run dev\` is the one
   command.
 - **Nothing is published.** The variables are live once you publish the
@@ -270,7 +270,7 @@ ${made.length ? `- **It makes ${made.map((v) => `\`${v.key}\``).join(' and ')}**
 ## In your server
 
 \`\`\`ts
-import { ${slug} } from '@voiceflow/channels-${slug}';
+import { ${slug} } from '@voiceflow/channelkit-${slug}';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: process.env.VOICEFLOW_PROJECT_ID! },
@@ -283,7 +283,7 @@ const channels = await createChannels({
 Install it with Chat SDK's adapter:
 
 \`\`\`bash
-npm install @voiceflow/channels-sdk @voiceflow/channels-${slug} chat @chat-adapter/catalog ${packageName}
+npm install @voiceflow/channelkit @voiceflow/channelkit-${slug} chat @chat-adapter/catalog ${packageName}
 \`\`\`
 
 ### What happens in ${name}
@@ -338,7 +338,7 @@ function channelTable() {
     const points = POINTS[slug] ?? existsSync(join(root, `packages/${slug}/src/connect/point.ts`));
     const most = traits.capabilities?.maxButtons;
     const choices = !yes(slug, 'buttons') ? 'A numbered list' : most ? `Buttons, up to ${most}` : 'Buttons';
-    return `| ${name} | [\`@voiceflow/channels-${slug}\`](packages/${slug}) | ${choices} | ${yes(slug, 'cardFormat') ? 'Cards' : 'Text'} | ${yes(slug, 'streaming') ? 'Streamed' : 'Posted whole'} | ${points ? '`connect` gives it' : 'You enter it'} |`;
+    return `| ${name} | [\`@voiceflow/channelkit-${slug}\`](packages/${slug}) | ${choices} | ${yes(slug, 'cardFormat') ? 'Cards' : 'Text'} | ${yes(slug, 'streaming') ? 'Streamed' : 'Posted whole'} | ${points ? '`connect` gives it' : 'You enter it'} |`;
   });
   return ["| Channel | Package | Choices | Cards | Answers | Your server's address |", '|---|---|---|---|---|---|', ...rows].join('\n');
 }

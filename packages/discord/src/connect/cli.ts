@@ -1,6 +1,6 @@
 // The command line for `connect discord`, `point discord` and `disconnect discord`:
 //
-//   npx voiceflow-channels connect discord --env-file .env.local
+//   npx voiceflow-channelkit connect discord --env-file .env.local
 //
 // Secrets never reach the screen or the command line: the Voiceflow API key
 // and the Discord bot token are each read from a file that holds only it,
@@ -11,8 +11,8 @@
 // it holds: a server that repeats one back in an error can't put it on screen.
 import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
-import { createRedactor, NeedsYou } from '@voiceflow/channels-sdk';
-import { checkProject } from '@voiceflow/channels-sdk/install';
+import { createRedactor, NeedsYou } from '@voiceflow/channelkit';
+import { checkProject } from '@voiceflow/channelkit/install';
 import {
   canOpenBrowser,
   hidden,
@@ -26,7 +26,7 @@ import {
   type Say,
   saveEnv,
   voiceflowKey,
-} from '@voiceflow/channels-sdk/setup';
+} from '@voiceflow/channelkit/setup';
 import { type ForwardGatewayOptions, forwardGateway } from '../gateway.js';
 import { createDiscordApi, DEVELOPER_PORTAL, installLink, isSnowflake, NEW_APPLICATION } from './api.js';
 import {
@@ -47,9 +47,9 @@ import {
 } from './connect.js';
 
 const USAGE = `Usage:
-  voiceflow-channels connect discord [--public-url <https://host>] [--env-file <path>] [options]
-  voiceflow-channels point discord --public-url <https://host> [--env-file <path>]
-  voiceflow-channels disconnect discord [--env-file <path>] [--yes]
+  voiceflow-channelkit connect discord [--public-url <https://host>] [--env-file <path>] [options]
+  voiceflow-channelkit point discord --public-url <https://host> [--env-file <path>]
+  voiceflow-channelkit disconnect discord [--env-file <path>] [--yes]
 
 Connect sets up a Discord bot for your Voiceflow agent. Discord has no way to
 make an application from here, so that one step is by hand: connect opens
@@ -69,7 +69,7 @@ VOICEFLOW_ENVIRONMENT, then --env-file.
 
 Discord sends what people write over a standing connection, and slash
 commands and button clicks to an address. Without --public-url, connect is
-for a server on this machine: \`voiceflow-channels dev\` holds the connection
+for a server on this machine: \`voiceflow-channelkit dev\` holds the connection
 and gives Discord your server's address each time it starts. Pass --public-url
 for a server that has an address of its own: Discord checks it answers there.
 
@@ -78,7 +78,7 @@ agent's prompts: they go on the environment's draft, and are live once you
 publish it. --publish does that here: the whole draft goes live.
 
 Point gives Discord another address for slash commands and buttons, and
-changes nothing else: \`voiceflow-channels dev\` runs it on each start.
+changes nothing else: \`voiceflow-channelkit dev\` runs it on each start.
 
 It exits 0 when done, 1 on a failure, 2 on a mistake in the command, and 3
 when it's waiting on you: do what it says, then run it again.
@@ -140,8 +140,8 @@ export interface CliIO {
   gateway?: (options: ForwardGatewayOptions) => Promise<void>;
 }
 
-const RELEASE_NAME = 'Discord variables (Channels SDK)';
-const RELEASE_DESCRIPTION = 'Published by `voiceflow-channels connect discord --publish`.';
+const RELEASE_NAME = 'Discord variables (ChannelKit)';
+const RELEASE_DESCRIPTION = 'Published by `voiceflow-channelkit connect discord --publish`.';
 
 /**
  * How to get a bot token: the one step Discord leaves to a person. The link opens the dialog that makes an
@@ -194,7 +194,7 @@ async function run(
       'no-open': { type: 'boolean', default: false },
       'no-wait': { type: 'boolean', default: false },
       'no-greeting': { type: 'boolean', default: false },
-      // Set by `voiceflow-channels dev` when it runs connect itself: the server starts next, so nobody is told to start it.
+      // Set by `voiceflow-channelkit dev` when it runs connect itself: the server starts next, so nobody is told to start it.
       'from-dev': { type: 'boolean', default: false },
       'no-variables': { type: 'boolean', default: false },
       'env-file': { type: 'string' },
@@ -426,7 +426,7 @@ ${
   result.endpoint === 'local'
     ? o['from-dev']
       ? "Your server starts next: dev holds the connection Discord sends messages over, and gives Discord your server's address for slash commands and buttons."
-      : "Then start your server with `voiceflow-channels dev -- <its command>` (`npm run dev` in an app the starter made): it holds the connection Discord sends messages over, and gives Discord your server's address for slash commands and buttons."
+      : "Then start your server with `voiceflow-channelkit dev -- <its command>` (`npm run dev` in an app the starter made): it holds the connection Discord sends messages over, and gives Discord your server's address for slash commands and buttons."
     : result.endpoint === 'refused'
       ? 'Discord has no address for slash commands and buttons yet: see below.'
       : `Discord sends slash commands and buttons to ${requestUrl}. What people write comes over a standing connection your server has to hold: the starter's README says how, for a server that stays up and for one that doesn't.`
@@ -455,7 +455,7 @@ ${
   const left = result.problems;
   if (left.length) {
     err(
-      `\n${left.join('\n\n')}${result.endpoint === 'refused' ? `\n\nOnce it's running there:\n\n  voiceflow-channels point discord --public-url ${o['public-url'] ?? '<https://host>'}${envFile ? ` --env-file ${envFile}` : ''}` : ''}`,
+      `\n${left.join('\n\n')}${result.endpoint === 'refused' ? `\n\nOnce it's running there:\n\n  voiceflow-channelkit point discord --public-url ${o['public-url'] ?? '<https://host>'}${envFile ? ` --env-file ${envFile}` : ''}` : ''}`,
     );
     return 3;
   }
@@ -492,7 +492,7 @@ async function botToken(from: {
   const where = from.envFile ? `in ${from.envFile}` : 'in the environment';
   if (from.connected)
     throw new NeedsYou(
-      `No DISCORD_BOT_TOKEN ${where}. Run connect first: voiceflow-channels connect discord${from.envFile ? ` --env-file ${from.envFile}` : ''}.`,
+      `No DISCORD_BOT_TOKEN ${where}. Run connect first: voiceflow-channelkit connect discord${from.envFile ? ` --env-file ${from.envFile}` : ''}.`,
     );
   if (!from.interactive) {
     throw new NeedsYou(
@@ -508,7 +508,7 @@ async function botToken(from: {
 
 /**
  * Whether a Discord bot has been connected from here: its token, its public key and its application's ID are all
- * in the environment or the env file. `voiceflow-channels dev` asks, and runs connect first when it hasn't.
+ * in the environment or the env file. `voiceflow-channelkit dev` asks, and runs connect first when it hasn't.
  */
 export async function connected(options: { envFile?: string; env?: Record<string, string | undefined> } = {}): Promise<boolean> {
   const env = options.env ?? process.env;
@@ -517,7 +517,7 @@ export async function connected(options: { envFile?: string; env?: Record<string
 }
 
 /**
- * Holds Discord's Gateway connection open for `voiceflow-channels dev`, passing
+ * Holds Discord's Gateway connection open for `voiceflow-channelkit dev`, passing
  * what people write to your server on this machine, until `signal` aborts.
  */
 export async function listen(
@@ -534,7 +534,7 @@ export async function listen(
   const absent = ['DISCORD_BOT_TOKEN', 'DISCORD_PUBLIC_KEY', 'DISCORD_APPLICATION_ID'].filter((name) => !get(name));
   if (absent.length) {
     throw new NeedsYou(
-      `No ${absent.join(', ')}${options.envFile ? ` here or in ${options.envFile}` : ' in the environment'}. Run connect first: voiceflow-channels connect discord${options.envFile ? ` --env-file ${options.envFile}` : ''}.`,
+      `No ${absent.join(', ')}${options.envFile ? ` here or in ${options.envFile}` : ' in the environment'}. Run connect first: voiceflow-channelkit connect discord${options.envFile ? ` --env-file ${options.envFile}` : ''}.`,
     );
   }
   const webhookUrl = `${options.localUrl.replace(/\/+$/, '')}${WEBHOOK_PATH}`;

@@ -2,8 +2,8 @@
 // bot's webhook is set with a call to the Bot API (setWebhook), along with the
 // secret Telegram is to send back on every request, which is how the server
 // knows a request is Telegram's.
-import { NeedsYou } from '@voiceflow/channels-sdk';
-import type { ChannelSetup } from '@voiceflow/channels-sdk/connect';
+import { NeedsYou } from '@voiceflow/channelkit';
+import type { ChannelSetup } from '@voiceflow/channelkit/connect';
 
 type Point = NonNullable<ChannelSetup['point']>;
 type Remove = NonNullable<ChannelSetup['remove']>;

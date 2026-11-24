@@ -94,10 +94,10 @@ what the draft holds, and why you ask.
   agent and its channels are set.
 - \`.env.local\`: the server's settings. \`.env.example\` names each one.
 - A server that has an address of its own: \`README.md\`, "Deploy it".
-- Every option: \`npx voiceflow-channels connect slack --help\` and
-  \`npx voiceflow-channels dev --help\`.
+- Every option: \`npx voiceflow-channelkit connect slack --help\` and
+  \`npx voiceflow-channelkit dev --help\`.
 - Tools of your own, and the rest:
-  [Voiceflow Channels](https://github.com/voiceflow/channels-sdk).
+  [Voiceflow ChannelKit](https://github.com/voiceflow/channelkit).
 `;
 }
 
@@ -111,7 +111,7 @@ A Voiceflow agent in Slack, served by one Next.js route:
 the assistant panel, buttons, forms and \`/ask\` all arrive there, and so do the
 calls the agent's Slack tools make.
 
-Made with [\`create-voiceflow-channels\`](https://github.com/voiceflow/channels-sdk).
+Made with [\`create-voiceflow-channelkit\`](https://github.com/voiceflow/channelkit).
 
 ## Run it
 
@@ -173,7 +173,7 @@ Slack's assistant panel.
 
 ## Learn more
 
-- [Voiceflow Channels](https://github.com/voiceflow/channels-sdk): every Slack
+- [Voiceflow ChannelKit](https://github.com/voiceflow/channelkit): every Slack
   option, the tools, and tools of your own.
 - [Voiceflow's documentation](https://www.voiceflow.com/docs), for building the
   agent itself.

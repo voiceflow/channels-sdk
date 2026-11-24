@@ -3,7 +3,7 @@
 // button that opens a Slack dialog, whose answers become the person's next
 // message to the agent).
 
-import type { ExtensionHost, TraceHandler, TraceTurn } from '@voiceflow/channels-sdk';
+import type { ExtensionHost, TraceHandler, TraceTurn } from '@voiceflow/channelkit';
 import {
   Actions,
   Button,

@@ -9,11 +9,11 @@
 // After that the app and the tools are yours: change them in Slack and in
 // Voiceflow. Running connect again only adds what's missing.
 //
-// Node only: import it from `@voiceflow/channels-slack/connect`.
+// Node only: import it from `@voiceflow/channelkit-slack/connect`.
 import { createHmac, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { redact, TOOLS_URL_SECRET } from '@voiceflow/channels-sdk';
+import { redact, TOOLS_URL_SECRET } from '@voiceflow/channelkit';
 import {
   type ApiOptions,
   checkProject,
@@ -25,8 +25,8 @@ import {
   secretState,
   setSecretValues,
   uninstallTools,
-} from '@voiceflow/channels-sdk/install';
-import { downloadIcon, type IconFile, iconUrl, VOICEFLOW_ICON_NAME, voiceflowIcon } from '@voiceflow/channels-sdk/setup';
+} from '@voiceflow/channelkit/install';
+import { downloadIcon, type IconFile, iconUrl, VOICEFLOW_ICON_NAME, voiceflowIcon } from '@voiceflow/channelkit/setup';
 import { type SlackToolsOptions, slackTools } from '../tools/index.js';
 import { createSlackApi, type SlackApi, SlackApiError } from './api.js';
 import { appNameOf, type ManifestChanges, type ManifestOptions, mergeManifest, repointManifest, type SlackManifest, slackManifest } from './manifest.js';
@@ -330,7 +330,7 @@ export async function connectSlack(options: ConnectSlackOptions): Promise<Connec
 // ── Another address ─────────────────────────────────────────────────────────
 // A server's address changes: a tunnel's is new each time it starts. Pointing
 // moves the app's request URL and the agent's tools to it, and nothing else:
-// no scope, no tool, no install. `voiceflow-channels dev` does it on each start.
+// no scope, no tool, no install. `voiceflow-channelkit dev` does it on each start.
 
 export interface PointSlackOptions {
   /** The Slack CLI's login. Leave it out for an app you made by hand: only the agent's tools are pointed, and Slack's settings stay yours. */

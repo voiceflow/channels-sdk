@@ -1,6 +1,6 @@
 // The command line for `connect slack` and `disconnect slack`:
 //
-//   npx voiceflow-channels connect slack --public-url https://<host> --env-file .env.local
+//   npx voiceflow-channelkit connect slack --public-url https://<host> --env-file .env.local
 //
 // Secrets never reach the screen or the command line: the Voiceflow API key is
 // read from a file (--key-file), VOICEFLOW_API_KEY, your server's env file
@@ -12,8 +12,8 @@
 // it holds: a server that repeats one back in an error can't put it on screen.
 import http from 'node:http';
 import { parseArgs } from 'node:util';
-import { createRedactor } from '@voiceflow/channels-sdk';
-import { checkTunnelTool, startTunnel, type Tunnel, type TunnelHost } from '@voiceflow/channels-sdk/dev';
+import { createRedactor } from '@voiceflow/channelkit';
+import { checkTunnelTool, startTunnel, type Tunnel, type TunnelHost } from '@voiceflow/channelkit/dev';
 import {
   hidden,
   previewPublish,
@@ -26,7 +26,7 @@ import {
   saveEnv,
   voiceflowKey,
   writeEnvFile,
-} from '@voiceflow/channels-sdk/setup';
+} from '@voiceflow/channelkit/setup';
 import { slackCliLogins } from './api.js';
 import {
   type ConnectResult,
@@ -45,11 +45,11 @@ import {
 import { NeedsYou, type SlackCliHost, slackSignIn } from './sign-in.js';
 
 const USAGE = `Usage:
-  voiceflow-channels connect slack [--public-url <https://host>] [--env-file <path>] [options]
-  voiceflow-channels connect slack --manual --public-url <https://host> [--env-file <path>]
-  voiceflow-channels point slack --public-url <https://host> [--env-file <path>]
-  voiceflow-channels disconnect slack [--env-file <path>] [--remove-tools] [--yes]
-  voiceflow-channels connect slack --print-manifest --public-url <https://host>
+  voiceflow-channelkit connect slack [--public-url <https://host>] [--env-file <path>] [options]
+  voiceflow-channelkit connect slack --manual --public-url <https://host> [--env-file <path>]
+  voiceflow-channelkit point slack --public-url <https://host> [--env-file <path>]
+  voiceflow-channelkit disconnect slack [--env-file <path>] [--remove-tools] [--yes]
+  voiceflow-channelkit connect slack --print-manifest --public-url <https://host>
 
 Connect makes a Slack app for your Voiceflow agent (or adds what's missing to
 one you have), installs it in your workspace, and installs Slack's tools on the
@@ -81,11 +81,11 @@ environment or --env-file, or asks for them.
 
 Without --public-url, connect is for a server on this machine: it opens a
 temporary tunnel so Slack has an address while the app is made, and
-\`voiceflow-channels dev\` gives Slack your server's address each time it
+\`voiceflow-channelkit dev\` gives Slack your server's address each time it
 starts. Pass --public-url for a server that has an address of its own.
 
 Point moves a connected app, and the agent's Slack tools, to another address,
-and changes nothing else: \`voiceflow-channels dev\` runs it on each start.
+and changes nothing else: \`voiceflow-channelkit dev\` runs it on each start.
 Slack checks the address as it takes it, so your server has to be answering.
 
 It exits 0 when done, 1 on a failure, 2 on a mistake in the command, and 3
@@ -188,8 +188,8 @@ const NO_TUNNEL = "Or give connect your server's address: --public-url https://<
 /** Stands in for a tunnel's address in a plan that is only shown. */
 const NOT_YET = 'https://temporary-tunnel.invalid';
 /** The release a publish by connect makes in Voiceflow. */
-const RELEASE_NAME = 'Slack tools (Channels SDK)';
-const RELEASE_DESCRIPTION = 'Published by `voiceflow-channels connect slack`, on a yes.';
+const RELEASE_NAME = 'Slack tools (ChannelKit)';
+const RELEASE_DESCRIPTION = 'Published by `voiceflow-channelkit connect slack`, on a yes.';
 
 async function run(
   argv: string[],
@@ -516,7 +516,7 @@ async function run(
         : `unchanged (the app already existed): Basic Information, ${page('general')}`,
       key: envFile && (inFile.VOICEFLOW_API_KEY || saved.includes('VOICEFLOW_API_KEY')) ? `in ${envFile}` : 'your Voiceflow API key',
       sends: local
-        ? "Slack has a temporary address, which has stopped. Start your server with `voiceflow-channels dev -- <its command>` (`npm run dev` in an app the starter made): it opens a tunnel and points Slack, and the agent's tools, at it."
+        ? "Slack has a temporary address, which has stopped. Start your server with `voiceflow-channelkit dev -- <its command>` (`npm run dev` in an app the starter made): it opens a tunnel and points Slack, and the agent's tools, at it."
         : `Slack sends to ${requestUrl}.`,
       projectID: project,
       environment,

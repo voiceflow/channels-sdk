@@ -29,11 +29,11 @@ const there = (url) =>
 const json = async (url) => JSON.parse(await readFile(url, 'utf8'));
 const installed = async (name) => (await json(new URL(`node_modules/${name}/package.json`, root))).version;
 
-// Every channel this repository has a package for: packages/<slug>, named @voiceflow/channels-<slug>.
+// Every channel this repository has a package for: packages/<slug>, named @voiceflow/channelkit-<slug>.
 const slugs = [];
 for (const dir of await readdir(new URL('packages/', root))) {
   const pkg = await json(new URL(`packages/${dir}/package.json`, root)).catch(() => undefined);
-  if (pkg?.name === `@voiceflow/channels-${dir}` && dir !== 'sdk') slugs.push(dir);
+  if (pkg?.name === `@voiceflow/channelkit-${dir}`) slugs.push(dir);
 }
 slugs.sort((a, b) => (FIRST.indexOf(a) + 1 || 99) - (FIRST.indexOf(b) + 1 || 99) || a.localeCompare(b));
 
@@ -151,7 +151,7 @@ for (const slug of slugs) {
         .flatMap(([name, version]) =>
           name === shared.package
             ? [[info.package, info.version]]
-            : [[name === `@voiceflow/channels-${SHARED}` ? `@voiceflow/channels-${slug}` : name, version]],
+            : [[name === `@voiceflow/channelkit-${SHARED}` ? `@voiceflow/channelkit-${slug}` : name, version]],
         )
         .sort(([a], [b]) => a.localeCompare(b)),
     );

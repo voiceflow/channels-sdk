@@ -1,10 +1,10 @@
-// `voiceflow-channels dev -- <your server's command>`: local development in
+// `voiceflow-channelkit dev -- <your server's command>`: local development in
 // one command. It opens a tunnel to your server's port, starts the server,
 // and has each channel in the app point its platform, and the agent's tools,
 // at the tunnel's address. A quick tunnel's address is new each time, so this
 // is done on every start. Stopping it stops the server and the tunnel.
 //
-// A channel takes part by having its connect module (`@voiceflow/channels-<name>/connect`)
+// A channel takes part by having its connect module (`@voiceflow/channelkit-<name>/connect`)
 // answer `cli(['point', '--public-url', <address>, '--local-url', <the server here>, …])`.
 // It is given the local address so that it can check the server answers, with a
 // request signed as its platform signs one, before the platform is pointed at it.
@@ -23,8 +23,8 @@ import { startTunnel, type Tunnel, type TunnelHost } from './tunnel.js';
 export { checkTunnelTool, startTunnel, TUNNEL_DOCS, TUNNEL_INSTALL_BREW, type Tunnel, type TunnelHost, type TunnelOptions } from './tunnel.js';
 
 export const DEV_USAGE = `Usage:
-  voiceflow-channels dev [options] -- <your server's command>
-  voiceflow-channels dev [options]            (your server is running already)
+  voiceflow-channelkit dev [options] -- <your server's command>
+  voiceflow-channelkit dev [options]            (your server is running already)
 
 Local development in one command. It opens a tunnel to your server's port,
 starts the server, and points each channel in this app, and the agent's tools,
@@ -36,7 +36,7 @@ Options:
                         command is started with PORT set to it
   --env-file <path>     your server's env file, passed on to each channel
   --public-url <url>    use this address and start no tunnel
-  --channel <name>      a channel to point; default: every @voiceflow/channels-*
+  --channel <name>      a channel to point; default: every @voiceflow/channelkit-*
                         package this app depends on. Repeat it for several
   -h, --help            show this`;
 
@@ -115,7 +115,7 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
     return 0;
   }
   if (positionals.length) {
-    err(`dev takes your server's command after "--": voiceflow-channels dev -- ${positionals.join(' ')}\n\n${DEV_USAGE}`);
+    err(`dev takes your server's command after "--": voiceflow-channelkit dev -- ${positionals.join(' ')}\n\n${DEV_USAGE}`);
     return 2;
   }
   const env = io.env ?? process.env;
@@ -127,7 +127,7 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
   }
   const channels = o.channel?.length ? o.channel : channelsOf(cwd);
   if (!channels.length) {
-    err('No channel to point: this app depends on no @voiceflow/channels-* package. Install one, or name it with --channel.');
+    err('No channel to point: this app depends on no @voiceflow/channelkit-* package. Install one, or name it with --channel.');
     return 2;
   }
   if (channels.some((name) => !/^[a-z0-9-]+$/.test(name))) {
@@ -161,7 +161,7 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
       return 1;
     }
     if (!command.length && !(await answers())) {
-      err(`Nothing answers on port ${port}. Start your server there, or give dev its command: voiceflow-channels dev -- <command>.`);
+      err(`Nothing answers on port ${port}. Start your server there, or give dev its command: voiceflow-channelkit dev -- <command>.`);
       return 1;
     }
 
@@ -259,7 +259,7 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
   }
 }
 
-/** The channels this app has: its `@voiceflow/channels-<name>` dependencies, the SDK itself aside. */
+/** The channels this app has: its `@voiceflow/channelkit-<name>` dependencies. The core, `@voiceflow/channelkit`, is no channel. */
 function channelsOf(cwd: string): string[] {
   let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
   try {
@@ -268,22 +268,22 @@ function channelsOf(cwd: string): string[] {
     return [];
   }
   return Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })
-    .map((name) => /^@voiceflow\/channels-([a-z0-9-]+)$/.exec(name)?.[1])
-    .filter((name): name is string => Boolean(name) && name !== 'sdk');
+    .map((name) => /^@voiceflow\/channelkit-([a-z0-9-]+)$/.exec(name)?.[1])
+    .filter((name): name is string => Boolean(name));
 }
 
 async function channelCli(name: string): Promise<ChannelCommands> {
-  const module = `@voiceflow/channels-${name}/connect`;
+  const module = `@voiceflow/channelkit-${name}/connect`;
   let loaded: Partial<ChannelCommands>;
   try {
     loaded = await import(module);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND' && String((error as Error).message).includes(`channels-${name}`)) {
-      throw new Error(`No ${name} package: install @voiceflow/channels-${name}.`);
+      throw new Error(`No ${name} package: install @voiceflow/channelkit-${name}.`);
     }
     throw error;
   }
-  if (typeof loaded.cli !== 'function') throw new Error(`@voiceflow/channels-${name} has no command to point it with.`);
+  if (typeof loaded.cli !== 'function') throw new Error(`@voiceflow/channelkit-${name} has no command to point it with.`);
   return {
     cli: loaded.cli,
     ...(typeof loaded.listen === 'function' ? { listen: loaded.listen } : {}),

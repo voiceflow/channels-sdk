@@ -1,4 +1,4 @@
-# @voiceflow/channels-discord
+# @voiceflow/channelkit-discord
 
 A Voiceflow agent in Discord: mentions, threads, direct messages, buttons,
 cards and a slash command, with one command to set it up.
@@ -11,7 +11,7 @@ cards and a slash command, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect discord --env-file .env.local
+npx voiceflow-channelkit connect discord --env-file .env.local
 ```
 
 Discord has no way to make an application from a command, so that one step is
@@ -29,7 +29,7 @@ Discord: app "My app" (1234567890), bot My app
   + set the bot's picture to the agent's avatar in Voiceflow (Voiceflow's icon if Discord won't take it): https://…/avatar.png
   + turn on the Message Content intent, so the bot is sent what people write
   + add the /ask command
-  · slash commands and buttons need your server's address: `voiceflow-channels dev` gives it to Discord each time it starts
+  · slash commands and buttons need your server's address: `voiceflow-channelkit dev` gives it to Discord each time it starts
 Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment development: the variables go on its draft
   + 8 variables for your agent's prompts (discord_user_id, discord_user_name, …)
   ~ compile the environment's draft
@@ -68,7 +68,7 @@ Then:
   you in Discord to say it's connected (you, because the application is
   yours; nothing is posted in the server). `--no-wait` and `--no-greeting`
   turn each off.
-- **`voiceflow-channels dev` runs connect for you** the first time, when the
+- **`voiceflow-channelkit dev` runs connect for you** the first time, when the
   bot was never connected from here and a person is there. So in an app the
   starter made, `npm run dev` is the one command.
 - **Nothing is published.** The bot works as soon as it's connected. The
@@ -88,7 +88,7 @@ Discord reaches a bot two ways, and this package uses both.
 | Slash commands, button clicks | Discord sends them to an address, signed with the app's key. |
 | What people write, reactions | Over a standing connection (Discord's Gateway) that something has to hold. Whatever holds it passes each event on to the same route. |
 
-**On your machine,** `voiceflow-channels dev -- <your server's command>` does
+**On your machine,** `voiceflow-channelkit dev -- <your server's command>` does
 both: it opens a tunnel, gives Discord the tunnel's address
 (`point discord`), and holds the connection, passing events to your server.
 
@@ -104,7 +104,7 @@ bot connected from two places answers twice.
 ## In your server
 
 ```ts
-import { discord } from '@voiceflow/channels-discord';
+import { discord } from '@voiceflow/channelkit-discord';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: process.env.VOICEFLOW_PROJECT_ID! },

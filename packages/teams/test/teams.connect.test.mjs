@@ -9,8 +9,8 @@ import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { NeedsYou } from '@voiceflow/channels-sdk';
-import { fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
+import { NeedsYou } from '@voiceflow/channelkit';
+import { fakeVoiceflowApi } from '@voiceflow/channelkit/testing';
 import {
   botNameOf,
   cli,
@@ -119,7 +119,7 @@ test('the plan says everything it would do, and changes nothing', async () => {
     out,
     /\+ let it read a thread's replies, so they need no mention \(the permission ChannelMessage\.Read\.Group: Teams then sends it everything written in a channel/,
   );
-  assert.match(out, /· Teams needs your server's address: `voiceflow-channels dev` gives it one each time it starts/);
+  assert.match(out, /· Teams needs your server's address: `voiceflow-channelkit dev` gives it one each time it starts/);
   assert.match(out, /Voiceflow: project "Acme Support" \(proj1\) in workspace ws1, environment development: the variables go on its draft/);
   assert.match(out, new RegExp(`\\+ ${VARIABLES} variables for your agent's prompts`));
   assert.match(out, /· nothing is published, and nothing has to be/);
@@ -180,7 +180,7 @@ test('from a Microsoft 365 sign-in, connect does the rest', async () => {
   assert.match(out, /TEAMS_APP_PASSWORD {4}in .*\.env\.local/);
   assert.match(out, /Add the bot in Teams: open this link\. Choose "Use the web app instead"/);
   assert.ok(out.includes(`https://teams.microsoft.com/l/app/${app.id}?installAppPackage=true&appTenantId=${TENANT}`));
-  assert.match(out, /Then start your server with `voiceflow-channels dev -- <its command>`/);
+  assert.match(out, /Then start your server with `voiceflow-channelkit dev -- <its command>`/);
   assert.match(out, /The teams_\* variables are on development's draft/);
   assert.deepEqual(t.opened, [], 'no page is opened when nobody is there');
 });
@@ -563,7 +563,7 @@ test('point says what it waits on: connect not run, or Microsoft 365 signed out'
   const none = await setup({ file: {} });
   const first = await none.run(['point', '--public-url', PUBLIC, '--env-file', none.envFile]);
   assert.equal(first.code, 3);
-  assert.match(first.err, /No TEAMS_APP_ID in .*\.env\.local\. Run connect first: voiceflow-channels connect teams --env-file/);
+  assert.match(first.err, /No TEAMS_APP_ID in .*\.env\.local\. Run connect first: voiceflow-channelkit connect teams --env-file/);
 
   const out = await setup({ ms: { signedIn: false, apps: [{ id: APP, name: 'Acme Support' }] }, file: { TEAMS_APP_ID: APP } });
   const second = await out.run(['point', '--public-url', PUBLIC, '--env-file', out.envFile]);

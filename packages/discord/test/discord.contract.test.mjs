@@ -5,8 +5,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createMemoryState } from '@chat-adapter/state-memory';
-import { createChannels } from '@voiceflow/channels-sdk';
-import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
+import { createChannels } from '@voiceflow/channelkit';
+import { fakeVoiceflow, waiter } from '@voiceflow/channelkit/testing';
 import { CONTEXT_VARIABLES, createDiscordExtension, discord, discordLogger, titleOf, withoutInteractionTokens } from '../dist/index.js';
 import { ADA, APP_ID, BOT_TOKEN, CHANNEL, DM, fakeDiscord, GUILD } from './helpers/fake-discord.mjs';
 

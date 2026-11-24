@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PASS_VARIABLE, TOOLS_URL_SECRET } from '@voiceflow/channels-sdk';
+import { PASS_VARIABLE, TOOLS_URL_SECRET } from '@voiceflow/channelkit';
 import { createWorkspaceTools, RETIRED_SECRETS, slackToolScopes, slackTools, workspaceTools } from '../dist/index.js';
 import { unixTime } from '../dist/workspace.js';
 

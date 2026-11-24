@@ -1,7 +1,7 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // `connect github`, `point github` and `disconnect github`. Node only: import it
-// from `@voiceflow/channels-github/connect`.
-import { channelCommands } from '@voiceflow/channels-sdk/connect';
+// from `@voiceflow/channelkit-github/connect`.
+import { channelCommands } from '@voiceflow/channelkit/connect';
 
 export const { cli, connected, settings } = channelCommands('github', {
   settings: [

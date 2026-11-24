@@ -1,4 +1,4 @@
-# @voiceflow/channels-slack
+# @voiceflow/channelkit-slack
 
 A Voiceflow agent in Slack: everything Slack has is on by
 default, and Slack's tools are installed on the agent when you connect it.
@@ -11,7 +11,7 @@ One command makes the Slack app, installs it, and installs Slack's tools on
 your agent:
 
 ```bash
-npx voiceflow-channels connect slack --public-url https://<your server> --env-file .env
+npx voiceflow-channelkit connect slack --public-url https://<your server> --env-file .env
 ```
 
 It shows its whole plan and asks before it changes anything:
@@ -71,9 +71,9 @@ Then:
 - **A server on your own machine** needs no address from you. Without
   `--public-url`, connect opens a temporary tunnel (cloudflared, no account)
   so Slack has an address while the app is made, and
-  `voiceflow-channels dev -- <your server's command>` then opens one on each
+  `voiceflow-channelkit dev -- <your server's command>` then opens one on each
   start and points the app, and the agent's tools, at it.
-- **`point`** is what dev runs: `voiceflow-channels point slack --public-url
+- **`point`** is what dev runs: `voiceflow-channelkit point slack --public-url
   <address>` moves a connected app's request URL and the tools' address, and
   changes nothing else. The tools' address is set in the published version as
   well as the draft, so it needs no publish. Given `--local-url`, as dev gives
@@ -118,18 +118,18 @@ Then:
   installs only the presentation tools (pass `workspaceTools: false` to
   `slack()` then). `--print-manifest` prints the app's manifest, to paste into
   api.slack.com ("Create New App", "From a manifest").
-- `voiceflow-channels disconnect slack` deletes the app. The tools stay on the
+- `voiceflow-channelkit disconnect slack` deletes the app. The tools stay on the
   agent unless you add `--remove-tools`.
 
 The same steps are a function, for your own scripts:
-`connectSlack()` and `disconnectSlack()` from `@voiceflow/channels-slack/connect`.
+`connectSlack()` and `disconnectSlack()` from `@voiceflow/channelkit-slack/connect`.
 
 ## Run it
 
 ```ts
 import { createRedisState } from '@chat-adapter/state-redis';
-import { createChannels } from '@voiceflow/channels-sdk';
-import { slack } from '@voiceflow/channels-slack';
+import { createChannels } from '@voiceflow/channelkit';
+import { slack } from '@voiceflow/channelkit-slack';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: '64f…', environment: 'development' },
@@ -296,8 +296,8 @@ when you update the package. For a tool of your own, write a
 To install the tools without connect:
 
 ```ts
-import { installTools } from '@voiceflow/channels-sdk/install';
-import { slackTools } from '@voiceflow/channels-slack';
+import { installTools } from '@voiceflow/channelkit/install';
+import { slackTools } from '@voiceflow/channelkit-slack';
 
 await installTools(slackTools(), {
   apiKey, projectID, environment: 'development',
@@ -318,6 +318,6 @@ through the same connect code. See its header.
 ## License
 
 MIT, in [LICENSE](LICENSE). The icon connect gives an agent's Slack app when
-the agent has no avatar is Voiceflow's logo, from `@voiceflow/channels-sdk`
+the agent has no avatar is Voiceflow's logo, from `@voiceflow/channelkit`
 (`assets/voiceflow-icon.png`). The Voiceflow name and logo are trademarks of
 Voiceflow, Inc. and are not licensed under MIT.

@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { codeHash } from '@voiceflow/channels-sdk/install';
+import { codeHash } from '@voiceflow/channelkit/install';
 import { slackTools } from '../dist/index.js';
 
 const recorded = JSON.parse(readFileSync(new URL('./tool-versions.json', import.meta.url), 'utf8'));

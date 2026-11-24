@@ -7,7 +7,7 @@
 // (functionSource), so it must be self-contained: no imports, no constants from
 // this module, nothing the Voiceflow sandbox lacks (Node and browser globals,
 // `URLSearchParams`, `setTimeout`). The tests run each one in an emulated sandbox.
-import { functionSource, type ToolDefinition } from '@voiceflow/channels-sdk';
+import { functionSource, type ToolDefinition } from '@voiceflow/channelkit';
 
 /** The custom trace each presentation tool returns, by tool. The trace type is the tool's name. */
 export const PRESENTATION_TRACES = ['slack_react', 'slack_show_table', 'slack_show_chart', 'slack_reply_privately', 'slack_ask_form'] as const;

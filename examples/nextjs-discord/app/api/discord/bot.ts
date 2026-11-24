@@ -2,8 +2,8 @@
 
 import { createMemoryState } from '@chat-adapter/state-memory';
 import { createRedisState } from '@chat-adapter/state-redis';
-import { discord } from '@voiceflow/channels-discord';
-import { type Channels, createChannels } from '@voiceflow/channels-sdk';
+import { type Channels, createChannels } from '@voiceflow/channelkit';
+import { discord } from '@voiceflow/channelkit-discord';
 
 let channels: Promise<Channels> | undefined;
 

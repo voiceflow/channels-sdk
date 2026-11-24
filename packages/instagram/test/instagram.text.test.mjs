@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createMemoryState } from '@chat-adapter/state-memory';
-import { channelHarness } from '@voiceflow/channels-sdk/testing';
+import { channelHarness } from '@voiceflow/channelkit/testing';
 import { instagram } from '../dist/index.js';
 import { start } from './stand-in.mjs';
 

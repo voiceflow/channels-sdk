@@ -4,19 +4,19 @@
   "private": true,
   "description": "A Voiceflow agent in Slack, served by a Next.js route.",
   "scripts": {
-    "dev": "voiceflow-channels dev --env-file .env.local -- next dev",
+    "dev": "voiceflow-channelkit dev --env-file .env.local -- next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
-    "connect": "voiceflow-channels connect slack --env-file .env.local"
+    "connect": "voiceflow-channelkit connect slack --env-file .env.local"
   },
   "dependencies": {
     "@chat-adapter/catalog": "4.45.0",
     "@chat-adapter/slack": "4.45.0",
     "@chat-adapter/state-memory": "4.45.0",
     "@chat-adapter/state-redis": "4.45.0",
-    "@voiceflow/channels-sdk": "*",
-    "@voiceflow/channels-slack": "*",
+    "@voiceflow/channelkit": "*",
+    "@voiceflow/channelkit-slack": "*",
     "chat": "4.45.0",
     "next": "16.4.6",
     "react": "19.3.1",

@@ -1,4 +1,4 @@
-# @voiceflow/channels-teams
+# @voiceflow/channelkit-teams
 
 A Voiceflow agent in Microsoft Teams: chats, channel threads, mentions,
 buttons and cards, with one command to set it up.
@@ -11,7 +11,7 @@ buttons and cards, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect teams --env-file .env.local
+npx voiceflow-channelkit connect teams --env-file .env.local
 ```
 
 Connect runs Microsoft's own Teams command
@@ -28,7 +28,7 @@ Microsoft 365: signed in as ada@contoso.com (organization 2f6c…)
   + make a Teams app and its bot, named "Support" after your agent in Voiceflow (--name gives another)
   + give it the agent's avatar in Voiceflow as its picture, made the 192 by 192 pixels Teams takes (Voiceflow's icon if it can't be): https://…/avatar.png
   + let it read a thread's replies, so they need no mention (the permission ChannelMessage.Read.Group: Teams then sends it everything written in a channel it's added to, and it answers only in threads where it was mentioned)
-  · Teams needs your server's address: `voiceflow-channels dev` gives it one each time it starts
+  · Teams needs your server's address: `voiceflow-channelkit dev` gives it one each time it starts
 Voiceflow: project "Support" (64f…) in workspace a1B2c3, environment development: the variables go on its draft
   + 9 variables for your agent's prompts (teams_user_id, teams_user_aad_id, …)
   ~ compile the environment's draft
@@ -71,7 +71,7 @@ Then:
   first offers its desktop app ("Use the web app instead" goes on in the
   browser), then **Add**. From there **Open** starts a chat with the bot, and
   picking a team's channel adds it there.
-- **`voiceflow-channels dev` runs connect for you** the first time, when no
+- **`voiceflow-channelkit dev` runs connect for you** the first time, when no
   bot was connected from here and a person is there. So in an app the starter
   made, `npm run dev` is the one command.
 - **Nothing is published.** The bot works as soon as it's added. The
@@ -88,7 +88,7 @@ signed by Microsoft: a message in a chat or a channel, a button's click, the
 bot being added somewhere. The adapter checks the signature before anything
 is done.
 
-**On your machine,** `voiceflow-channels dev -- <your server's command>` opens
+**On your machine,** `voiceflow-channelkit dev -- <your server's command>` opens
 a tunnel and gives Teams the tunnel's address (`point teams`), each time it
 starts. Teams takes a new address at once, for an app already added: nobody
 adds it again.
@@ -101,7 +101,7 @@ Teams sends that bot's messages to your machine.
 ## In your server
 
 ```ts
-import { teams } from '@voiceflow/channels-teams';
+import { teams } from '@voiceflow/channelkit-teams';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: process.env.VOICEFLOW_PROJECT_ID! },

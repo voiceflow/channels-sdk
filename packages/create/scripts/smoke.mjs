@@ -47,7 +47,7 @@ let platform;
 const CHANNELS = {
   slack: {
     env: { SLACK_BOT_TOKEN: 'xoxb-smoke-test', SLACK_SIGNING_SECRET: SIGNING_SECRET },
-    help: /voiceflow-channels connect slack \[--public-url/,
+    help: /voiceflow-channelkit connect slack \[--public-url/,
     check: checkSlack,
   },
   discord: {
@@ -57,7 +57,7 @@ const CHANNELS = {
       DISCORD_APPLICATION_ID: '111111111111111111',
       CRON_SECRET: 'smoke-test-cron-secret',
     },
-    help: /voiceflow-channels connect discord \[--public-url/,
+    help: /voiceflow-channelkit connect discord \[--public-url/,
     check: checkDiscord,
   },
   teams: {
@@ -66,7 +66,7 @@ const CHANNELS = {
       TEAMS_APP_PASSWORD: 'smoke-test-teams-secret',
       TEAMS_APP_TENANT_ID: '22222222-2222-4222-8222-222222222222',
     },
-    help: /voiceflow-channels connect teams --env-file <path> \[--public-url/,
+    help: /voiceflow-channelkit connect teams --env-file <path> \[--public-url/,
     check: checkTeams,
   },
   telegram: {
@@ -86,7 +86,7 @@ function channelOf(name) {
   const settings = [...info.required, ...(info.modes[0]?.settings ?? []), ...info.made, ...info.later];
   return {
     env: Object.fromEntries(settings.map((setting) => [setting.key, `smoke-test-${setting.key.toLowerCase()}`])),
-    help: new RegExp(`voiceflow-channels connect ${name} --env-file <path> \\[--public-url`),
+    help: new RegExp(`voiceflow-channelkit connect ${name} --env-file <path> \\[--public-url`),
     check: checkRoute,
     ...CHANNELS[name],
   };
@@ -99,14 +99,15 @@ try {
   await run('npm', ['pack', '--pack-destination', work, '-w', 'packages/core', ...chosen.flatMap((name) => ['-w', `packages/${name}`])], { cwd: root });
   const tarballs = (await readdir(work)).filter((f) => f.endsWith('.tgz'));
   const tarball = (name) => {
-    const file = tarballs.find((f) => f.startsWith(`${name}-`));
+    // The name, then its version: the core's name is the start of every channel's.
+    const file = tarballs.find((f) => f.startsWith(`${name}-`) && /^\d/.test(f.slice(name.length + 1)));
     if (!file) throw new Error(`no tarball for ${name} among ${tarballs.join(', ')}`);
     return `file:${join(work, file)}`;
   };
   for (const channel of chosen) {
     await smoke(channel, {
-      '@voiceflow/channels-sdk': tarball('voiceflow-channels-sdk'),
-      [`@voiceflow/channels-${channel}`]: tarball(`voiceflow-channels-${channel}`),
+      '@voiceflow/channelkit': tarball('voiceflow-channelkit'),
+      [`@voiceflow/channelkit-${channel}`]: tarball(`voiceflow-channelkit-${channel}`),
     });
   }
   console.log(`\n✓ the starter makes apps that install, build and answer their channels: ${chosen.join(', ')}`);
@@ -155,7 +156,7 @@ async function smoke(channel, packed) {
     pkg.dependencies[name] = packed[name];
   }
   // The channel's package asks for the core by version; this is that version.
-  pkg.overrides = { '@voiceflow/channels-sdk': packed['@voiceflow/channels-sdk'] };
+  pkg.overrides = { '@voiceflow/channelkit': packed['@voiceflow/channelkit'] };
   await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
   step('npm install');
@@ -165,8 +166,8 @@ async function smoke(channel, packed) {
   const help = await run('npm', ['run', '--silent', 'connect', '--', '--help'], { cwd: app });
   if (!helpText.test(help.stdout)) throw new Error(`connect --help printed:\n${help.stdout}`);
   // dev is the same package's command: its help runs without a tunnel or a server.
-  const dev = await run('npx', ['--no-install', 'voiceflow-channels', 'dev', '--help'], { cwd: app });
-  if (!/voiceflow-channels dev \[options\] -- <your server's command>/.test(dev.stdout)) throw new Error(`dev --help printed:\n${dev.stdout}`);
+  const dev = await run('npx', ['--no-install', 'voiceflow-channelkit', 'dev', '--help'], { cwd: app });
+  if (!/voiceflow-channelkit dev \[options\] -- <your server's command>/.test(dev.stdout)) throw new Error(`dev --help printed:\n${dev.stdout}`);
 
   step('typecheck and build');
   const env = { ...process.env, NEXT_TELEMETRY_DISABLED: '1' };
@@ -356,7 +357,7 @@ async function checkDiscord(url, log) {
     fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-discord-gateway-token': token },
-      body: JSON.stringify({ type: 'GATEWAY_CHANNELS_SDK_CHECK', timestamp: Date.now(), data: {} }),
+      body: JSON.stringify({ type: 'GATEWAY_CHANNELKIT_CHECK', timestamp: Date.now(), data: {} }),
     });
   const passed = await event(DISCORD_TOKEN);
   if (passed.status !== 200) throw new Error(`an event passed on with the bot's token got ${passed.status}\n${log()}`);

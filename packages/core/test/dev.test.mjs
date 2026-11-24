@@ -1,4 +1,4 @@
-// The tunnel and `voiceflow-channels dev`, against a machine of the test's own:
+// The tunnel and `voiceflow-channelkit dev`, against a machine of the test's own:
 // no cloudflared is run, no server is started and nothing leaves this process.
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile } from 'node:fs/promises';
@@ -183,7 +183,7 @@ test('with Homebrew and a person there, cloudflared is installed on a yes: the c
  *   `point`      what a channel's point returns
  */
 async function app({
-  deps = { '@voiceflow/channels-sdk': '*', '@voiceflow/channels-slack': '*' },
+  deps = { '@voiceflow/channelkit': '*', '@voiceflow/channelkit-slack': '*' },
   serverUp = 'after-start',
   serverExit,
   point = 0,
@@ -259,7 +259,7 @@ test('dev opens a tunnel, starts the server, and points each channel at it once 
 });
 
 test('dev takes the port, the channels and an address of your own from its options', async () => {
-  const a = await app({ deps: { '@voiceflow/channels-sdk': '*' } });
+  const a = await app({ deps: { '@voiceflow/channelkit': '*' } });
   const code = await dev(
     ['--port', '8080', '--public-url', 'https://bot.example.com/', '--channel', 'slack', '--channel', 'whatsapp', '--', 'node', 'server.js'],
     a.io,
@@ -287,7 +287,7 @@ test("a channel that can't be pointed stops dev with its exit code, and the serv
   assert.deepEqual(waiting.events.slice(-2), ['stop server', 'stop tunnel']);
 
   // The second channel isn't tried once the first fails.
-  const two = await app({ deps: { '@voiceflow/channels-slack': '*', '@voiceflow/channels-teams': '*' }, point: 1 });
+  const two = await app({ deps: { '@voiceflow/channelkit-slack': '*', '@voiceflow/channelkit-teams': '*' }, point: 1 });
   assert.equal(await dev(['--', 'next', 'dev'], two.io), 1);
   assert.ok(!two.events.some((e) => e.startsWith('teams:')));
 });
@@ -311,9 +311,9 @@ test("dev says what's wrong with the server's port before it points anything at 
 });
 
 test('dev with no channel, no cloudflared or a bad option says so, and starts nothing', async () => {
-  const none = await app({ deps: { '@voiceflow/channels-sdk': '*', next: '16' } });
+  const none = await app({ deps: { '@voiceflow/channelkit': '*', next: '16' } });
   assert.equal(await dev(['--', 'next', 'dev'], none.io), 2);
-  assert.match(none.err.join('\n'), /No channel to point: this app depends on no @voiceflow\/channels-\* package/);
+  assert.match(none.err.join('\n'), /No channel to point: this app depends on no @voiceflow\/channelkit-\* package/);
   assert.deepEqual(none.events, []);
 
   const bare = await app({ tunnel: machine({ tools: [] }) });
@@ -323,7 +323,7 @@ test('dev with no channel, no cloudflared or a bad option says so, and starts no
   assert.ok(!bare.events.some((e) => e.startsWith('serve')));
 
   for (const [argv, said] of [
-    [['next', 'dev'], /dev takes your server's command after "--": voiceflow-channels dev -- next dev/],
+    [['next', 'dev'], /dev takes your server's command after "--": voiceflow-channelkit dev -- next dev/],
     [['--port', 'eighty', '--', 'next', 'dev'], /"eighty" isn't a port\./],
     [['--channel', '../etc', '--', 'next', 'dev'], /A channel's name is lowercase letters, digits and "-"/],
   ]) {
@@ -334,7 +334,7 @@ test('dev with no channel, no cloudflared or a bad option says so, and starts no
   }
   const help = await app();
   assert.equal(await dev(['--help'], help.io), 0);
-  assert.match(help.out.join('\n'), /voiceflow-channels dev \[options\] -- <your server's command>/);
+  assert.match(help.out.join('\n'), /voiceflow-channelkit dev \[options\] -- <your server's command>/);
 });
 
 test("a server that stops on its own ends dev with the server's code", async () => {

@@ -15,8 +15,8 @@ body:
       label: What would it change?
       multiple: true
       options:
-        - "@voiceflow/channels-sdk (the core)"
-        - "@voiceflow/channels-slack"
+        - "@voiceflow/channelkit (the core)"
+        - "@voiceflow/channelkit-slack"
         - "connect"
         - "A channel's tools"
         - "Not sure"

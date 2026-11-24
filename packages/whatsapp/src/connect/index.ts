@@ -1,7 +1,7 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // `connect whatsapp`, `point whatsapp` and `disconnect whatsapp`. Node only: import it
-// from `@voiceflow/channels-whatsapp/connect`.
-import { channelCommands } from '@voiceflow/channels-sdk/connect';
+// from `@voiceflow/channelkit-whatsapp/connect`.
+import { channelCommands } from '@voiceflow/channelkit/connect';
 
 export const { cli, connected, settings } = channelCommands('whatsapp', {
   settings: [
