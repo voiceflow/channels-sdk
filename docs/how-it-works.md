@@ -77,8 +77,8 @@ turn's own stream, and your server shows it.
 
 ## Any Chat SDK adapter
 
-A channel package such as `@voiceflow/channels-slack` brings everything its
-platform has. Any other platform in
+A channel package (`@voiceflow/channels-slack`, `@voiceflow/channels-discord`)
+brings what only its platform has. Any other platform in
 [Chat SDK's catalog](https://chat-sdk.dev/adapters) loads through the core on
 its own, with the replies fitted to what the platform can show. Only Slack has
 been tried live so far.

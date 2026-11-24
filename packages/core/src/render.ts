@@ -2,7 +2,7 @@
 // can show (its catalog capabilities). Where a channel lacks buttons or cards,
 // the reply degrades to text with numbered choices, and the person answers
 // with the number or the label.
-import { Actions, Button, Card, CardText, Image, LinkButton, Select, SelectOption, type Thread } from 'chat';
+import { Actions, Button, Card, CardText, LinkButton, Select, SelectOption, type Thread } from 'chat';
 import type { ChannelCapabilities } from './catalog.js';
 import type { CardData, Choice, Reply, Source } from './translate.js';
 
@@ -174,7 +174,9 @@ export function createRenderer(caps: ChannelCapabilities, options: RenderOptions
           return reply.cards.map(card);
         case 'image': {
           const text = { markdown: reply.url };
-          return [caps.cards && caps.imagesInCards ? keep(Card({ children: [Image({ url: reply.url })] }), text) : text];
+          // As a card's own image, the way a card with a picture goes: an image inside a card is dropped by some
+          // adapters (Discord's sends an empty embed for it, which Discord refuses).
+          return [caps.cards && caps.imagesInCards ? keep(Card({ imageUrl: reply.url }), text) : text];
         }
         case 'trace':
           // Shown by the channel's extension, not rendered.

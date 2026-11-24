@@ -19,6 +19,7 @@
   "workspaces": [
     "packages/core",
     "packages/slack",
+    "packages/discord",
     "packages/create",
     "examples/*"
   ],
@@ -37,6 +38,7 @@
     "@biomejs/biome": "2.6.5",
     "@changesets/cli": "3.0.3",
     "@chat-adapter/catalog": "4.45.0",
+    "@chat-adapter/discord": "4.45.0",
     "@chat-adapter/slack": "4.45.0",
     "@chat-adapter/state-memory": "4.45.0",
     "@types/node": "22.20.5",

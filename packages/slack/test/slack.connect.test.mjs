@@ -371,7 +371,7 @@ test('running connect again reuses the app, changing only what is missing', asyn
 
 const AVATAR = 'https://assets.example.com/1768-agent%20face.png';
 const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
-const VOICEFLOW_ICON = new Uint8Array(await readFile(new URL('../assets/voiceflow-icon.png', import.meta.url)));
+const VOICEFLOW_ICON = new Uint8Array(await readFile(new URL('../../core/assets/voiceflow-icon.png', import.meta.url)));
 const isVoiceflowIcon = async (file) =>
   file.name === 'voiceflow-icon.png' && file.type === 'image/png' && Buffer.from(await file.arrayBuffer()).equals(VOICEFLOW_ICON);
 const withAvatar = (slack = {}) => ({

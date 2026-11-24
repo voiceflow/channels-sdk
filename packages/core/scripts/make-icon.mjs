@@ -1,7 +1,7 @@
-// Makes assets/voiceflow-icon.png, the icon connect gives a new Slack app when
-// the agent has no avatar of its own.
+// Makes assets/voiceflow-icon.png, the picture connect gives a new bot (a Slack
+// app's icon, a Discord bot's avatar) when the agent has no avatar of its own.
 //
-//   node packages/slack/scripts/make-icon.mjs --website <a voiceflow-website checkout>
+//   node packages/core/scripts/make-icon.mjs --website <a voiceflow-website checkout>
 //
 // For Voiceflow's maintainers: the website repository is private. Contributors
 // never need to run it; the PNG it makes is committed.

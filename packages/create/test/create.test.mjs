@@ -281,3 +281,86 @@ test('the app carries notes for a coding agent: the two commands, how to read wh
   assert.equal(await read(mine.app, 'AGENTS.md'), '# Mine\n');
   assert.equal(await read(mine.app, 'CLAUDE.md'), 'Mine too.\n');
 });
+
+// ── Discord ─────────────────────────────────────────────────────────────────
+
+const DISCORD_EXAMPLE = new URL('../../../examples/nextjs-discord/', import.meta.url);
+
+test('--channel discord makes the Discord app: its routes, the schedule that keeps it connected, and its own steps', async () => {
+  const { code, out, err, app } = await start(['my-bot', '--channel', 'discord']);
+  assert.equal(code, 0, err);
+  assert.deepEqual(await tree(app), [
+    '.env.example',
+    '.env.local',
+    '.gitignore',
+    'AGENTS.md',
+    'CLAUDE.md',
+    'README.md',
+    'app/api/discord/bot.ts',
+    'app/api/discord/gateway/route.ts',
+    'app/api/discord/route.ts',
+    'app/layout.tsx',
+    'app/page.tsx',
+    'next.config.ts',
+    'package.json',
+    'tsconfig.json',
+    'vercel.json',
+  ]);
+  // One copy of the app: the example, which CI builds.
+  for (const path of ['app/api/discord/bot.ts', 'app/api/discord/gateway/route.ts', 'app/api/discord/route.ts', 'next.config.ts', 'vercel.json']) {
+    assert.equal(await read(app, path), await readFile(new URL(path, DISCORD_EXAMPLE), 'utf8'), path);
+  }
+  const pkg = JSON.parse(await read(app, 'package.json'));
+  assert.equal(pkg.description, 'A Voiceflow agent in Discord, served by a Next.js route.');
+  assert.equal(pkg.scripts.connect, 'voiceflow-channels connect discord --env-file .env.local');
+  assert.equal(pkg.scripts.dev, 'voiceflow-channels dev --env-file .env.local -- next dev');
+  assert.ok(pkg.dependencies['@voiceflow/channels-discord'] && pkg.dependencies['@chat-adapter/discord']);
+  assert.ok(!Object.keys(pkg.dependencies).some((dep) => /slack/.test(dep)), 'a Discord app depends on nothing of Slack');
+
+  // Two commands. The one step by hand is said with the first: connect opens the page for it.
+  assert.match(out, /Created my-bot: a Voiceflow agent in Discord/);
+  assert.match(out, /1\. Set it up:\n {7}npm run connect\n/);
+  assert.match(
+    out,
+    /It opens the page for the one step in Discord itself: make the application, open its Bot page,\n {5}click Reset Token, and paste the token at the hidden prompt\./,
+  );
+  assert.match(out, /opens the page that adds the bot to a server\./);
+  assert.match(out, /2\. Start it:\n {7}npm run dev\n/);
+  assert.doesNotMatch(out, /\n {2}3\. /);
+  assert.doesNotMatch(out, /Slack/);
+
+  // The env file names what the server needs, with nothing in it.
+  const env = await read(app, '.env.local');
+  for (const name of ['DISCORD_BOT_TOKEN', 'DISCORD_PUBLIC_KEY', 'DISCORD_APPLICATION_ID', 'VOICEFLOW_API_KEY'])
+    assert.match(env, new RegExp(`^${name}=$`, 'm'));
+  assert.doesNotMatch(env, /SLACK/);
+  assert.equal((await stat(join(app, '.env.local'))).mode & 0o777, 0o600);
+});
+
+test("the Discord app carries its own notes: the token is the person's to copy, the link is theirs to open, and nothing is published", async () => {
+  const { app } = await start(['my-bot', '--channel', 'discord', '--pm', 'pnpm', '--environment', 'staging']);
+  const notes = await read(app, 'AGENTS.md');
+  assert.equal(await read(app, 'CLAUDE.md'), '@AGENTS.md\n');
+  assert.match(notes, /`pnpm connect --dry-run`/);
+  assert.match(notes, /`pnpm connect --yes`/);
+  assert.match(notes, /`pnpm dev`, as a background process/);
+  assert.match(notes, /it stops with code 3: Discord has no way to make an\s+application from a command/);
+  assert.match(notes, /Don't ask them to paste it to you/);
+  assert.match(notes, /Give them the link it prints/);
+  assert.match(notes, /`connected to Discord`/);
+  assert.match(notes, /agent's\s+`staging` environment/);
+  assert.match(notes, /Don't pass `--publish` unless the person asks for exactly that/);
+  assert.match(notes, /grep -c '\^DISCORD_BOT_TOKEN=\.' \.env\.local/);
+  assert.doesNotMatch(notes, /Slack|slack/);
+  const readme = await read(app, 'README.md');
+  assert.match(readme, /```bash\n {3}pnpm connect\n/);
+  assert.match(readme, /Use a second Discord application for development/);
+  assert.match(readme, /`pnpm connect --public-url https:\/\/<your deployment>`/);
+  assert.doesNotMatch(readme, /Slack|slack/);
+});
+
+test('a channel with no starter is said, with the ones there are', async () => {
+  const { code, err } = await start(['my-bot', '--channel', 'teams']);
+  assert.equal(code, 2);
+  assert.match(err, /There's no starter for "teams" yet: there is one for slack and discord\./);
+});

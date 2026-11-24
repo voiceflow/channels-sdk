@@ -40,6 +40,15 @@ test('with buttons and cards, replies become Chat SDK cards with numbered action
   );
 });
 
+test("an image goes as a card's own image, the way a card with a picture does, and as its link where cards can't hold one", () => {
+  const url = 'https://example.com/chart.png';
+  const [post] = render([{ type: 'image', url }], rich).posts;
+  // Not as an image inside the card: Discord's adapter drops that, and sends an embed with nothing in it.
+  assert.equal(post.imageUrl, url);
+  assert.deepEqual(post.children, []);
+  assert.deepEqual(render([{ type: 'image', url }], none).posts, [{ markdown: url }]);
+});
+
 test('a card with buttons on a channel with cards but no buttons goes as text', () => {
   const r = render([{ type: 'card', card: { title: 'Plan', choices } }], { ...none, cards: true });
   assert.deepEqual(r.posts, [{ markdown: '**Plan**\n1. Yes\n2. No' }]);

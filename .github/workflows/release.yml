@@ -15,7 +15,7 @@ on:
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 env:
-  # The build includes examples/nextjs-slack.
+  # The build includes the example apps.
   NEXT_TELEMETRY_DISABLED: "1"
 
 permissions:

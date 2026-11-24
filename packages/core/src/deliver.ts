@@ -5,6 +5,7 @@
 // A rich post the channel refuses is sent again as text, and the turn goes on.
 import type { SentMessage, StreamChunk, Thread } from 'chat';
 import { type ButtonsShown, type Post, type Renderer, type RenderOptions, withSources } from './render.js';
+import { type Measure, splitMarkdown } from './split.js';
 import { type Choice, type Reply, type Source, sourcesOf, translate } from './translate.js';
 import type { Trace } from './voiceflow.js';
 
@@ -27,6 +28,10 @@ export interface DeliveryOptions extends RenderOptions {
   onRefused?: (error: unknown) => void;
   /** Custom traces the channel shows natively, by type. Each runs in its place in the turn. */
   traces?: Record<string, CustomTrace>;
+  /** The longest text the channel shows in one message: a longer one goes as several, cut where the text breaks. */
+  maxText?: number;
+  /** How long a text is as the channel counts it. Default: its characters. */
+  measureText?: Measure;
 }
 
 /** What a custom trace's handler can do in the turn: post below what's shown, or close the streamed message. */
@@ -39,15 +44,37 @@ export type CustomTrace = (trace: Trace, io: TraceIO) => Promise<void>;
 
 export const DEFAULT_PROGRESS_TITLE = 'Working on it';
 
+/** Text alone: the one kind of post that can go as several messages. */
+function plainText(post: Post): string | null {
+  if (typeof post !== 'object' || post === null) return null;
+  const keys = Object.keys(post);
+  const { markdown } = post as { markdown?: unknown };
+  return keys.length === 1 && typeof markdown === 'string' ? markdown : null;
+}
+
+/**
+ * Posts a post. Text longer than the channel shows in one message goes as several, in order: some adapters cut
+ * a long message short and say nothing, and the end of an answer would be lost. Returns the last message sent.
+ */
+async function postFitting(thread: AnyThread, post: Post, options: DeliveryOptions): Promise<SentMessage> {
+  const text = options.maxText ? plainText(post) : null;
+  if (text === null) return thread.post(post);
+  const parts = splitMarkdown(text, options.maxText!, options.measureText);
+  if (parts.length === 1) return thread.post(post);
+  let sent!: SentMessage;
+  for (const markdown of parts) sent = await thread.post({ markdown });
+  return sent;
+}
+
 /** Posts a post, or `text` if the channel refuses it. Returns the sent message, or `null` when its text form went. */
-async function postOrText(thread: AnyThread, post: Post, text: Post | null | undefined, options: DeliveryOptions): Promise<SentMessage | null> {
+async function postOrText(thread: AnyThread, shown: Post, text: Post | null | undefined, options: DeliveryOptions): Promise<SentMessage | null> {
   try {
-    return await thread.post(post);
+    return await postFitting(thread, shown, options);
   } catch (error) {
     // An image the channel can't fetch, say. Text keeps the reply, and its choices stay answerable by number.
     if (!text) throw error;
     options.onRefused?.(error);
-    await thread.post(text);
+    await postFitting(thread, text, options);
     return null;
   }
 }

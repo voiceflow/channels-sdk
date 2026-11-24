@@ -317,7 +317,7 @@ through the same connect code. See its header.
 
 ## License
 
-MIT, in [LICENSE](LICENSE). `assets/voiceflow-icon.png` is Voiceflow's logo,
-which connect sets as the icon of an agent's Slack app when the agent has no
-avatar. The Voiceflow name and logo are trademarks of Voiceflow, Inc. and are
-not licensed under MIT.
+MIT, in [LICENSE](LICENSE). The icon connect gives an agent's Slack app when
+the agent has no avatar is Voiceflow's logo, from `@voiceflow/channels-sdk`
+(`assets/voiceflow-icon.png`). The Voiceflow name and logo are trademarks of
+Voiceflow, Inc. and are not licensed under MIT.
