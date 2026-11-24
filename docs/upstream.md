@@ -147,6 +147,8 @@ It asserts, for every channel:
 - the commands are the same as every channel's, and know what it needs;
 - `connect` sets it up (the variables, any secret it makes), prints no
   secret, and changes nothing on a second run;
+- nothing the adapter logs in any test, at any level, holds a credential it
+  was given;
 - nothing is reached outside this machine.
 
 What it can't assert is that the stand-in is right about the platform. A
@@ -259,7 +261,10 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       test here proves it with the Chat SDK's own console logger
       (`packages/teams/test/teams.contract.test.mjs`). This package's logger prints the
       error's name, message, status and what Teams answered (`packages/teams/src/log.ts`).
-      Ask for the request to be left out at the source. Report it privately first.
+      And since 2026-11-24 it doesn't rest on the package: the core cleans what every
+      adapter logs (`packages/core/src/log.ts`), so Teams used with a logger of your own,
+      or with no package at all, prints no token either. Nothing here waits on a fix at
+      the source.
     - The adapter always passes `skipAuth` to Microsoft's SDK, which prints
       `[DEPRECATED] skipAuth is deprecated. Use dangerouslyAllowUnauthenticatedRequests
       instead.` on every start. And it doesn't hand its `logger` to the SDK, so the SDK's own
@@ -353,10 +358,12 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 ## 7. Before the public release
 
 - [x] License: MIT (matches Chat SDK)
-- [ ] Reserve `@voiceflow/channels-sdk`, `@voiceflow/channels-slack`,
-      `@voiceflow/channels-discord`, `@voiceflow/channels-teams` and `create-voiceflow-channels` on npm. And `voiceflow-channels`, the
-      command's own name: `npx voiceflow-channels` run where the core isn't
-      installed looks that name up on npm, and nobody owns it
+- [ ] Settle the names, then reserve them on npm: `@voiceflow/channels-sdk`,
+      one `@voiceflow/channels-<channel>` for each of the 14 channels in the
+      README's table, and `create-voiceflow-channels`. And `voiceflow-channels`,
+      the command's own name: `npx voiceflow-channels` run where the core isn't
+      installed looks that name up on npm, and whoever owns it decides what
+      runs. None of the 17 was taken on 2026-11-24
 - [x] A starter (2026-11-23): `npm create voiceflow-channels@latest` makes the
       app, as `npm create chat-sdk` does for Chat SDK. CI makes one from the
       packed packages, builds it and sends it what Slack sends
@@ -430,7 +437,26 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       the browser but can't hand its session to another program, and a key
       for the server can only be issued in a signed-in browser. Both are
       Voiceflow's to change; until then connect takes a key
-- [ ] Contract tests passing for Phase 1: Slack (done), WhatsApp, Messenger, Instagram, Teams, Resend, Gmail
+- [x] Eleven more channels (2026-11-24): Telegram, WhatsApp, Messenger,
+      Instagram, Twilio, Google Chat, GitHub, GitLab, Linear, Notion and X,
+      each a package written from one template (section 1) that passes the
+      contract (section 4). The starter takes any of them. X Chat, Web, Gmail
+      and Twitch were set aside (section 8)
+- [x] Every channel with a package passes its contract tests (2026-11-24):
+      Slack's, Discord's and Teams' own, and the shared one for the eleven
+- [ ] The eleven run on their own platforms: none has been yet. Section 8 is
+      the record, and says what to check first on each. Telegram first: it is
+      the one whose address connect gives
+- [ ] The platforms where a command could give the address and doesn't yet
+      (checked against each platform's documentation, 2026-11-24, and not
+      run): GitHub (a GitHub App from a manifest, and `PATCH /app/hook/config`),
+      GitLab (`/projects/:id/hooks`), Twilio (a number's `SmsUrl`), Messenger
+      (`/{app-id}/subscriptions`) and X (`/2/webhooks`, then the Activity
+      API's subscriptions). WhatsApp, Instagram and Notion take it only on
+      their own pages
+- [ ] Telegram's buttons: the adapter refuses a message of buttons alone, so
+      the core has to put a line of text on a turn's choices before Telegram
+      can be told it has them
 - [ ] Upstream tracking (section 3) running
 - [ ] Docs: the Channels page (native vs Channels SDK) and one page per channel
 - [x] Security review of credential handling (2026-11-20): the API-key
@@ -461,7 +487,37 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 - [x] Known secret values are stripped from everything the CLI prints, errors
       included (2026-11-23): where an error is made, before it is cut to
       length, and from every line on its way out
-- [ ] Remove `"private": true`
+- [ ] Take "pre-release, local only" and "the package name is not final" off
+      the 17 READMEs that say it, and choose the first version (every
+      package is at 0.0.0)
+- [ ] Remove `"private": true` from the 16 packages
+- [x] No open advisory in what the repository installs (2026-11-24): `npm
+      audit` finds none. Two were open, on `glob` and `minimatch`, which come
+      in under Google Chat's adapter and are never loaded (section 5); the
+      root `package.json` overrides the package that brought them
+
+### Before the repository is public
+
+Checked on 2026-11-24: the 53 commits and the 18 pull requests hold no
+credential, no real ID, no address of a tunnel and no path on anyone's
+machine. What is left is not in the code:
+
+- [x] Nothing an adapter logs can hold a secret, whatever the adapter does
+      (2026-11-24): every adapter `createChannels` makes logs through the
+      core's cleaner, which takes out the request an error carries, anything
+      shaped like an access token, and every secret the channel was given. It
+      was built for the Teams adapter's log (section 5), which is no longer a
+      thing to wait on. That section, and pull request 17, still say what the
+      adapter does: cut them before the repository is public if that should
+      not be said here
+- [ ] Decide whether this file goes public as it is: it holds plans, and the
+      record of what has and hasn't been run
+- [ ] Turn on private vulnerability reporting (Settings, Security), which
+      SECURITY.md promises. It was off on 2026-11-24
+- [ ] Turn on secret scanning and push protection. Both were off on 2026-11-24
+- [ ] Protect `main`: require pull requests, CI's `all checks` check and code
+      owners' review. It had no protection on 2026-11-24
+- [ ] Confirm the address SECURITY.md gives for reports is read
 
 ### The first publish
 
@@ -470,16 +526,14 @@ few things done by hand, once:
 
 - [ ] Make the repository public first: npm makes provenance only for a public
       repository, and `release.yml` asks for it.
-- [ ] Publish each package once by hand, since a trusted publisher is set on a
-      package that already exists. Then, on npmjs.com, add this repository's
-      `release.yml` as each package's trusted publisher.
+- [ ] Publish each of the 16 packages once by hand, since a trusted publisher
+      is set on a package that already exists. Then, on npmjs.com, add this
+      repository's `release.yml` as each package's trusted publisher.
+- [ ] Whoever does that first publish has rights on npm's `@voiceflow` scope,
+      which other packages of Voiceflow's are already published under.
 - [ ] Check CI's `changeset` check goes red once: changesets skips private
       packages, so the check passes every pull request until `"private": true`
       comes off.
-- [ ] Turn on private vulnerability reporting (Settings, Security), which
-      SECURITY.md promises.
-- [ ] Protect `main`: require pull requests, CI's `all checks` check and code
-      owners' review.
 - [ ] Give the release workflow a GitHub App token (changesets/action's
       `github-token`), so CI runs on the version pull request it opens. One
       opened with the default `GITHUB_TOKEN` starts no workflows.
@@ -556,6 +610,17 @@ stand-in can't settle. The work done on each is kept outside the repository.
 ### Found in the adapters while adding channels (4.45.0)
 
 To report to `vercel/chat`. Each is worked around here, with a test.
+
+- **Google Chat's dependencies carry two advisories** (2026-11-24: `glob`
+  before 14.0.2 and `minimatch` before 11.0.1, both medium). The chain is
+  `@chat-adapter/gchat` → `@googleapis/chat@^44.6.0` → `googleapis-common@8`
+  → `gaxios@7.1.3` → `rimraf@^5` → `glob@10` → `minimatch@9`. `gaxios` 7
+  lists `rimraf` as a dependency and never loads it, and no version inside
+  those ranges is free of them: `gaxios` 8, under `@googleapis/chat` 51, has
+  no `rimraf` at all. Here the root `package.json` overrides that one
+  `rimraf` to 6, which takes fixed versions of both. An app that installs
+  the adapter gets the chain as it is: ask for `@googleapis/chat` to be
+  moved up.
 
 - **Google Chat:** a button's click in a direct message is given another
   thread than the message it is on. `handleMessageEvent` names a direct

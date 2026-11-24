@@ -138,6 +138,9 @@ Each package's README has its settings, its options and its variables.
   approval.
 - **Your credentials stay on your server.** The tools that act in Slack run
   there, so the bot token never goes to Voiceflow.
+- **No secret reaches your log.** What an adapter logs is cleaned first, for
+  every channel: access tokens, the channel's own secrets, and the request a
+  failed call carries.
 - **Your own tools, the same way.** A server tool is a function in your app
   that the agent can call, with the conversation and the person it is for.
 - **One command to set up.** Connect makes the Slack app from a manifest,

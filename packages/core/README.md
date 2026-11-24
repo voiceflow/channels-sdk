@@ -56,6 +56,24 @@ A channel package gives `createChannels` an extension (`ChannelExtension`):
 module and those facts about its platform: it is what each channel's package
 calls.
 
+## What an adapter logs
+
+Every adapter `createChannels` makes logs through a cleaner
+(`cleanLogger`), so a log line never lets whoever reads it act as the bot:
+
+- an error is passed on as an error, with its name, message, stack, code,
+  status and what the platform answered, and without the request it was
+  thrown for (an HTTP client's error carries its headers);
+- anything shaped like an access token is taken out of every string;
+- so is every secret the channel was given: the settings Chat SDK's catalog
+  marks as secret, and the adapter options named like one.
+
+With no logger of its own an adapter prints to the console as it would have,
+under its name, from `info` up. A logger you pass (`adapter: { logger }`, or
+`options: { logger }` for an adapter with no package) gets the same lines,
+cleaned the same way. Only an adapter you built yourself and passed whole
+logs as you made it.
+
 ## Server tools
 
 A server tool is a tool the agent calls whose code runs in your app. The agent

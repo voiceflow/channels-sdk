@@ -12,6 +12,7 @@ import https from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { inspect } from 'node:util';
 import type { StateAdapter } from 'chat';
 import { capabilities, platformEntry } from './catalog.js';
 import { type ChannelSpec, createChannels } from './channels.js';
@@ -74,7 +75,17 @@ const text = (message: string): Trace => ({ type: 'text', payload: { message, sl
 const CHOICES = ['Track order', 'Talk to someone'];
 /** Two things as a numbered list, in whatever marks the platform keeps: "1. One", "(1) One", "1) One". */
 const NUMBERED = (one: string, two: string) => new RegExp(`(^|\\s)\\(?1[.)]\\s*${one}[\\s\\S]*\\s\\(?2[.)]\\s*${two}`);
-const silent = { child: () => silent, debug() {}, info() {}, warn() {}, error() {} };
+
+/** The credentials among a stand-in's adapter options: each string under a key named like one, which is not an address. */
+function credentialsOf(options: unknown, depth = 0, named = false, found: string[] = []): string[] {
+  if (typeof options === 'string') {
+    if (named && options.length >= 8 && !/^https?:\/\//.test(options)) found.push(options);
+  } else if (options && typeof options === 'object' && depth < 5) {
+    for (const [key, value] of Object.entries(options))
+      credentialsOf(value, depth + 1, named || /token|secret|password|credential|private|key$|pin$/i.test(key), found);
+  }
+  return found;
+}
 
 /** What a test is given by `setup`: the platform's stand-in, the scripted agent, and a way to send the bot a request. */
 export interface ChannelHarness {
@@ -124,8 +135,16 @@ export function channelHarness(options: Pick<ChannelContractOptions, 'slug' | 'c
 
   /** The stand-ins a test started: each is closed when the test ends, passed or failed. */
   const started: ChannelStandIn[] = [];
+  /** Every line the adapter logged in a test, at every level, as a console would print it; and the credentials it held. */
+  const logged: { lines: string[]; credentials: string[] }[] = [];
   test.afterEach(async () => {
     await Promise.all(started.splice(0).map((standIn) => standIn.close()));
+    // Whatever went on in the test, and whatever the adapter chose to log of it, none of it is a credential.
+    for (const { lines, credentials } of logged.splice(0)) {
+      const text = lines.join('\n');
+      for (const credential of credentials)
+        assert.ok(!text.includes(credential), `the adapter's log holds a credential it was given (${credential.slice(0, 4)}…)`);
+    }
     assert.deepEqual(outside.splice(0), [], 'nothing was reached outside this machine');
   });
 
@@ -148,6 +167,10 @@ export function channelHarness(options: Pick<ChannelContractOptions, 'slug' | 'c
     const platform = given ?? (await options.start());
     if (!given) started.push(platform);
     const errors: unknown[] = [];
+    const kept = { lines: [] as string[], credentials: credentialsOf(platform.adapter) };
+    logged.push(kept);
+    const keep = (message: string, ...args: unknown[]) => void kept.lines.push(`${message} ${args.map((arg) => inspect(arg, { depth: 8 })).join(' ')}`);
+    const recorder = { child: () => recorder, debug: keep, info: keep, warn: keep, error: keep };
     const voiceflow = fakeVoiceflow(
       (answer ??
         ((action) => {
@@ -163,7 +186,7 @@ export function channelHarness(options: Pick<ChannelContractOptions, 'slug' | 'c
     );
     const channels = await createChannels({
       voiceflow: { apiKey: `VF.DM.${slug}-contract`, projectID: 'proj1', environment: 'development', fetch: voiceflow.fetch },
-      channels: [options.channel({ ...channelOptions, adapter: { logger: silent, ...platform.adapter, ...channelOptions.adapter } })],
+      channels: [options.channel({ ...channelOptions, adapter: { logger: recorder, ...platform.adapter, ...channelOptions.adapter } })],
       state,
       onError: (error) => errors.push(error),
     });

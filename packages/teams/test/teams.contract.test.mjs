@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import https from 'node:https';
 import test from 'node:test';
+import { inspect } from 'node:util';
 import { createMemoryState } from '@chat-adapter/state-memory';
+import * as teamsAdapterModule from '@chat-adapter/teams';
 import { createChannels } from '@voiceflow/channels-sdk';
 import { fakeVoiceflow, waiter } from '@voiceflow/channels-sdk/testing';
 import { CONTEXT_VARIABLES, createTeamsExtension, MAX_TEXT, teams, teamsLogger } from '../dist/index.js';
@@ -45,7 +47,7 @@ globalThis.fetch = (input, init) => {
 /** The stand-ins a test started: each is closed when the test ends, passed or failed, so a failure never leaves the run waiting. */
 const started = [];
 
-async function setup({ options = {}, api = {}, answer, logger = silent } = {}) {
+async function setup({ options = {}, api = {}, answer, logger = silent, bare = false } = {}) {
   const fake = await fakeTeams(api);
   started.push(fake);
   const errors = [];
@@ -64,7 +66,11 @@ async function setup({ options = {}, api = {}, answer, logger = silent } = {}) {
   );
   const channels = await createChannels({
     voiceflow: { apiKey: 'VF.DM.teams-contract', projectID: 'proj1', environment: 'development', fetch: voiceflow.fetch },
-    channels: [teams({ ...options, adapter: { ...fake.adapter, ...(logger ? { logger } : {}), ...options.adapter } })],
+    channels: [
+      bare
+        ? { slug: 'teams', module: teamsAdapterModule, options: { ...fake.adapter, ...(logger ? { logger } : {}) } }
+        : teams({ ...options, adapter: { ...fake.adapter, ...(logger ? { logger } : {}), ...options.adapter } }),
+    ],
     state: createMemoryState(),
     onError: (error) => errors.push(error),
   });
@@ -348,16 +354,49 @@ test("a failed call to Teams is logged in a line, without the bot's access token
   assert.equal(t.errors.length >= 1, true, 'the turn failed and said so');
 });
 
-test("the adapter's own logger would have printed the access token: what this package's logger is for", async () => {
+test('a logger of your own gets the same lines, with no access token in them', async () => {
   const lines = [];
   // As the Chat SDK's console logger prints: the message, and each argument as Node shows an object.
-  const { inspect } = await import('node:util');
-  const capture = (message, ...args) => lines.push(`${message} ${args.map((arg) => inspect(arg, { depth: 6 })).join(' ')}`);
-  const raw = { child: () => raw, debug() {}, info() {}, warn: capture, error: capture };
+  const capture = (message, ...args) => lines.push(`${message} ${args.map((arg) => inspect(arg, { depth: 8 })).join(' ')}`);
+  const raw = { child: () => raw, debug: capture, info: capture, warn: capture, error: capture };
   const t = await setup({ logger: raw });
-  t.fake.refuse((call) => (call.method === 'POST' && call.body?.type === 'message' ? { status: 400 } : undefined));
+  t.fake.refuse((call) =>
+    call.method === 'POST' && call.body?.type === 'message'
+      ? { status: 400, body: { error: { code: 'BadArgument', message: 'Activity was not valid.' } } }
+      : undefined,
+  );
   await t.send(t.fake.chat('hello'));
-  assert.ok(lines.join('\n').includes(t.fake.accessToken), 'the error the adapter logs carries the request, token and all');
+  const logged = lines.join('\n');
+  assert.match(logged, /Teams API: send failed/, 'the failure is logged');
+  assert.match(logged, /BadArgument/, 'with what Teams answered');
+  assert.ok(!logged.includes(t.fake.accessToken), 'and without the access token the failed request carried');
+  assert.ok(!logged.includes(APP_PASSWORD));
+  assert.doesNotMatch(logged, /Authorization|Bearer ey/);
+});
+
+test('Teams through the core alone, with no package of its own, logs no access token either', async () => {
+  const printed = [];
+  const real = { info: console.info, error: console.error, debug: console.debug, warn: console.warn, log: console.log };
+  for (const level of Object.keys(real))
+    console[level] = (...args) => printed.push(args.map((arg) => (typeof arg === 'string' ? arg : inspect(arg, { depth: 8 }))).join(' '));
+  let t;
+  try {
+    // The adapter by its name in the catalog, and its own console logger: what an app without this package has.
+    t = await setup({ bare: true, logger: null });
+    t.fake.refuse((call) =>
+      call.method === 'POST' && call.body?.type === 'message'
+        ? { status: 400, body: { error: { code: 'BadArgument', message: 'Activity was not valid.' } } }
+        : undefined,
+    );
+    await t.send(t.fake.chat('hello'));
+  } finally {
+    Object.assign(console, real);
+  }
+  const logged = printed.join('\n');
+  assert.match(logged, /Teams API: send failed/, 'the failure is printed on the console');
+  assert.ok(!logged.includes(t.fake.accessToken), 'without the access token');
+  assert.ok(!logged.includes(APP_PASSWORD), "or the app's secret");
+  assert.doesNotMatch(logged, /Authorization|Bearer ey/);
 });
 
 test('the extension is the Teams one, and says what the core needs of it', () => {
