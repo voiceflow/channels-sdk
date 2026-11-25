@@ -369,20 +369,23 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       was called ChannelKit and its repository `channelkit`: both went back
       before anything was published, and GitHub sends that address on to
       this one
-- [ ] Hold the command's name on npm: `voiceflow-channels`. The command
+- [x] Hold the command's name on npm: `voiceflow-channels`. The command
       comes with `@voiceflow/channels-sdk`, but where the core isn't
       installed, `npx voiceflow-channels` looks that name up on npm, and
-      whoever owns it decides what runs. A placeholder that only says the
-      project isn't released yet is enough. Publishing it takes a person's
-      npm sign-in
+      whoever owns it decides what runs
+      Done 2026-11-24: a placeholder, version 0.0.0, that only says which
+      package the command comes with
 - [x] Two names from the day as ChannelKit are held on npm and used by
       nothing here (2026-11-24): `voiceflow-channelkit` and
       `create-voiceflow-channelkit`. Each was published as a placeholder, and
       npm staged it: what is public under the name is npm's own stub,
       version `0.0.0-stage`. The bare name `channelkit` is someone else's
       package, a messaging gateway
-- [ ] Give each held name more than one owner (`npm owner add`): each has
-      the one account that published it
+- [ ] Give each of the three names held outside the scope more than one
+      owner (`npm owner add`): `voiceflow-channels`, `voiceflow-channelkit`
+      and `create-voiceflow-channelkit` each have the one account that
+      published them. The 16 packages under the scope list the
+      organization's accounts as their maintainers
 - [x] A starter (2026-11-23): `npm create @voiceflow/channels-sdk@latest` makes the
       app, as `npm create chat-sdk` does for Chat SDK. CI makes one from the
       packed packages, builds it and sends it what Slack sends
@@ -518,9 +521,11 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 
 ### Before the repository is public
 
-Checked on 2026-11-24: the 53 commits and the 18 pull requests hold no
-credential, no real ID, no address of a tunnel and no path on anyone's
-machine. What is left is not in the code:
+The repository went public on 2026-11-24. Checked that day, before it did:
+the 62 commits on every branch, and the 23 pull requests with their review
+comments, hold no credential, no real ID, no address of a tunnel and no path
+on anyone's machine. The logs of CI's runs were not read; CI is given no
+secret of ours. What is left is not in the code:
 
 - [x] Nothing an adapter logs can hold a secret, whatever the adapter does
       (2026-11-24): every adapter `createChannels` makes logs through the
@@ -533,9 +538,11 @@ machine. What is left is not in the code:
 - [x] Decide whether this file goes public as it is: it holds plans, and the
       record of what has and hasn't been run
       Decided 2026-11-24: it does
-- [ ] Turn on private vulnerability reporting (Settings, Security), which
-      SECURITY.md promises. It was off on 2026-11-24
-- [ ] Turn on secret scanning and push protection. Both were off on 2026-11-24
+- [x] Turn on private vulnerability reporting (Settings, Security), which
+      SECURITY.md promises
+      Done 2026-11-24
+- [x] Turn on secret scanning and push protection
+      Done 2026-11-24: no alert was open when read that day
 - [x] Protect `main`: require pull requests, CI's `all checks` check and code
       owners' review. It had no protection on 2026-11-24
       Done 2026-11-24, without the review: pull requests and `all checks`
@@ -550,16 +557,40 @@ machine. What is left is not in the code:
 The release workflow publishes through npm's trusted publishing, which needs a
 few things done by hand, once:
 
-- [ ] Make the repository public first: npm makes provenance only for a public
+- [x] Make the repository public first: npm makes provenance only for a public
       repository, and `release.yml` asks for it.
-- [ ] Publish each of the 16 packages once by hand, since a trusted publisher
-      is set on a package that already exists. Then, on npmjs.com, add this
-      repository's `release.yml` as each package's trusted publisher.
-- [ ] Whoever does that first publish has rights on npm's `@voiceflow` scope,
+      Done 2026-11-24
+- [x] Publish each of the 16 packages once by hand, since a trusted publisher
+      is set on a package that already exists.
+      Done 2026-11-24, at 0.1.0. npm staged each one: for a few minutes none
+      was to be seen, and the stub it made, `0.0.0-stage`, is still listed as
+      a version of each
+- [ ] On npmjs.com, add this repository's `release.yml` as the trusted
+      publisher of each of the 16 packages. Until then the workflow can't
+      publish, so a version pull request must not be merged
+- [x] Whoever does that first publish has rights on npm's `@voiceflow` scope,
       which other packages of Voiceflow's are already published under.
-- [ ] Check CI's `changeset` check goes red once: changesets skips private
+      A `developer` member of the organization has them (2026-11-24)
+- [x] Check CI's `changeset` check goes red once: changesets skips private
       packages, so the check passes every pull request until `"private": true`
       comes off.
+      Checked 2026-11-24 with the command the job runs, on a change to every
+      package's `package.json`: it fails with no changeset and passes with
+      one
+- [x] What npm serves is what was checked (2026-11-24): each of the 16 is,
+      byte for byte, the file that was packed, and 543 of their 546 files
+      are, byte for byte, a clean build of the commit they were packed from.
+      A new app made with `npm create @voiceflow/channels-sdk@latest` from
+      npm itself, for Slack and for Telegram, installs, builds, starts and
+      answers; the 15 libraries install together, and each one loads
+- [x] The other three files are in `@voiceflow/channels-slack` 0.1.0:
+      `dist/tools/workspace.js`, its types and its map, left in `dist` by a
+      build from before their source was removed. Nothing loads them. Every
+      build now empties `dist` first (`scripts/clean.mjs`), and the starter's
+      smoke test fails on a built file with no source (2026-11-24). They go
+      with the next release
+- [ ] 0.1.0 has no git tag and no GitHub release: the workflow makes them
+      for what it publishes, and these were published by hand
 - [ ] Give the release workflow a GitHub App token (changesets/action's
       `github-token`), so CI runs on the version pull request it opens. One
       opened with the default `GITHUB_TOKEN` starts no workflows.

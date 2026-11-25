@@ -19,7 +19,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
@@ -98,6 +98,8 @@ try {
   for (const name of chosen) channelOf(name);
   await run('npm', ['pack', '--pack-destination', work, '-w', 'packages/core', ...chosen.flatMap((name) => ['-w', `packages/${name}`])], { cwd: root });
   const tarballs = (await readdir(work)).filter((f) => f.endsWith('.tgz'));
+  step('nothing built in them without its source');
+  for (const file of tarballs) await sourced(join(work, file));
   const tarball = (name) => {
     // The name, then its version: the core's name is the start of every channel's.
     const file = tarballs.find((f) => f.startsWith(`${name}-`) && /^\d/.test(f.slice(name.length + 1)));
@@ -208,6 +210,22 @@ async function smoke(channel, packed) {
 
   await check(url, () => log);
   await stop();
+}
+
+/**
+ * A package ships its sources beside what was built from them, so a built file with no source was left in dist
+ * by an earlier build: tsc never removes one. The Slack package's 0.1.0 was published with three.
+ */
+async function sourced(tarball) {
+  const { stdout } = await run('tar', ['-tzf', tarball], { maxBuffer: 16 * 1024 * 1024 });
+  const files = new Set(stdout.split('\n'));
+  const built = /^package\/dist\/(.+?)(?:\.d\.ts|\.js)(?:\.map)?$/;
+  const strays = [...files].filter((file) => {
+    const stem = built.exec(file)?.[1];
+    return stem !== undefined && !['.ts', '.tsx'].some((ext) => files.has(`package/src/${stem}${ext}`));
+  });
+  if (strays.length)
+    throw new Error(`${basename(tarball)} holds built files with no source:\n  ${strays.join('\n  ')}\nBuild again: every build empties dist first.`);
 }
 
 /** Sends a request with exactly these headers, the host's included, as a proxy passes one on. */
