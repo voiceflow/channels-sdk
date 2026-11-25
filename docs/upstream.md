@@ -574,8 +574,19 @@ few things done by hand, once:
       publish. npm's note on what that means: anyone with write access to
       the repository can publish through the workflow. Naming an environment
       that needs approval would narrow it; the workflow uses none
-- [ ] The workflow has not published yet. The first release it makes is the
-      proof that the trusted publisher, and provenance, work
+- [x] The workflow publishes, through the trusted publisher and with
+      provenance.
+      Done 2026-11-24, at 0.1.1, with no npm token. On npm, each of the 16
+      carries provenance and has the files a clean build of the same commit
+      packs; the workflow made the 16 tags and releases. Slack and Telegram
+      apps made from npm at 0.1.1 install, build, start and answer, and the
+      15 libraries install together and load. npm listed 0.1.1 of two
+      packages about five minutes before it served them: an install of either
+      failed until then
+- [x] The core's release is the one marked as the latest on GitHub. The
+      workflow makes the 16 at once, and for 0.1.1 the mark went to another's.
+      Moved by hand 2026-11-24, and a step of `release.yml` does it from now
+      on. That step has not run yet: the next release runs it
 - [x] Whoever does that first publish has rights on npm's `@voiceflow` scope,
       which other packages of Voiceflow's are already published under.
       A `developer` member of the organization has them (2026-11-24)
@@ -595,23 +606,24 @@ few things done by hand, once:
       `dist/tools/workspace.js`, its types and its map, left in `dist` by a
       build from before their source was removed. Nothing loads them. Every
       build now empties `dist` first (`scripts/clean.mjs`), and the starter's
-      smoke test fails on a built file with no source (2026-11-24). They go
-      with the next release
+      smoke test fails on a built file with no source (2026-11-24). Gone in
+      0.1.1
 - [x] A git tag and a GitHub release for each package at 0.1.0, named as
       the workflow names them (`@voiceflow/channels-sdk@0.1.0`). The
       workflow makes them for what it publishes, and these were published by
       hand
       Done 2026-11-24, by hand: 16 tags on the commit the packages were
       packed from, and a release for each with its package's changelog entry
-- [ ] CI on the version pull request. One opened with the default
-      `GITHUB_TOKEN` starts no workflows, so `all checks` would never report
-      and it could not be merged.
-      Built 2026-11-24, with no other token: after it opens or updates the
-      pull request, `release.yml` starts `ci` on its branch
-      (`workflow_dispatch`), which GitHub lets the default token do. The
-      first version pull request is the proof that a run started
-      that way satisfies the required check. A GitHub App token
-      (changesets/action's `github-token`) is the other way, if it doesn't
+- [x] CI on the version pull request. GitHub holds it, since a workflow opens
+      that pull request with the default `GITHUB_TOKEN`: someone with write
+      access selects "Approve workflows to run" on it, once when it is opened
+      and again each time it is updated.
+      Done that way for 0.1.1 (2026-11-24): `all checks` passed and the pull
+      request could be merged. Tried first, and taken out: `release.yml`
+      starting `ci` on the branch itself (`workflow_dispatch`). That run passes
+      on the same commit, but GitHub counts no run of that event towards a
+      required check. A GitHub App token (changesets/action's `github-token`)
+      is the way to need no approval
 - [x] Decide the oldest Node version supported: 22. Node 20's support ended
       on 2026-04-30; Vercel Chat SDK tests 22 and 24.
 

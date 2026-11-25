@@ -2,6 +2,10 @@
 # updates) a "chore(release): version packages" pull request; merging that pull
 # request publishes the new versions to npm, with provenance, and tags them.
 #
+# A workflow opens that pull request, so GitHub holds ci on it until someone
+# with write access selects "Approve workflows to run" there: once when it is
+# opened, and again each time it is updated.
+#
 # npm trusts this workflow through trusted publishing (OIDC), so no npm token is
 # stored here. A package marked "private": true is never published.
 name: release
@@ -28,9 +32,6 @@ jobs:
     name: release
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
-    outputs:
-      # The version pull request's number, when this run opened or updated one.
-      pull_request: ${{ steps.changesets.outputs.pr-number }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -57,24 +58,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
 
-  # The version pull request is opened with the default token, and GitHub starts
-  # no workflow for what that token does: ci would never run on it, "all checks"
-  # would never report, and it could not be merged. Starting a workflow outright
-  # (workflow_dispatch) is an exception GitHub makes for that token, so ci is
-  # started here, on the pull request's branch: its checks are for the same
-  # commit the pull request shows.
-  #
-  # A job of its own, so the job above, which runs the repository's scripts,
-  # is not given the permission to start workflows.
-  ci-on-version-pr:
-    name: ci on the version pull request
-    needs: release
-    if: ${{ needs.release.outputs.pull_request != '' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref changeset-release/main
+      # A release is made for each package, all at once, and the one GitHub marks
+      # as the latest need not be the core's.
+      - name: Mark the core's release as the latest
+        if: ${{ steps.changesets.outputs.published == 'true' }}
+        run: gh release edit "@voiceflow/channels-sdk@$(node -p "require('./packages/core/package.json').version")" --latest --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ github.token }}

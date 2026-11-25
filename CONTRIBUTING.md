@@ -99,13 +99,14 @@ npx changeset
   `examples/nextjs-slack`, so a change there changes what the starter makes:
   add a changeset for `@voiceflow/create-channels-sdk`. The check can't tell, since
   examples need no changeset of their own.
-- **One version:** `@voiceflow/channels-sdk`, `@voiceflow/channels-slack` and
-  `@voiceflow/create-channels-sdk` share a version number, so a changeset for one
-  moves all three. The starter writes that version into the apps it makes.
+- **One version:** the published packages share a version number, so a changeset
+  for one moves them all. The starter writes that version into the apps it makes.
 - **Releasing:** when changesets reach `main`, the `release` workflow opens a
   "chore(release): version packages" pull request with the new versions and
-  changelogs. Merging it publishes to npm with provenance, through npm's trusted
-  publishing: no npm token is stored in this repository.
+  changelogs. GitHub holds CI on it, since a workflow opened it: someone with
+  write access selects "Approve workflows to run" there. Merging it publishes to
+  npm with provenance, through npm's trusted publishing: no npm token is stored
+  in this repository.
 
 ## Trying it against real Slack
 

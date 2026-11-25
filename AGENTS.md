@@ -114,7 +114,7 @@ a tool's code is its functions' text, so restyling it would change the tool.
 - **A test that can't fail isn't one.** Break the code once and watch the new
   test go red before relying on it.
 - **Add a changeset** for any change a package's users would notice
-  (`npx changeset`). Both packages share one version.
+  (`npx changeset`). The published packages share one version.
 
 ## Testing
 

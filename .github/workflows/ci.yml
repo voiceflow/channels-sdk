@@ -11,9 +11,6 @@ on:
   push:
     branches: [main]
   pull_request:
-  # The release workflow starts this on its version pull request's branch: a
-  # pull request opened with the default token starts no workflow of its own.
-  workflow_dispatch:
 
 permissions:
   contents: read
