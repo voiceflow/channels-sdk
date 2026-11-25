@@ -145,7 +145,11 @@ function files(slug) {
       './connect': { types: './dist/connect/index.d.ts', import: './dist/connect/index.js' },
     },
     files: ['dist', 'src', 'README.md', 'LICENSE'],
-    scripts: { build: 'tsc -p tsconfig.json', test: 'npm run build && node --test test/*.test.mjs', typecheck: 'tsc -p tsconfig.json --noEmit' },
+    scripts: {
+      build: 'node ../../scripts/clean.mjs && tsc -p tsconfig.json',
+      test: 'npm run build && node --test test/*.test.mjs',
+      typecheck: 'tsc -p tsconfig.json --noEmit',
+    },
     dependencies: { '@voiceflow/channels-sdk': VERSION },
     peerDependencies: {
       chat: '>=4.44.0 <5',

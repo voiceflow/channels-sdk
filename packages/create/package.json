@@ -50,7 +50,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/template.mjs",
+    "build": "node ../../scripts/clean.mjs && tsc -p tsconfig.json && node scripts/template.mjs",
     "test": "npm run build && node --test test/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
