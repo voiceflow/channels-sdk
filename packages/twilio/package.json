@@ -1,6 +1,6 @@
 {
   "name": "@voiceflow/channels-twilio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Voiceflow agent in Twilio, with one command to set it up.",
   "keywords": [
     "voiceflow",
@@ -53,7 +53,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@voiceflow/channels-sdk": "0.1.0"
+    "@voiceflow/channels-sdk": "0.1.1"
   },
   "peerDependencies": {
     "chat": ">=4.44.0 <5",

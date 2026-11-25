@@ -1,6 +1,6 @@
 {
   "name": "@voiceflow/create-channels-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Start a Voiceflow agent in Slack, or any other channel, with one command: a Next.js app with its route and its env file.",
   "keywords": [
     "voiceflow",

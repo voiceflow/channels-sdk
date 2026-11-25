@@ -1,5 +1,12 @@
 # @voiceflow/channels-slack
 
+## 0.1.1
+
+### Patch Changes
+
+- a16b6eb: The package no longer carries three built files left from an earlier version: `dist/tools/workspace.js`, its types and its map. Nothing loaded them.
+- @voiceflow/channels-sdk@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
