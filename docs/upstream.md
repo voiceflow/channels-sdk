@@ -565,9 +565,17 @@ few things done by hand, once:
       Done 2026-11-24, at 0.1.0. npm staged each one: for a few minutes none
       was to be seen, and the stub it made, `0.0.0-stage`, is still listed as
       a version of each
-- [ ] On npmjs.com, add this repository's `release.yml` as the trusted
-      publisher of each of the 16 packages. Until then the workflow can't
-      publish, so a version pull request must not be merged
+- [x] Add this repository's `release.yml` as the trusted publisher of each
+      of the 16 packages.
+      Done 2026-11-24 with `npm trust github` (npm 11.10 or later; each call
+      asks for a second factor, in a terminal): GitHub Actions,
+      `voiceflow/channels-sdk`, `release.yml`, no environment. Read back from
+      npm, each package lists two permissions, to publish and to stage a
+      publish. npm's note on what that means: anyone with write access to
+      the repository can publish through the workflow. Naming an environment
+      that needs approval would narrow it; the workflow uses none
+- [ ] The workflow has not published yet. The first release it makes is the
+      proof that the trusted publisher, and provenance, work
 - [x] Whoever does that first publish has rights on npm's `@voiceflow` scope,
       which other packages of Voiceflow's are already published under.
       A `developer` member of the organization has them (2026-11-24)
@@ -589,8 +597,12 @@ few things done by hand, once:
       build now empties `dist` first (`scripts/clean.mjs`), and the starter's
       smoke test fails on a built file with no source (2026-11-24). They go
       with the next release
-- [ ] 0.1.0 has no git tag and no GitHub release: the workflow makes them
-      for what it publishes, and these were published by hand
+- [x] A git tag and a GitHub release for each package at 0.1.0, named as
+      the workflow names them (`@voiceflow/channels-sdk@0.1.0`). The
+      workflow makes them for what it publishes, and these were published by
+      hand
+      Done 2026-11-24, by hand: 16 tags on the commit the packages were
+      packed from, and a release for each with its package's changelog entry
 - [ ] Give the release workflow a GitHub App token (changesets/action's
       `github-token`), so CI runs on the version pull request it opens. One
       opened with the default `GITHUB_TOKEN` starts no workflows.
