@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The command `npm create @voiceflow/channelkit` runs.
+// The command `npm create @voiceflow/channels-sdk` runs.
 import { create } from './index.js';
 
 create(process.argv.slice(2)).then(

@@ -1,11 +1,11 @@
 {
-  "name": "@voiceflow/channelkit",
+  "name": "@voiceflow/channels-sdk",
   "version": "0.0.0",
   "private": true,
-  "description": "The core of Voiceflow ChannelKit: a Voiceflow agent inside any Vercel Chat SDK bot, on any adapter in the catalog.",
+  "description": "The core of Voiceflow Channels SDK: a Voiceflow agent inside any Vercel Chat SDK bot, on any adapter in the catalog.",
   "keywords": [
     "voiceflow",
-    "channelkit",
+    "channels-sdk",
     "chat",
     "chat-sdk",
     "vercel-chat",
@@ -21,12 +21,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/voiceflow/channelkit.git",
+    "url": "git+https://github.com/voiceflow/channels-sdk.git",
     "directory": "packages/core"
   },
-  "homepage": "https://github.com/voiceflow/channelkit/tree/main/packages/core#readme",
+  "homepage": "https://github.com/voiceflow/channels-sdk/tree/main/packages/core#readme",
   "bugs": {
-    "url": "https://github.com/voiceflow/channelkit/issues"
+    "url": "https://github.com/voiceflow/channels-sdk/issues"
   },
   "publishConfig": {
     "access": "public"
@@ -78,6 +78,6 @@
     "@chat-adapter/catalog": ">=4.44.0 <5"
   },
   "bin": {
-    "voiceflow-channelkit": "./dist/cli.js"
+    "voiceflow-channels": "./dist/cli.js"
   }
 }

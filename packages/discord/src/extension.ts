@@ -4,7 +4,7 @@
 //
 // Mentions, threads, direct messages, buttons, cards and carousels need
 // nothing here: the channel-neutral agent and the Discord adapter do them.
-import type { ChannelExtension, ExtensionHost } from '@voiceflow/channelkit';
+import type { ChannelExtension, ExtensionHost } from '@voiceflow/channels-sdk';
 import type { Chat, Thread } from 'chat';
 import { type DiscordAdapterLike, DM_GUILD, discordAdapter, fitMessages, nameThreads, SLUG, type ThreadNames, where } from './adapter.js';
 import { createContext } from './context.js';

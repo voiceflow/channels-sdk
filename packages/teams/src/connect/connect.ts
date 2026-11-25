@@ -13,13 +13,13 @@
 // It shows its whole plan before it changes anything. The bot's secret is for
 // your server alone: it never goes to Voiceflow.
 //
-// Node only: import it from `@voiceflow/channelkit-teams/connect`.
+// Node only: import it from `@voiceflow/channels-teams/connect`.
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { NeedsYou } from '@voiceflow/channelkit';
-import { type ApiOptions, checkProject, type InstallResult, installTools, memoryRecordStore } from '@voiceflow/channelkit/install';
-import { downloadIcon, type IconFile, iconUrl, readEnvFile, VOICEFLOW_ICON_NAME, voiceflowIcon } from '@voiceflow/channelkit/setup';
+import { NeedsYou } from '@voiceflow/channels-sdk';
+import { type ApiOptions, checkProject, type InstallResult, installTools, memoryRecordStore } from '@voiceflow/channels-sdk/install';
+import { downloadIcon, type IconFile, iconUrl, readEnvFile, VOICEFLOW_ICON_NAME, voiceflowIcon } from '@voiceflow/channels-sdk/setup';
 import { CONTEXT_VARIABLES } from '../context.js';
 import { teamsIcon } from './icon.js';
 import { MS_CLI_NPX, type MsAccount, type MsApp, type MsCli, MsCliError } from './ms.js';
@@ -106,7 +106,7 @@ export interface ConnectTeamsOptions {
   voiceflow: ApiOptions & { projectID: string; environment: string; expectWorkspace?: string };
   /** The app connected from here before (TEAMS_APP_ID): it is kept, and only what's missing is added. */
   appId?: string;
-  /** Where Teams sends the bot's messages: your server's public address and its route. Without it, `voiceflow-channelkit dev` gives one. */
+  /** Where Teams sends the bot's messages: your server's public address and its route. Without it, `voiceflow-channels dev` gives one. */
   endpoint?: string;
   /** The bot's name in Teams. Default: your agent's name in Voiceflow, on a new app. An app made before keeps its name unless you give one. */
   name?: string;
@@ -202,7 +202,7 @@ export async function connectTeams(options: ConnectTeamsOptions): Promise<Connec
         : `${VOICEFLOW_ICON_NAME} as its picture (the agent has no avatar in Voiceflow)`;
   const rename = existing && typeof options.name === 'string' && name !== existing.name ? name : undefined;
   const addressLine = !url
-    ? "  · Teams needs your server's address: `voiceflow-channelkit dev` gives it one each time it starts"
+    ? "  · Teams needs your server's address: `voiceflow-channels dev` gives it one each time it starts"
     : existing?.endpoint === url
       ? `  = Teams sends the bot's messages to ${url}`
       : `  ${existing ? '~' : '+'} have Teams send the bot's messages to ${url}${existing?.endpoint ? ` (it sends them to ${existing.endpoint} now)` : ''}`;

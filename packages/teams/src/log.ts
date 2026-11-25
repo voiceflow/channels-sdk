@@ -12,7 +12,7 @@
 //
 // A logger you give the adapter yourself gets every line, and the core takes
 // the token and the request out of each first, as it does for every channel
-// (`cleanLogger` in @voiceflow/channelkit).
+// (`cleanLogger` in @voiceflow/channels-sdk).
 import { ConsoleLogger, type Logger } from 'chat';
 
 /** A signed token (three base64url parts), as Microsoft's access tokens are. */

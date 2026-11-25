@@ -79,7 +79,7 @@ export function createDiscordApi(options: DiscordApiOptions): DiscordApi {
         headers: {
           authorization: `Bot ${options.token}`,
           // Discord refuses a request that doesn't say what sent it.
-          'user-agent': 'DiscordBot (https://github.com/voiceflow/channelkit, 0)',
+          'user-agent': 'DiscordBot (https://github.com/voiceflow/channels-sdk, 0)',
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

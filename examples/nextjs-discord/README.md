@@ -89,7 +89,7 @@ Discord reaches a bot two ways, and a deployment needs both.
 
 - `createChannels` runs on the first request, not at build time: Discord's
   adapter needs the app's public key, and the build doesn't have it.
-- `discord()` from `@voiceflow/channelkit-discord` brings what only Discord has,
+- `discord()` from `@voiceflow/channels-discord` brings what only Discord has,
   and the Discord adapter's module.
 - `next.config.ts` keeps the Discord adapter out of the bundle: it loads
   optional native modules by name.

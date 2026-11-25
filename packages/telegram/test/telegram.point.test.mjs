@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createMemoryState } from '@chat-adapter/state-memory';
-import { channelHarness, fakeVoiceflowApi } from '@voiceflow/channelkit/testing';
+import { channelHarness, fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
 import { cli } from '../dist/connect/index.js';
 import { telegram } from '../dist/index.js';
 import { start } from './stand-in.mjs';
@@ -77,7 +77,7 @@ test('point gives Telegram another address and keeps the secret; before connect 
   const a = await app(t);
   const early = await a.run(['point', '--public-url', 'https://one.example.com']);
   assert.equal(early.code, 3, early.said);
-  assert.match(early.said, /isn't connected here yet: run `voiceflow-channelkit connect telegram --env-file /);
+  assert.match(early.said, /isn't connected here yet: run `voiceflow-channels connect telegram --env-file /);
   assert.equal(a.platform.webhook(), undefined, 'and Telegram was told nothing');
 
   assert.equal((await a.run(['connect', '--yes'])).code, 0);

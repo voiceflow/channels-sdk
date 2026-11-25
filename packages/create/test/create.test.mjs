@@ -1,4 +1,4 @@
-// The starter, run as `npm create @voiceflow/channelkit` runs it, into a temporary
+// The starter, run as `npm create @voiceflow/channels-sdk` runs it, into a temporary
 // folder: what it writes, what it refuses, and what it runs. Nothing is
 // installed and no git repository is made: the commands it would run are recorded.
 
@@ -86,15 +86,15 @@ test('the app it writes is the example app, which CI builds, with the versions t
   assert.equal(pkg.name, 'my-bot');
   assert.equal(pkg.private, true);
   assert.deepEqual(pkg.scripts, example.scripts);
-  assert.equal(pkg.scripts.connect, 'voiceflow-channelkit connect slack --env-file .env.local', "connect runs the app's own copy of the command");
-  assert.equal(pkg.scripts.dev, 'voiceflow-channelkit dev --env-file .env.local -- next dev', 'and dev is the tunnel, the server and the pointing in one');
+  assert.equal(pkg.scripts.connect, 'voiceflow-channels connect slack --env-file .env.local', "connect runs the app's own copy of the command");
+  assert.equal(pkg.scripts.dev, 'voiceflow-channels dev --env-file .env.local -- next dev', 'and dev is the tunnel, the server and the pointing in one');
   assert.equal(pkg.scripts.start, 'next start', 'a deployed server runs with no tunnel');
   assert.deepEqual(Object.keys(pkg.dependencies), Object.keys(example.dependencies));
   assert.deepEqual(Object.keys(pkg.devDependencies), Object.keys(example.devDependencies));
   for (const [dep, version] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })) {
     const tested = { ...example.dependencies, ...example.devDependencies }[dep];
     // This project's packages come at the starter's own version: they are released together.
-    assert.equal(version, /^@voiceflow\/channelkit(-[a-z0-9-]+)?$/.test(dep) ? `^${own.version}` : `^${tested}`, dep);
+    assert.equal(version, /^@voiceflow\/channels-[a-z0-9-]+$/.test(dep) ? `^${own.version}` : `^${tested}`, dep);
     assert.match(version, /^\^\d+\.\d+\.\d+/, `${dep} is a version on npm, not a link into a repository`);
   }
 });
@@ -235,7 +235,7 @@ test('a mistake in the command is an answer and an exit code, with nothing writt
   }
   const help = await start(['--help']);
   assert.equal(help.code, 0);
-  assert.match(help.out, /^Usage:\n {2}npm create @voiceflow\/channelkit@latest \[name\]/);
+  assert.match(help.out, /^Usage:\n {2}npm create @voiceflow\/channels-sdk@latest \[name\]/);
   assert.deepEqual(await readdir(help.cwd), []);
 });
 
@@ -312,9 +312,9 @@ test('--channel discord makes the Discord app: its routes, the schedule that kee
   }
   const pkg = JSON.parse(await read(app, 'package.json'));
   assert.equal(pkg.description, 'A Voiceflow agent in Discord, served by a Next.js route.');
-  assert.equal(pkg.scripts.connect, 'voiceflow-channelkit connect discord --env-file .env.local');
-  assert.equal(pkg.scripts.dev, 'voiceflow-channelkit dev --env-file .env.local -- next dev');
-  assert.ok(pkg.dependencies['@voiceflow/channelkit-discord'] && pkg.dependencies['@chat-adapter/discord']);
+  assert.equal(pkg.scripts.connect, 'voiceflow-channels connect discord --env-file .env.local');
+  assert.equal(pkg.scripts.dev, 'voiceflow-channels dev --env-file .env.local -- next dev');
+  assert.ok(pkg.dependencies['@voiceflow/channels-discord'] && pkg.dependencies['@chat-adapter/discord']);
   assert.ok(!Object.keys(pkg.dependencies).some((dep) => /slack/.test(dep)), 'a Discord app depends on nothing of Slack');
 
   // One command: the first time, dev sets Discord up before it starts. The one step by hand is said with it.
@@ -383,9 +383,9 @@ test('--channel teams makes the Teams app: its route, its env file, and its own 
   }
   const pkg = JSON.parse(await read(app, 'package.json'));
   assert.equal(pkg.description, 'A Voiceflow agent in Microsoft Teams, served by a Next.js route.');
-  assert.equal(pkg.scripts.connect, 'voiceflow-channelkit connect teams --env-file .env.local');
-  assert.equal(pkg.scripts.dev, 'voiceflow-channelkit dev --env-file .env.local -- next dev');
-  assert.ok(pkg.dependencies['@voiceflow/channelkit-teams'] && pkg.dependencies['@chat-adapter/teams']);
+  assert.equal(pkg.scripts.connect, 'voiceflow-channels connect teams --env-file .env.local');
+  assert.equal(pkg.scripts.dev, 'voiceflow-channels dev --env-file .env.local -- next dev');
+  assert.ok(pkg.dependencies['@voiceflow/channels-teams'] && pkg.dependencies['@chat-adapter/teams']);
   assert.ok(!Object.keys(pkg.dependencies).some((dep) => /slack|discord/.test(dep)), 'a Teams app depends on nothing of Slack or Discord');
 
   // One command: the first time, dev sets Teams up before it starts.
@@ -455,8 +455,8 @@ test('--channel telegram makes the Telegram app: its route, its env file, and it
   assert.equal(await read(app, '.env.example'), await readFile(new URL('.env.example', TELEGRAM_EXAMPLE), 'utf8'));
   const pkg = JSON.parse(await read(app, 'package.json'));
   assert.equal(pkg.description, 'A Voiceflow agent in Telegram, served by a Next.js route.');
-  assert.equal(pkg.scripts.connect, 'voiceflow-channelkit connect telegram --env-file .env.local');
-  assert.ok(pkg.dependencies['@voiceflow/channelkit-telegram'] && pkg.dependencies['@chat-adapter/telegram']);
+  assert.equal(pkg.scripts.connect, 'voiceflow-channels connect telegram --env-file .env.local');
+  assert.ok(pkg.dependencies['@voiceflow/channels-telegram'] && pkg.dependencies['@chat-adapter/telegram']);
 
   assert.match(out, /Created my-bot: a Voiceflow agent in Telegram/);
   assert.match(out, /1\. Put Telegram's settings in \.env\.local: TELEGRAM_BOT_TOKEN\.\n {5}They come from Telegram's own pages: https:\/\//);
@@ -494,20 +494,20 @@ test('every channel has a starter: its own app, its own settings, and nothing of
     const files = await tree(app);
     assert.ok(files.includes(`app/api/${channel}/route.ts`), `${channel}: its route`);
     const pkg = JSON.parse(await read(app, 'package.json'));
-    assert.equal(pkg.scripts.connect, `voiceflow-channelkit connect ${channel} --env-file .env.local`);
-    for (const dep of [`@voiceflow/channelkit-${channel}`, '@voiceflow/channelkit', info.package, 'chat', 'next']) {
+    assert.equal(pkg.scripts.connect, `voiceflow-channels connect ${channel} --env-file .env.local`);
+    for (const dep of [`@voiceflow/channels-${channel}`, '@voiceflow/channels-sdk', info.package, 'chat', 'next']) {
       assert.ok(pkg.dependencies[dep], `${channel}: depends on ${dep}`);
     }
     assert.equal(
-      pkg.dependencies[`@voiceflow/channelkit-${channel}`],
-      pkg.dependencies['@voiceflow/channelkit'],
+      pkg.dependencies[`@voiceflow/channels-${channel}`],
+      pkg.dependencies['@voiceflow/channels-sdk'],
       `${channel}: its package at the core's version`,
     );
     assert.match(pkg.dependencies[info.package], /^\^\d/, `${channel}: the adapter at a version it was tested with`);
     // Nothing of another channel: no other package, and no other channel's name in any file.
     const others = CHANNELS.filter((other) => other !== channel);
     assert.deepEqual(
-      Object.keys(pkg.dependencies).filter((dep) => others.some((other) => dep === `@voiceflow/channelkit-${other}` || dep === `@chat-adapter/${other}`)),
+      Object.keys(pkg.dependencies).filter((dep) => others.some((other) => dep === `@voiceflow/channels-${other}` || dep === `@chat-adapter/${other}`)),
       [],
       channel,
     );

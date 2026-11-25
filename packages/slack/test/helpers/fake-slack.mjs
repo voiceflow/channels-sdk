@@ -1,5 +1,5 @@
 // Slack test doubles, picked by shape: a fake Slack Web API and signed Slack
-// requests. The fake Voiceflow runtime comes from @voiceflow/channelkit/testing.
+// requests. The fake Voiceflow runtime comes from @voiceflow/channels-sdk/testing.
 // Secrets here are test-only values.
 
 import { createHmac } from 'node:crypto';

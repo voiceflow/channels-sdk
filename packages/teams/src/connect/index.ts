@@ -1,5 +1,5 @@
 // `connect teams` and what it's made of. Node only: import it from
-// `@voiceflow/channelkit-teams/connect`.
+// `@voiceflow/channels-teams/connect`.
 export { type CliIO, cli, connected } from './cli.js';
 export {
   botNameOf,

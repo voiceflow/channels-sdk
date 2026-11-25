@@ -1,6 +1,6 @@
 # Staying current with Vercel Chat SDK
 
-How `@voiceflow/channelkit` uses Chat SDK adapters for every platform it can, and
+How `@voiceflow/channels-sdk` uses Chat SDK adapters for every platform it can, and
 stays compatible as upstream ships.
 
 ## Upstream facts (checked 2026-11-19, against 4.45.0)
@@ -26,7 +26,7 @@ stays compatible as upstream ships.
 
 ## 1. How a channel is built
 
-Every channel is a package, `@voiceflow/channelkit-<name>`, and every package is
+Every channel is a package, `@voiceflow/channels-<name>`, and every package is
 the same four things:
 
 - Chat SDK's adapter for the platform, with its module imported so a bundled
@@ -122,7 +122,7 @@ Not built yet: the plan for before the public release.
 
 ## 4. The contract (what every channel has to pass)
 
-`channelContract`, in `@voiceflow/channelkit/testing`
+`channelContract`, in `@voiceflow/channels-sdk/testing`
 (`packages/core/src/contract.ts`), is the conversation every channel carries.
 Each package's tests run it with the real Chat SDK, the platform's real
 adapter, the core's agent, a scripted Voiceflow runtime, and a stand-in for
@@ -187,7 +187,7 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
     nothing, so "Ask the agent about this message" can't be built without verifying
     Slack's signature ourselves, which this package never does. Ask for an
     `onShortcut` handler (`callbackId`, the message, `triggerId`, the user).
-  - **Discord (`@chat-adapter/discord` 4.45.0), found building `@voiceflow/channelkit-discord`:**
+  - **Discord (`@chat-adapter/discord` 4.45.0), found building `@voiceflow/channels-discord`:**
     - `apiUrl` (and `DISCORD_API_URL`) isn't used for an interaction's own webhook or for a
       message with files: those calls go to `https://discord.com/api/v10` whatever it says
       (`discordInteractionFetch`, `postMessageWithFiles`). Our tests send them to the stand-in
@@ -253,7 +253,7 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       A bot can be given a name and a picture through the API, and an application an icon; an
       application's name can't (Discord answers 200 and leaves it), so the name on the page
       that adds the bot is the one typed in the portal.
-  - **Teams (`@chat-adapter/teams` 4.45.0), found building `@voiceflow/channelkit-teams` and
+  - **Teams (`@chat-adapter/teams` 4.45.0), found building `@voiceflow/channels-teams` and
     running it in Teams itself (2026-11-23, a new Microsoft 365 trial organization):**
     - **A failed call is logged with the bot's access token.** `Teams API: send failed` is
       logged with the error the adapter caught, which is its HTTP client's: the whole request
@@ -353,37 +353,37 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
     one, the server could offer its tools over MCP, and nothing would be
     installed on the agent.
 - **Live check:** a nightly conversation against a Voiceflow test agent.
-- **Transcripts:** tag every conversation with `vf-sdk` = `@voiceflow/channelkit@<version>`.
+- **Transcripts:** tag every conversation with `vf-sdk` = `@voiceflow/channels-sdk@<version>`.
 
 ## 7. Before the public release
 
 - [x] License: MIT (matches Chat SDK)
-- [x] The names are settled (2026-11-24), and every one is under the
+- [x] The names are settled (2026-11-24), and every package is under the
       `@voiceflow` scope, which only Voiceflow's npm organization can publish
-      to: `@voiceflow/channelkit`, one `@voiceflow/channelkit-<channel>` for
+      to: `@voiceflow/channels-sdk`, one `@voiceflow/channels-<channel>` for
       each of the 14 channels in the README's table, and
-      `@voiceflow/create-channelkit`, the starter
-      (`npm create @voiceflow/channelkit`). They were "Voiceflow Channels",
-      with a core called `channels-sdk`, until that day. ChannelKit is the
-      name for channels whose surface Voiceflow doesn't own. The repository
-      was renamed with them, from `channels-sdk` to `channelkit`: GitHub
-      sends the old address on to the new one
-- [x] Two names outside the scope are held on npm as guards (2026-11-24),
-      and nothing here tells anyone to install either. `voiceflow-channelkit`
-      is the command's name, which comes with `@voiceflow/channelkit`: where
-      the core isn't installed, `npx voiceflow-channelkit` looks that name up
-      on npm, and whoever owns it decides what runs.
-      `create-voiceflow-channelkit` was the starter's name for a day. Each was
-      published as a placeholder that only says ChannelKit isn't released
-      yet. npm staged them: until a maintainer approves each on npmjs.com,
-      what is public under the name is npm's own stub, version `0.0.0-stage`.
-      Either way the name has an owner. An unscoped name can only belong to
-      people's accounts, never to an organization, which is why what people
-      install is all under the scope. The bare name `channelkit` is someone
-      else's package, a messaging gateway
-- [ ] Give the two guard names more than one owner (`npm owner add`): each
-      has the one account that published it
-- [x] A starter (2026-11-23): `npm create @voiceflow/channelkit@latest` makes the
+      `@voiceflow/create-channels-sdk`, the starter
+      (`npm create @voiceflow/channels-sdk`). A name with no scope can belong
+      only to people's accounts, never to an organization, which is why what
+      people install is all under the scope. For part of that day the project
+      was called ChannelKit and its repository `channelkit`: both went back
+      before anything was published, and GitHub sends that address on to
+      this one
+- [ ] Hold the command's name on npm: `voiceflow-channels`. The command
+      comes with `@voiceflow/channels-sdk`, but where the core isn't
+      installed, `npx voiceflow-channels` looks that name up on npm, and
+      whoever owns it decides what runs. A placeholder that only says the
+      project isn't released yet is enough. Publishing it takes a person's
+      npm sign-in
+- [x] Two names from the day as ChannelKit are held on npm and used by
+      nothing here (2026-11-24): `voiceflow-channelkit` and
+      `create-voiceflow-channelkit`. Each was published as a placeholder, and
+      npm staged it: what is public under the name is npm's own stub,
+      version `0.0.0-stage`. The bare name `channelkit` is someone else's
+      package, a messaging gateway
+- [ ] Give each held name more than one owner (`npm owner add`): each has
+      the one account that published it
+- [x] A starter (2026-11-23): `npm create @voiceflow/channels-sdk@latest` makes the
       app, as `npm create chat-sdk` does for Chat SDK. CI makes one from the
       packed packages, builds it and sends it what Slack sends
 - [x] Connect reads the server's env file (2026-11-23): the agent's key,
@@ -403,7 +403,7 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       draft's, and needs no publish: seen live 2026-11-23, twice, through dev
 - [x] A server on your own machine needs no address from you (2026-11-23):
       connect opens a temporary tunnel when it's given none, and
-      `voiceflow-channelkit dev` opens one on each start, starts the server and
+      `voiceflow-channels dev` opens one on each start, starts the server and
       points each channel at it. `point` is the channel's half of that, and
       asks the server the platform's signed check first. A new tunnel's name
       is asked of a public resolver before this machine's own, which remembers
@@ -420,7 +420,7 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       and `dev` holds Discord's standing connection beside the server: a
       channel's connect module can export `listen` for that. What every
       channel's command shares moved into the core
-      (`@voiceflow/channelkit/setup`). The starter takes `--channel discord`
+      (`@voiceflow/channels-sdk/setup`). The starter takes `--channel discord`
 - [x] A third channel (2026-11-23): Microsoft Teams. Its package adds
       `teams_*` variables, takes the bot's mention out of what people write,
       and keeps a failed call's access token out of the log. `connect teams`
@@ -477,7 +477,7 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
       the core has to put a line of text on a turn's choices before Telegram
       can be told it has them
 - [ ] Upstream tracking (section 3) running
-- [ ] Docs: the Channels page (native vs ChannelKit) and one page per channel
+- [ ] Docs: the Channels page (native vs Channels SDK) and one page per channel
 - [x] Security review of credential handling (2026-11-20): the API-key
       prompt, the env file, and what the workspace tools show and to whom
       were fixed with tests

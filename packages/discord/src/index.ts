@@ -1,7 +1,7 @@
 // A Voiceflow agent in Discord. Everything channel-neutral comes from
-// @voiceflow/channelkit; this package adds what only Discord has.
+// @voiceflow/channels-sdk; this package adds what only Discord has.
 import * as discordAdapter from '@chat-adapter/discord';
-import type { ChannelSpec } from '@voiceflow/channelkit';
+import type { ChannelSpec } from '@voiceflow/channels-sdk';
 import { createDiscordExtension, type DiscordOptions } from './extension.js';
 
 export type { DiscordAdapterLike, DiscordThreadId } from './adapter.js';

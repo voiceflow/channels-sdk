@@ -4,7 +4,7 @@
 // minutes, and each call holds the connection for ten: the two overlap, so
 // there is always one. vercel.json is that schedule on Vercel.
 //
-// On your machine this isn't used: `voiceflow-channelkit dev` holds the connection.
+// On your machine this isn't used: `voiceflow-channels dev` holds the connection.
 
 import { after } from 'next/server';
 import { bot } from '../bot';

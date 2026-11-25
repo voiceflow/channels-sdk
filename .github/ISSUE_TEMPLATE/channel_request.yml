@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Any platform with a [Vercel Chat SDK adapter](https://chat-sdk.dev) already loads through `@voiceflow/channelkit`. A channel package adds what only that platform has: its native features, tools for the agent, and a `connect` command. This form asks for one.
+        Any platform with a [Vercel Chat SDK adapter](https://chat-sdk.dev) already loads through `@voiceflow/channels-sdk`. A channel package adds what only that platform has: its native features, tools for the agent, and a `connect` command. This form asks for one.
 
         A platform with no Chat SDK adapter needs one first, and adapters live upstream: [request it on vercel/chat](https://github.com/vercel/chat/issues/new/choose).
 

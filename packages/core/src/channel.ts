@@ -3,7 +3,7 @@
 // needs nothing loaded by name), and what every channel has whatever the
 // platform: who and where, set as variables for the agent's prompts.
 //
-// A platform's own package (@voiceflow/channelkit-slack, …) builds on the same
+// A platform's own package (@voiceflow/channels-slack, …) builds on the same
 // thing and adds what only that platform has.
 import { type ChannelCapabilities, platformEntry } from './catalog.js';
 import type { ChannelSpec } from './channels.js';

@@ -1,7 +1,7 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // `connect messenger`, `point messenger` and `disconnect messenger`. Node only: import it
-// from `@voiceflow/channelkit-messenger/connect`.
-import { channelCommands } from '@voiceflow/channelkit/connect';
+// from `@voiceflow/channels-messenger/connect`.
+import { channelCommands } from '@voiceflow/channels-sdk/connect';
 
 export const { cli, connected, settings } = channelCommands('messenger', {
   settings: [

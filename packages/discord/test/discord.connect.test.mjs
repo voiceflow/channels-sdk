@@ -8,8 +8,8 @@ import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { NeedsYou } from '@voiceflow/channelkit';
-import { fakeVoiceflowApi } from '@voiceflow/channelkit/testing';
+import { NeedsYou } from '@voiceflow/channels-sdk';
+import { fakeVoiceflowApi } from '@voiceflow/channels-sdk/testing';
 import {
   APP_FLAGS,
   BOT_PERMISSIONS,
@@ -106,7 +106,7 @@ test('the plan says everything it would do, and changes nothing', async (t) => {
   assert.match(r.out, /\+ set the bot's picture to Voiceflow's icon \(the agent has no avatar in Voiceflow\)/);
   assert.match(r.out, /\+ turn on the Message Content intent/);
   assert.match(r.out, /\+ add the \/ask command/);
-  assert.match(r.out, /`voiceflow-channelkit dev` gives it to Discord each time it starts/);
+  assert.match(r.out, /`voiceflow-channels dev` gives it to Discord each time it starts/);
   assert.match(r.out, /Voiceflow: project "Spike" \(proj1\) in workspace ws1, environment development/);
   assert.match(r.out, new RegExp(`\\+ ${VARIABLES} variables for your agent's prompts`));
   assert.match(r.out, /nothing is published, and nothing has to be/);
@@ -161,7 +161,7 @@ test('from a bot token, connect does the rest', async (t) => {
   // How to add the bot, and what to run next.
   assert.ok(r.out.includes(installLink(APP_ID)));
   assert.match(r.out, /The bot is in no server yet/);
-  assert.match(r.out, /voiceflow-channelkit dev -- <its command>/);
+  assert.match(r.out, /voiceflow-channels dev -- <its command>/);
   assert.match(r.out, /DISCORD_BOT_TOKEN {7}in /);
   assert.ok(!r.all.includes(BOT_TOKEN) && !r.all.includes(VF_KEY), 'a secret was printed');
   // Discord refuses a request that doesn't say what sent it.
@@ -556,7 +556,7 @@ test("an address Discord can't verify leaves everything else done, and says how 
   assert.equal((await s.env()).DISCORD_PUBLIC_KEY, s.fake.publicKey);
   assert.match(r.err, /Discord couldn't verify https:\/\/bot\.example\.com\/api\/discord/);
   assert.match(r.err, /could not be verified/);
-  assert.ok(r.err.includes(`voiceflow-channelkit point discord --public-url ${PUBLIC} --env-file ${s.envFile}`));
+  assert.ok(r.err.includes(`voiceflow-channels point discord --public-url ${PUBLIC} --env-file ${s.envFile}`));
 });
 
 test('a mistake in the command is said as one, before anything is asked or changed', async (t) => {
@@ -630,7 +630,7 @@ test('--publish publishes the environment, and only then', async (t) => {
   const r = await s.run(['connect', '--env-file', s.envFile, '--publish', '--yes']);
   assert.equal(r.code, 0, r.all);
   assert.deepEqual(s.voiceflow.state.publishes, [
-    { environment: 'development', name: 'Discord variables (ChannelKit)', description: 'Published by `voiceflow-channelkit connect discord --publish`.' },
+    { environment: 'development', name: 'Discord variables (Channels SDK)', description: 'Published by `voiceflow-channels connect discord --publish`.' },
   ]);
 });
 
@@ -782,7 +782,7 @@ test("Discord's errors are said with the field they're about, and never with the
   await assert.rejects(echo('GET', '/x'), (error) => !error.message.includes(BOT_TOKEN) && /\[bot token\]/.test(error.message));
 });
 
-// ── listen: what `voiceflow-channelkit dev` holds open beside the server ──────
+// ── listen: what `voiceflow-channels dev` holds open beside the server ──────
 
 function listening(s, { env = {}, localUrl = 'http://127.0.0.1:3000' } = {}) {
   const out = [];

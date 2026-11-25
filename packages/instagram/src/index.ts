@@ -1,10 +1,10 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // A Voiceflow agent in Instagram. Everything channel-neutral comes from
-// @voiceflow/channelkit; this package brings Chat SDK's Instagram adapter.
+// @voiceflow/channels-sdk; this package brings Chat SDK's Instagram adapter.
 import * as adapter from '@chat-adapter/instagram';
-import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channelkit';
+import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channels-sdk';
 
-export type { ChannelOptions as InstagramOptions } from '@voiceflow/channelkit';
+export type { ChannelOptions as InstagramOptions } from '@voiceflow/channels-sdk';
 
 /** Every variable this channel sets, with what it holds. `connect instagram` creates them on the agent. */
 export const CONTEXT_VARIABLES: Record<string, string> = contextVariables('instagram');

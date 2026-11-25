@@ -17,8 +17,8 @@ npm run channels       # write the channel packages that share one template (-- 
 npx changeset          # describe a change to a published package
 ```
 
-Per package: `npm test -w @voiceflow/channelkit-slack` (or `-w @voiceflow/channelkit`).
-One file: `npm run build -w @voiceflow/channelkit-slack && node --test packages/slack/test/slack.contract.test.mjs`.
+Per package: `npm test -w @voiceflow/channels-slack` (or `-w @voiceflow/channels-sdk`).
+One file: `npm run build -w @voiceflow/channels-slack && node --test packages/slack/test/slack.contract.test.mjs`.
 
 Node 22.11 or later (`.nvmrc` says 24). CI runs build, typecheck and test on
 Node 22 and 24, and again against the oldest Chat SDK the packages support,
@@ -29,7 +29,7 @@ a tool's code is its functions' text, so restyling it would change the tool.
 
 | Path | What it is |
 |---|---|
-| `packages/core` | `@voiceflow/channelkit`: `createChannels`, the agent loop, rendering, the extension API, the tool installer, test fakes, the `voiceflow-channelkit` bin |
+| `packages/core` | `@voiceflow/channels-sdk`: `createChannels`, the agent loop, rendering, the extension API, the tool installer, test fakes, the `voiceflow-channels` bin |
 | `packages/core/src/agent.ts` | One Chat SDK thread is one Voiceflow conversation: the turn loop |
 | `packages/core/src/catalog.ts`, `loader.ts` | Adapters loaded from `@chat-adapter/catalog`: slug, package, factory, features, env vars |
 | `packages/core/src/render.ts`, `deliver.ts`, `translate.ts` | Voiceflow traces become Chat SDK posts, fitted to what the channel can show; streaming |
@@ -38,18 +38,18 @@ a tool's code is its functions' text, so restyling it would change the tool.
 | `packages/core/src/server-tools.ts`, `tool-server.ts`, `pass.ts` | Server tools: tools that run in the developer's app. The turn's signed pass, the endpoint that answers a tool's call, approvals |
 | `packages/core/src/sandbox/` | `callServerTool`: the one Voiceflow function behind every server tool |
 | `packages/core/src/testing.ts` | `fakeVoiceflow`, `fakeVoiceflowApi`, `runFunction` (runs a tool as Voiceflow's sandbox does) |
-| `packages/slack` | `@voiceflow/channelkit-slack`: `slack()`, Slack's extension, its tools, `connect slack` |
+| `packages/slack` | `@voiceflow/channels-slack`: `slack()`, Slack's extension, its tools, `connect slack` |
 | `packages/slack/src/tools/` | What goes on the agent: `presentation.ts` (functions that show native Slack UI) and the install set |
 | `packages/slack/src/workspace.ts` | The workspace tools (act in Slack): server tools, run with the adapter's own client |
 | `packages/core/src/channel.ts`, `connect.ts`, `contract.ts`, `plain.ts` | What every channel's package is built from: `channel()`, the `connect`/`point`/`disconnect` commands, the conversation contract every channel's tests run, and Markdown as plain words |
 | `packages/core/src/log.ts` | What every adapter logs goes through `cleanLogger` first: no access token, no secret of the channel's, and no request an error carries reaches a log. `createChannels` gives it to every adapter it makes |
 | `packages/<channel>` | A channel's package. Discord and Teams are written by hand like Slack; the rest are written by `scripts/channels.mjs` from one template, with what a platform needs beyond it in the package's `traits.json`, `src/platform.ts`, `src/connect/point.ts` and `test/stand-in.mjs` (never written by the script) |
 | `scripts/channels.mjs` | Writes those packages and the README's table of channels. `--check` fails when one was edited by hand. Change the template, then run it |
-| `packages/core/src/dev.ts`, `tunnel.ts` | `voiceflow-channelkit dev`: a tunnel, your server, and each channel pointed at it |
+| `packages/core/src/dev.ts`, `tunnel.ts` | `voiceflow-channels dev`: a tunnel, your server, and each channel pointed at it |
 | `packages/slack/src/connect/` | `connect slack` and `point slack`: manifest, Slack CLI login, app creation, the Voiceflow install |
 | `packages/slack/test/helpers/fake-slack.mjs` | A fake of Slack's Web API and events |
 | `packages/slack/scripts/live/` | The live harness: real Slack, real Voiceflow (see below) |
-| `packages/create` | `@voiceflow/create-channelkit`: the starter. Its templates are built from the example apps (`scripts/template.mjs`), so there is one copy of each app; a channel with no example of its own gets `examples/nextjs-telegram` with its name in |
+| `packages/create` | `@voiceflow/create-channels-sdk`: the starter. Its templates are built from the example apps (`scripts/template.mjs`), so there is one copy of each app; a channel with no example of its own gets `examples/nextjs-telegram` with its name in |
 | `examples/` | Apps that use the packages; workspaces named `example-*`, never published |
 | `docs/` | How a conversation works; how this project tracks Vercel Chat SDK |
 
@@ -119,7 +119,7 @@ a tool's code is its functions' text, so restyling it would change the tool.
 ## Testing
 
 - `node --test` over `test/*.test.mjs`, against the built `dist/`. No network,
-  no accounts: Voiceflow and Slack are fakes (`@voiceflow/channelkit/testing`,
+  no accounts: Voiceflow and Slack are fakes (`@voiceflow/channels-sdk/testing`,
   `packages/slack/test/helpers/fake-slack.mjs`).
 - Contract tests (`*.contract.test.mjs`) pin behaviour a channel promises;
   behaviour tests cover the turn loop end to end through the fakes.

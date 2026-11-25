@@ -19,11 +19,11 @@ packages support.
 
 | Path | What it is |
 |---|---|
-| `packages/core` | `@voiceflow/channelkit`: the agent on any Chat SDK adapter, the extension API, the tool installer |
-| `packages/slack` | `@voiceflow/channelkit-slack`: Slack's native features, its tools, and `connect slack` |
-| `packages/<channel>` | A channel's package: `@voiceflow/channelkit-discord`, `-teams`, `-telegram` and the rest. [Adding a channel](#adding-a-channel) |
+| `packages/core` | `@voiceflow/channels-sdk`: the agent on any Chat SDK adapter, the extension API, the tool installer |
+| `packages/slack` | `@voiceflow/channels-slack`: Slack's native features, its tools, and `connect slack` |
+| `packages/<channel>` | A channel's package: `@voiceflow/channels-discord`, `-teams`, `-telegram` and the rest. [Adding a channel](#adding-a-channel) |
 | `scripts/channels.mjs` | Writes the channel packages that share one template, and the README's table of channels |
-| `packages/create` | `@voiceflow/create-channelkit`: the starter, `npm create @voiceflow/channelkit` |
+| `packages/create` | `@voiceflow/create-channels-sdk`: the starter, `npm create @voiceflow/channels-sdk` |
 | `examples/` | Apps that use the packages, such as a Next.js Slack bot. The starter writes this app |
 | `docs/` | How a conversation works, and how this project tracks Vercel Chat SDK |
 | `.changeset/` | Pending changesets and the release configuration |
@@ -57,7 +57,7 @@ packages support.
 ## Adding a channel
 
 A channel is a package that passes the conversation every channel has to
-carry (`channelContract`, in `@voiceflow/channelkit/testing`) against Chat
+carry (`channelContract`, in `@voiceflow/channels-sdk/testing`) against Chat
 SDK's real adapter and a stand-in for the platform.
 
 1. Add the platform's name in Chat SDK's catalog to `CHANNELS` in
@@ -95,12 +95,12 @@ npx changeset
   examples need none. CI's `changeset` check says when one is missing.
 - **Which bump:** `patch` for a fix, `minor` for something new, `major` for a
   change that breaks existing code. Before 1.0, a breaking change is `minor`.
-- **The example is the starter's app.** `@voiceflow/create-channelkit` writes
+- **The example is the starter's app.** `@voiceflow/create-channels-sdk` writes
   `examples/nextjs-slack`, so a change there changes what the starter makes:
-  add a changeset for `@voiceflow/create-channelkit`. The check can't tell, since
+  add a changeset for `@voiceflow/create-channels-sdk`. The check can't tell, since
   examples need no changeset of their own.
-- **One version:** `@voiceflow/channelkit`, `@voiceflow/channelkit-slack` and
-  `@voiceflow/create-channelkit` share a version number, so a changeset for one
+- **One version:** `@voiceflow/channels-sdk`, `@voiceflow/channels-slack` and
+  `@voiceflow/create-channels-sdk` share a version number, so a changeset for one
   moves all three. The starter writes that version into the apps it makes.
 - **Releasing:** when changesets reach `main`, the `release` workflow opens a
   "chore(release): version packages" pull request with the new versions and

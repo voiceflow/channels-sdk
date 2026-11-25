@@ -1,4 +1,4 @@
-# @voiceflow/channelkit-gitlab
+# @voiceflow/channels-gitlab
 
 A Voiceflow agent in GitLab, with one command to set it up.
 
@@ -8,7 +8,7 @@ A Voiceflow agent in GitLab, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channelkit connect gitlab --env-file .env.local
+npx voiceflow-channels connect gitlab --env-file .env.local
 ```
 
 GitLab's side is made on GitLab's own pages: its app or bot, and the
@@ -20,11 +20,11 @@ the rest. It shows its whole plan and asks before it changes anything.
 - **It creates the `gitlab_*` variables** on your agent, for its prompts.
 - **It writes the Voiceflow values** it had to ask for to the env file. A
   value already there is never changed.
-- **It says what address to give GitLab**: your server's public address, then `/api/gitlab`. It goes in the project's or group's Settings → Webhooks → Add new webhook → URL, with the Comments trigger. `voiceflow-channelkit dev` prints the tunnel's each time it starts.
+- **It says what address to give GitLab**: your server's public address, then `/api/gitlab`. It goes in the project's or group's Settings → Webhooks → Add new webhook → URL, with the Comments trigger. `voiceflow-channels dev` prints the tunnel's each time it starts.
 - **With nobody at the terminal** (a script, a coding agent) connect asks
   nothing. It stops with exit code 3 and says, in the one stop, everything a
   person has to do. Exit 0 is done, 1 a failure, 2 a mistake in the command.
-- **`voiceflow-channelkit dev` runs connect for you** the first time, when a
+- **`voiceflow-channels dev` runs connect for you** the first time, when a
   person is there. So in an app the starter made, `npm run dev` is the one
   command.
 - **Nothing is published.** The variables are live once you publish the
@@ -34,7 +34,7 @@ the rest. It shows its whole plan and asks before it changes anything.
 ## In your server
 
 ```ts
-import { gitlab } from '@voiceflow/channelkit-gitlab';
+import { gitlab } from '@voiceflow/channels-gitlab';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: process.env.VOICEFLOW_PROJECT_ID! },
@@ -47,7 +47,7 @@ const channels = await createChannels({
 Install it with Chat SDK's adapter:
 
 ```bash
-npm install @voiceflow/channelkit @voiceflow/channelkit-gitlab chat @chat-adapter/catalog @chat-adapter/gitlab
+npm install @voiceflow/channels-sdk @voiceflow/channels-gitlab chat @chat-adapter/catalog @chat-adapter/gitlab
 ```
 
 ### What happens in GitLab

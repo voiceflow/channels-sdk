@@ -1,5 +1,5 @@
 // Live Slack check: this package against a real Slack app and a real Voiceflow
-// agent, through the same connect code `voiceflow-channelkit connect slack` runs.
+// agent, through the same connect code `voiceflow-channels connect slack` runs.
 // No secret is printed or written to disk:
 // - the bot token comes back from installing the app with the Slack CLI's login;
 // - a new app's signing secret comes back from creating it; an existing app's is
@@ -29,10 +29,10 @@ import http from 'node:http';
 import readline from 'node:readline';
 import { parseArgs } from 'node:util';
 import { createMemoryState } from '@chat-adapter/state-memory';
-import { createChannels } from '@voiceflow/channelkit';
-import { fileRecordStore } from '@voiceflow/channelkit/install';
-import { slack } from '@voiceflow/channelkit-slack';
-import { connectSlack, createSlackApi, disconnectSlack, fileAppRecordStore, slackCliLogin } from '@voiceflow/channelkit-slack/connect';
+import { createChannels } from '@voiceflow/channels-sdk';
+import { fileRecordStore } from '@voiceflow/channels-sdk/install';
+import { slack } from '@voiceflow/channels-slack';
+import { connectSlack, createSlackApi, disconnectSlack, fileAppRecordStore, slackCliLogin } from '@voiceflow/channels-slack/connect';
 
 const { values: args } = parseArgs({
   options: {
@@ -210,9 +210,9 @@ const connected = await connectSlack({
   requestUrl,
   ...(args.app ? { appId: args.app } : {}),
   app: {
-    name: 'ChannelKit test',
-    description: 'Test of the Voiceflow ChannelKit. Temporary.',
-    botName: 'channelkit-test',
+    name: 'Channels SDK test',
+    description: 'Test of the Voiceflow Channels SDK. Temporary.',
+    botName: 'channels-sdk-test',
     ...(args.drive ? { userScopes: DRIVE_USER_SCOPES } : {}),
   },
   tools: args['install-tools'] ? {} : false,

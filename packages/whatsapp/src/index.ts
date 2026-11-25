@@ -1,10 +1,10 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // A Voiceflow agent in WhatsApp Business Cloud. Everything channel-neutral comes from
-// @voiceflow/channelkit; this package brings Chat SDK's WhatsApp Business Cloud adapter.
+// @voiceflow/channels-sdk; this package brings Chat SDK's WhatsApp Business Cloud adapter.
 import * as adapter from '@chat-adapter/whatsapp';
-import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channelkit';
+import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channels-sdk';
 
-export type { ChannelOptions as WhatsappOptions } from '@voiceflow/channelkit';
+export type { ChannelOptions as WhatsappOptions } from '@voiceflow/channels-sdk';
 
 /** Every variable this channel sets, with what it holds. `connect whatsapp` creates them on the agent. */
 export const CONTEXT_VARIABLES: Record<string, string> = contextVariables('whatsapp');

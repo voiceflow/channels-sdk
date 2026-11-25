@@ -2,7 +2,7 @@
 // channel-neutral agent: context the agent can read, native touches around a
 // turn, custom traces shown natively (the channel's presentation tools), and
 // the platform's own events (reactions, slash commands, forms). Each channel
-// package (@voiceflow/channelkit-slack, …) ships one; the core knows none.
+// package (@voiceflow/channels-slack, …) ships one; the core knows none.
 import type { Chat, Message, SentMessage, Thread } from 'chat';
 import type { Feedback } from './agent.js';
 import type { ChannelCapabilities } from './catalog.js';

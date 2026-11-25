@@ -1,8 +1,8 @@
-# Voiceflow ChannelKit
+# Voiceflow Channels SDK
 
-[![CI](https://github.com/voiceflow/channelkit/actions/workflows/ci.yml/badge.svg)](https://github.com/voiceflow/channelkit/actions/workflows/ci.yml)
-[![@voiceflow/channelkit](https://img.shields.io/npm/v/@voiceflow/channelkit?label=%40voiceflow%2Fchannelkit)](https://www.npmjs.com/package/@voiceflow/channelkit)
-[![@voiceflow/channelkit-slack](https://img.shields.io/npm/v/@voiceflow/channelkit-slack?label=%40voiceflow%2Fchannelkit-slack)](https://www.npmjs.com/package/@voiceflow/channelkit-slack)
+[![CI](https://github.com/voiceflow/channels-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/voiceflow/channels-sdk/actions/workflows/ci.yml)
+[![@voiceflow/channels-sdk](https://img.shields.io/npm/v/@voiceflow/channels-sdk?label=%40voiceflow%2Fchannels-sdk)](https://www.npmjs.com/package/@voiceflow/channels-sdk)
+[![@voiceflow/channels-slack](https://img.shields.io/npm/v/@voiceflow/channels-slack?label=%40voiceflow%2Fchannels-slack)](https://www.npmjs.com/package/@voiceflow/channels-slack)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Put your Voiceflow agent in Slack, with everything Slack has: streamed answers,
@@ -21,20 +21,20 @@ commands. Built on [Vercel Chat SDK](https://chat-sdk.dev).
 One command makes the app:
 
 ```bash
-npm create @voiceflow/channelkit@latest my-bot
+npm create @voiceflow/channels-sdk@latest my-bot
 ```
 
 It writes a small Next.js server with the route Slack calls, an env file, and
 a README with the steps from there: add your Voiceflow API key, run connect,
 publish, and start the server. For another channel, name it:
-`npm create @voiceflow/channelkit@latest my-bot -- --channel telegram`.
+`npm create @voiceflow/channels-sdk@latest my-bot -- --channel telegram`.
 
 ### Or add it to an app you have
 
 Install the packages, Chat SDK and a state adapter:
 
 ```bash
-npm install @voiceflow/channelkit @voiceflow/channelkit-slack chat @chat-adapter/catalog @chat-adapter/slack @chat-adapter/state-redis
+npm install @voiceflow/channels-sdk @voiceflow/channels-slack chat @chat-adapter/catalog @chat-adapter/slack @chat-adapter/state-redis
 ```
 
 Add the route Slack calls. In Next.js:
@@ -43,8 +43,8 @@ Add the route Slack calls. In Next.js:
 // app/api/slack/route.ts
 import { after } from 'next/server';
 import { createRedisState } from '@chat-adapter/state-redis';
-import { createChannels, type Channels } from '@voiceflow/channelkit';
-import { slack } from '@voiceflow/channelkit-slack';
+import { createChannels, type Channels } from '@voiceflow/channels-sdk';
+import { slack } from '@voiceflow/channels-slack';
 
 let channels: Promise<Channels> | undefined;
 
@@ -65,7 +65,7 @@ tools on your agent, and writes the app's credentials to your env file. It
 shows its plan and asks before it changes anything:
 
 ```bash
-npx voiceflow-channelkit connect slack --env-file .env.local
+npx voiceflow-channels connect slack --env-file .env.local
 ```
 
 It reads `VOICEFLOW_API_KEY`, `VOICEFLOW_PROJECT_ID` and `VOICEFLOW_ENVIRONMENT`
@@ -78,7 +78,7 @@ own machine that takes a tunnel. Dev opens one, starts the server and points
 both at it:
 
 ```bash
-npx voiceflow-channelkit dev --env-file .env.local -- next dev
+npx voiceflow-channels dev --env-file .env.local -- next dev
 ```
 
 For a server that has an address of its own, give it to connect instead
@@ -89,26 +89,26 @@ run.
 ## Channels
 
 Each channel is a package: `slack()`, `telegram()` and the rest go in
-`createChannels`, and `voiceflow-channelkit connect <channel>` sets each one up.
+`createChannels`, and `voiceflow-channels connect <channel>` sets each one up.
 A reply fits what the channel can show.
 
 <!-- channels:start -->
 | Channel | Package | Choices | Cards | Answers | Your server's address |
 |---|---|---|---|---|---|
-| Slack | [`@voiceflow/channelkit-slack`](packages/slack) | Buttons | Cards | Streamed | `connect` gives it |
-| Discord | [`@voiceflow/channelkit-discord`](packages/discord) | Buttons | Cards | Posted whole | `connect` gives it |
-| Microsoft Teams | [`@voiceflow/channelkit-teams`](packages/teams) | Buttons | Cards | Posted whole | `connect` gives it |
-| Google Chat | [`@voiceflow/channelkit-gchat`](packages/gchat) | A numbered list | Cards | Posted whole | You enter it |
-| GitHub | [`@voiceflow/channelkit-github`](packages/github) | A numbered list | Cards | Posted whole | You enter it |
-| GitLab | [`@voiceflow/channelkit-gitlab`](packages/gitlab) | A numbered list | Cards | Posted whole | You enter it |
-| Instagram | [`@voiceflow/channelkit-instagram`](packages/instagram) | A numbered list | Text | Posted whole | You enter it |
-| Linear | [`@voiceflow/channelkit-linear`](packages/linear) | A numbered list | Cards | Posted whole | You enter it |
-| Messenger | [`@voiceflow/channelkit-messenger`](packages/messenger) | A numbered list | Text | Posted whole | You enter it |
-| Notion | [`@voiceflow/channelkit-notion`](packages/notion) | A numbered list | Cards | Posted whole | You enter it |
-| Telegram | [`@voiceflow/channelkit-telegram`](packages/telegram) | A numbered list | Text | Posted whole | `connect` gives it |
-| Twilio | [`@voiceflow/channelkit-twilio`](packages/twilio) | A numbered list | Text | Posted whole | You enter it |
-| WhatsApp Business Cloud | [`@voiceflow/channelkit-whatsapp`](packages/whatsapp) | Buttons, up to 3 | Text | Posted whole | You enter it |
-| X | [`@voiceflow/channelkit-x`](packages/x) | A numbered list | Text | Posted whole | You enter it |
+| Slack | [`@voiceflow/channels-slack`](packages/slack) | Buttons | Cards | Streamed | `connect` gives it |
+| Discord | [`@voiceflow/channels-discord`](packages/discord) | Buttons | Cards | Posted whole | `connect` gives it |
+| Microsoft Teams | [`@voiceflow/channels-teams`](packages/teams) | Buttons | Cards | Posted whole | `connect` gives it |
+| Google Chat | [`@voiceflow/channels-gchat`](packages/gchat) | A numbered list | Cards | Posted whole | You enter it |
+| GitHub | [`@voiceflow/channels-github`](packages/github) | A numbered list | Cards | Posted whole | You enter it |
+| GitLab | [`@voiceflow/channels-gitlab`](packages/gitlab) | A numbered list | Cards | Posted whole | You enter it |
+| Instagram | [`@voiceflow/channels-instagram`](packages/instagram) | A numbered list | Text | Posted whole | You enter it |
+| Linear | [`@voiceflow/channels-linear`](packages/linear) | A numbered list | Cards | Posted whole | You enter it |
+| Messenger | [`@voiceflow/channels-messenger`](packages/messenger) | A numbered list | Text | Posted whole | You enter it |
+| Notion | [`@voiceflow/channels-notion`](packages/notion) | A numbered list | Cards | Posted whole | You enter it |
+| Telegram | [`@voiceflow/channels-telegram`](packages/telegram) | A numbered list | Text | Posted whole | `connect` gives it |
+| Twilio | [`@voiceflow/channels-twilio`](packages/twilio) | A numbered list | Text | Posted whole | You enter it |
+| WhatsApp Business Cloud | [`@voiceflow/channels-whatsapp`](packages/whatsapp) | Buttons, up to 3 | Text | Posted whole | You enter it |
+| X | [`@voiceflow/channels-x`](packages/x) | A numbered list | Text | Posted whole | You enter it |
 <!-- channels:end -->
 
 Each package's README has its settings, its options and its variables.
@@ -117,9 +117,9 @@ Each package's README has its settings, its options and its variables.
 
 | Package | What it is |
 |---|---|
-| [`@voiceflow/channelkit`](packages/core) | The core: a Voiceflow agent on any Chat SDK adapter, the extension API, the tool installer, and the `voiceflow-channelkit` CLI. |
-| `@voiceflow/channelkit-<channel>` | A channel: its adapter, its variables, what only its platform has, and `connect <channel>`. One for each [channel above](#channels). |
-| [`@voiceflow/create-channelkit`](packages/create) | The starter: `npm create @voiceflow/channelkit@latest` makes a new app, for any channel. |
+| [`@voiceflow/channels-sdk`](packages/core) | The core: a Voiceflow agent on any Chat SDK adapter, the extension API, the tool installer, and the `voiceflow-channels` CLI. |
+| `@voiceflow/channels-<channel>` | A channel: its adapter, its variables, what only its platform has, and `connect <channel>`. One for each [channel above](#channels). |
+| [`@voiceflow/create-channels-sdk`](packages/create) | The starter: `npm create @voiceflow/channels-sdk@latest` makes a new app, for any channel. |
 
 ## Features
 
@@ -164,15 +164,15 @@ Each package's README has its settings, its options and its variables.
 
 - [How it works](docs/how-it-works.md): how a conversation runs, using other
   Chat SDK adapters, and the design rules.
-- [`@voiceflow/channelkit-slack`](packages/slack/README.md): `connect slack`, every
+- [`@voiceflow/channels-slack`](packages/slack/README.md): `connect slack`, every
   Slack option, the tools, and the `slack_*` variables.
-- [`@voiceflow/channelkit-discord`](packages/discord/README.md): `connect discord`,
+- [`@voiceflow/channels-discord`](packages/discord/README.md): `connect discord`,
   how Discord reaches your server, the options, and the `discord_*` variables.
-- [`@voiceflow/channelkit-teams`](packages/teams/README.md): `connect teams`, what
+- [`@voiceflow/channels-teams`](packages/teams/README.md): `connect teams`, what
   Microsoft has to allow, the options, and the `teams_*` variables.
 - Every other channel's README, from the [table above](#channels): its
   settings, what happens in it, its options and its variables.
-- [`@voiceflow/channelkit`](packages/core/README.md): the API, server tools,
+- [`@voiceflow/channels-sdk`](packages/core/README.md): the API, server tools,
   channel extensions, and installing tools.
 - [Staying current with Chat SDK](docs/upstream.md).
 - [Voiceflow's documentation](https://www.voiceflow.com/docs), for building the
@@ -182,7 +182,7 @@ Each package's README has its settings, its options and its variables.
 
 Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers setup,
 tests, changesets and the rules. To ask for a new channel, open a
-[channel request](https://github.com/voiceflow/channelkit/issues/new?template=channel_request.yml).
+[channel request](https://github.com/voiceflow/channels-sdk/issues/new?template=channel_request.yml).
 
 ## Support
 

@@ -3,7 +3,7 @@
 // where the agent's instructions or global prompt reference it: a variable is
 // stored data, not the model's context. Nothing trusts them: Slack's tools take
 // who is asking from the turn's pass (workspace.ts), never from a variable.
-import type { TurnContext } from '@voiceflow/channelkit';
+import type { TurnContext } from '@voiceflow/channels-sdk';
 import { type SlackWebClient, slackAdapter, where } from './adapter.js';
 
 /** Every variable this package sets, with what it holds. The installer creates them on the agent. */

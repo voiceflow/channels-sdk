@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a vulnerability
-    url: https://github.com/voiceflow/channelkit/blob/main/SECURITY.md
+    url: https://github.com/voiceflow/channels-sdk/blob/main/SECURITY.md
     about: Don't open an issue for a vulnerability. Report it privately, as SECURITY.md says.
   - name: Building your Voiceflow agent
     url: https://www.voiceflow.com/docs

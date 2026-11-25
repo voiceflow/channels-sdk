@@ -5,7 +5,7 @@
 //
 // Chats, channel threads, buttons, cards and carousels need nothing here: the
 // channel-neutral agent and the Teams adapter do them.
-import type { ChannelExtension } from '@voiceflow/channelkit';
+import type { ChannelExtension } from '@voiceflow/channels-sdk';
 import { SLUG, type TeamsActivity } from './adapter.js';
 import { createContext } from './context.js';
 import { teamsLogger } from './log.js';
