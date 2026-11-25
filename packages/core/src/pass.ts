@@ -19,7 +19,7 @@ export interface PassClaims {
 }
 
 const VERSION = 'v1';
-const LABEL = 'voiceflow-channelkit/turn-pass/v1';
+const LABEL = 'voiceflow-channels/turn-pass/v1';
 
 /** The signing key for a secret. Derived, so the secret itself (an API key, say) never signs anything directly. */
 export function passKey(secret: string): Buffer {

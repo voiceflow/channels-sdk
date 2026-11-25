@@ -86,7 +86,7 @@ Slack's assistant panel.
 
 - `createChannels` runs on the first request, not at build time: Slack's
   adapter needs its signing secret, and the build doesn't have it.
-- `slack()` from `@voiceflow/channelkit-slack` brings everything only Slack has,
+- `slack()` from `@voiceflow/channels-slack` brings everything only Slack has,
   and the Slack adapter's module, so Next.js can bundle it.
 - `after()` lets the agent's turn finish after the response: Slack wants an
   answer within three seconds.

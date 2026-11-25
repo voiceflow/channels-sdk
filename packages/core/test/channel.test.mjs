@@ -306,7 +306,7 @@ test('the platform is given the address with the secret connect just made, and n
   assert.equal(early.code, 3, early.said);
   assert.match(
     early.said,
-    /Telegram isn't connected here yet: run `voiceflow-channelkit connect telegram --env-file .*` first\. It makes HOOK_SECRET and saves it there\./,
+    /Telegram isn't connected here yet: run `voiceflow-channels connect telegram --env-file .*` first\. It makes HOOK_SECRET and saves it there\./,
   );
   assert.deepEqual(given, [], 'and the platform was given nothing');
 
@@ -417,9 +417,9 @@ test('--help says the same commands for every channel, and a flag that makes no 
   const help = await c.run(['--help'], { withFile: false });
   assert.equal(help.code, 0);
   for (const line of [
-    'voiceflow-channelkit connect telegram --env-file <path>',
-    'voiceflow-channelkit point telegram --public-url',
-    'voiceflow-channelkit disconnect telegram',
+    'voiceflow-channels connect telegram --env-file <path>',
+    'voiceflow-channels point telegram --public-url',
+    'voiceflow-channels disconnect telegram',
     '--dry-run',
     '--no-variables',
     'exits 0 when done, 1 on a failure, 2 on a mistake in the command, and 3',

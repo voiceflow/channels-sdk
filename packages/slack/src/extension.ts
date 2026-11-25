@@ -2,7 +2,7 @@
 // doesn't, on by default. Each part can be turned off in `slack()`'s options;
 // what the agent does with it stays in Voiceflow.
 
-import type { ChannelExtension, ExtensionHost, PinPrompts, TurnContext } from '@voiceflow/channelkit';
+import type { ChannelExtension, ExtensionHost, PinPrompts, TurnContext } from '@voiceflow/channels-sdk';
 import type { Chat, ReactionEvent, Thread } from 'chat';
 import { SLUG, type SlackAdapterLike, slackAdapter, where } from './adapter.js';
 import { createContext } from './context.js';

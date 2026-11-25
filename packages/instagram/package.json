@@ -1,11 +1,11 @@
 {
-  "name": "@voiceflow/channelkit-instagram",
+  "name": "@voiceflow/channels-instagram",
   "version": "0.0.0",
   "private": true,
   "description": "A Voiceflow agent in Instagram, with one command to set it up.",
   "keywords": [
     "voiceflow",
-    "channelkit",
+    "channels-sdk",
     "instagram",
     "chat-sdk",
     "vercel-chat",
@@ -18,12 +18,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/voiceflow/channelkit.git",
+    "url": "git+https://github.com/voiceflow/channels-sdk.git",
     "directory": "packages/instagram"
   },
-  "homepage": "https://github.com/voiceflow/channelkit/tree/main/packages/instagram#readme",
+  "homepage": "https://github.com/voiceflow/channels-sdk/tree/main/packages/instagram#readme",
   "bugs": {
-    "url": "https://github.com/voiceflow/channelkit/issues"
+    "url": "https://github.com/voiceflow/channels-sdk/issues"
   },
   "publishConfig": {
     "access": "public"
@@ -54,7 +54,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@voiceflow/channelkit": "0.0.0"
+    "@voiceflow/channels-sdk": "0.0.0"
   },
   "peerDependencies": {
     "chat": ">=4.44.0 <5",

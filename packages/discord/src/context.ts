@@ -2,7 +2,7 @@
 // variables on every turn, for the agent's prompts. The model sees one only
 // where the agent's instructions or global prompt reference it: a variable is
 // stored data, not the model's context. Nothing trusts them.
-import type { TurnContext } from '@voiceflow/channelkit';
+import type { TurnContext } from '@voiceflow/channels-sdk';
 import { DM_GUILD, discordAdapter, where } from './adapter.js';
 
 /** Every variable this package sets, with what it holds. `connect discord` creates them on the agent. */

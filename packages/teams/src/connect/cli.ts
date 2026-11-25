@@ -1,6 +1,6 @@
 // The command line for `connect teams`, `point teams` and `disconnect teams`:
 //
-//   npx voiceflow-channelkit connect teams --env-file .env.local
+//   npx voiceflow-channels connect teams --env-file .env.local
 //
 // Secrets never reach the screen or the command line. Your Voiceflow API key
 // is read from a file that holds only it, the environment, your server's env
@@ -11,7 +11,7 @@
 // Every line this prints, an error's included, is first cleaned of the secrets
 // it holds: a server that repeats one back in an error can't put it on screen.
 import { parseArgs } from 'node:util';
-import { createRedactor, NeedsYou } from '@voiceflow/channelkit';
+import { createRedactor, NeedsYou } from '@voiceflow/channels-sdk';
 import {
   BARE,
   canOpenBrowser,
@@ -26,7 +26,7 @@ import {
   type Say,
   voiceflowKey,
   writeEnvFile,
-} from '@voiceflow/channelkit/setup';
+} from '@voiceflow/channels-sdk/setup';
 import {
   checkServer,
   connectTeams,
@@ -42,9 +42,9 @@ import {
 import { createMsCli, MS_CLI_NPX, type MsAccount, type MsCli, msRunner } from './ms.js';
 
 const USAGE = `Usage:
-  voiceflow-channelkit connect teams --env-file <path> [--public-url <https://host>] [options]
-  voiceflow-channelkit point teams --public-url <https://host> [--env-file <path>]
-  voiceflow-channelkit disconnect teams [--env-file <path>]
+  voiceflow-channels connect teams --env-file <path> [--public-url <https://host>] [options]
+  voiceflow-channels point teams --public-url <https://host> [--env-file <path>]
+  voiceflow-channels disconnect teams [--env-file <path>]
 
 Connect sets up a bot in Microsoft Teams for your Voiceflow agent. It runs
 Microsoft's own Teams command (${MS_CLI_NPX}) to make the app, its
@@ -66,7 +66,7 @@ then VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID and VOICEFLOW_ENVIRONMENT in the
 environment, then --env-file; a person is asked for what's left.
 
 Teams sends the bot's messages to an address. Without --public-url, connect is
-for a server on this machine: \`voiceflow-channelkit dev\` gives Teams your
+for a server on this machine: \`voiceflow-channels dev\` gives Teams your
 server's address each time it starts. Pass --public-url for a server that has
 an address of its own.
 
@@ -75,7 +75,7 @@ agent's prompts: they go on the environment's draft, and are live once you
 publish it. --publish does that here: the whole draft goes live.
 
 Point gives Teams another address for the bot's messages, and changes nothing
-else: \`voiceflow-channelkit dev\` runs it on each start. Teams takes it at once;
+else: \`voiceflow-channels dev\` runs it on each start. Teams takes it at once;
 nobody adds the bot again.
 
 Disconnect says how to remove the bot: Microsoft gives no command for it.
@@ -137,8 +137,8 @@ export interface CliIO {
   microsoft?: MsCli;
 }
 
-const RELEASE_NAME = 'Teams variables (ChannelKit)';
-const RELEASE_DESCRIPTION = 'Published by `voiceflow-channelkit connect teams --publish`.';
+const RELEASE_NAME = 'Teams variables (Channels SDK)';
+const RELEASE_DESCRIPTION = 'Published by `voiceflow-channels connect teams --publish`.';
 
 /** Runs the command. Returns its exit code: an error is printed, cleaned of every secret the command holds, and never thrown. */
 export async function cli(argv: string[], io: CliIO = {}): Promise<number> {
@@ -177,7 +177,7 @@ async function run(
       'mentions-only': { type: 'boolean', default: false },
       'device-code': { type: 'boolean', default: false },
       'no-open': { type: 'boolean', default: false },
-      // Set by `voiceflow-channelkit dev` when it runs connect itself: the server starts next, so nobody is told to start it.
+      // Set by `voiceflow-channels dev` when it runs connect itself: the server starts next, so nobody is told to start it.
       'from-dev': { type: 'boolean', default: false },
       'no-variables': { type: 'boolean', default: false },
       'env-file': { type: 'string' },
@@ -227,7 +227,7 @@ async function run(
   const withFetch = io.fetch ? { fetch: io.fetch } : {};
   const microsoft = io.microsoft ?? createMsCli(msRunner({ env: io.env, ...(io.cwd ? { cwd: io.cwd } : {}) }));
   const appId = io.env.TEAMS_APP_ID || inFile.TEAMS_APP_ID;
-  const connectAgain = `voiceflow-channelkit connect teams${envFile ? ` --env-file ${envFile}` : ' --env-file <path>'}`;
+  const connectAgain = `voiceflow-channels connect teams${envFile ? ` --env-file ${envFile}` : ' --env-file <path>'}`;
 
   /** Has a person sign in to Microsoft 365, in Microsoft's own command: a browser where one can open here, a link and a code where not. */
   const signIn = async () => {
@@ -413,7 +413,7 @@ ${
     ? `Teams sends the bot's messages to ${requestUrl}.`
     : o['from-dev']
       ? 'Your server starts next: dev gives Teams its address.'
-      : "Then start your server with `voiceflow-channelkit dev -- <its command>` (`npm run dev` in an app the starter made): it gives Teams your server's address, each time it starts."
+      : "Then start your server with `voiceflow-channels dev -- <its command>` (`npm run dev` in an app the starter made): it gives Teams your server's address, each time it starts."
 }${variables ? `\nThe teams_* variables are on ${environment}'s draft, for your agent's prompts: {teams_user_name}, say.${published === 'published' ? '' : ` They're live once you publish ${environment}.`}` : ''}`);
   for (const problem of result.install?.problems ?? []) err(`! ${problem}`);
   return published === 'failed' ? 1 : 0;
@@ -421,7 +421,7 @@ ${
 
 /**
  * Whether a Teams bot has been connected from here: its app's ID, its secret and its organization's ID are all
- * in the environment or the env file. `voiceflow-channelkit dev` asks, and runs connect first when it hasn't.
+ * in the environment or the env file. `voiceflow-channels dev` asks, and runs connect first when it hasn't.
  */
 export async function connected(options: { envFile?: string; env?: Record<string, string | undefined> } = {}): Promise<boolean> {
   const env = options.env ?? process.env;

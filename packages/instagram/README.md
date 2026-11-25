@@ -1,4 +1,4 @@
-# @voiceflow/channelkit-instagram
+# @voiceflow/channels-instagram
 
 A Voiceflow agent in Instagram, with one command to set it up.
 
@@ -8,7 +8,7 @@ A Voiceflow agent in Instagram, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channelkit connect instagram --env-file .env.local
+npx voiceflow-channels connect instagram --env-file .env.local
 ```
 
 Instagram's side is made on Instagram's own pages: its app or bot, and the
@@ -21,11 +21,11 @@ the rest. It shows its whole plan and asks before it changes anything.
 - **It creates the `instagram_*` variables** on your agent, for its prompts.
 - **It writes the Voiceflow values** it had to ask for to the env file. A
   value already there is never changed.
-- **It says what address to give Instagram**: your server's public address, then `/api/instagram`. It goes in Meta's app dashboard, in the Instagram product's webhook settings, with INSTAGRAM_VERIFY_TOKEN as the verify token. `voiceflow-channelkit dev` prints the tunnel's each time it starts.
+- **It says what address to give Instagram**: your server's public address, then `/api/instagram`. It goes in Meta's app dashboard, in the Instagram product's webhook settings, with INSTAGRAM_VERIFY_TOKEN as the verify token. `voiceflow-channels dev` prints the tunnel's each time it starts.
 - **With nobody at the terminal** (a script, a coding agent) connect asks
   nothing. It stops with exit code 3 and says, in the one stop, everything a
   person has to do. Exit 0 is done, 1 a failure, 2 a mistake in the command.
-- **`voiceflow-channelkit dev` runs connect for you** the first time, when a
+- **`voiceflow-channels dev` runs connect for you** the first time, when a
   person is there. So in an app the starter made, `npm run dev` is the one
   command.
 - **Nothing is published.** The variables are live once you publish the
@@ -35,7 +35,7 @@ the rest. It shows its whole plan and asks before it changes anything.
 ## In your server
 
 ```ts
-import { instagram } from '@voiceflow/channelkit-instagram';
+import { instagram } from '@voiceflow/channels-instagram';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: process.env.VOICEFLOW_PROJECT_ID! },
@@ -48,7 +48,7 @@ const channels = await createChannels({
 Install it with Chat SDK's adapter:
 
 ```bash
-npm install @voiceflow/channelkit @voiceflow/channelkit-instagram chat @chat-adapter/catalog @chat-adapter/instagram
+npm install @voiceflow/channels-sdk @voiceflow/channels-instagram chat @chat-adapter/catalog @chat-adapter/instagram
 ```
 
 ### What happens in Instagram

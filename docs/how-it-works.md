@@ -1,20 +1,20 @@
 # How it works
 
-What Voiceflow ChannelKit is for, how a conversation runs through it, and the
+What Voiceflow Channels SDK is for, how a conversation runs through it, and the
 rules its design follows. For a package's API and options, see its README:
-[`@voiceflow/channelkit`](../packages/core/README.md),
-[`@voiceflow/channelkit-slack`](../packages/slack/README.md).
+[`@voiceflow/channels-sdk`](../packages/core/README.md),
+[`@voiceflow/channels-slack`](../packages/slack/README.md).
 
 ## What it is, and what it isn't
 
-**ChannelKit connects Voiceflow agents to third-party platforms, where Voiceflow
+**Channels SDK connects Voiceflow agents to third-party platforms, where Voiceflow
 doesn't own the screen.** The web widget, SMS and phone are native Voiceflow channels
 and are not part of this package.
 
 | Do we own the screen? | Use |
 |---|---|
 | Yes: web widget, SMS, phone | Voiceflow's native channels |
-| No: Slack, WhatsApp, Teams, email, … | **`@voiceflow/channelkit`** |
+| No: Slack, WhatsApp, Teams, email, … | **`@voiceflow/channels-sdk`** |
 
 ## How a conversation works
 
@@ -93,8 +93,8 @@ npm install @larksuite/vercel-chat-adapter
 ```ts
 import * as larkAdapter from '@larksuite/vercel-chat-adapter';
 import { createRedisState } from '@chat-adapter/state-redis';
-import { createChannels } from '@voiceflow/channelkit';
-import { slack } from '@voiceflow/channelkit-slack';
+import { createChannels } from '@voiceflow/channels-sdk';
+import { slack } from '@voiceflow/channels-slack';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: process.env.VOICEFLOW_PROJECT_ID! },

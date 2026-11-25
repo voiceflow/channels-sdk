@@ -1,11 +1,11 @@
 // Written by scripts/channels.mjs: change the template there, not this file.
 // A Voiceflow agent in Twilio. Everything channel-neutral comes from
-// @voiceflow/channelkit; this package brings Chat SDK's Twilio adapter.
+// @voiceflow/channels-sdk; this package brings Chat SDK's Twilio adapter.
 import * as adapter from '@chat-adapter/twilio';
-import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channelkit';
+import { type ChannelOptions, type ChannelSpec, channel, contextVariables } from '@voiceflow/channels-sdk';
 import { adapterDefaults } from './platform.js';
 
-export type { ChannelOptions as TwilioOptions } from '@voiceflow/channelkit';
+export type { ChannelOptions as TwilioOptions } from '@voiceflow/channels-sdk';
 
 /** Every variable this channel sets, with what it holds. `connect twilio` creates them on the agent. */
 export const CONTEXT_VARIABLES: Record<string, string> = contextVariables('twilio');

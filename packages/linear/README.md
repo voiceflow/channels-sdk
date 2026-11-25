@@ -1,4 +1,4 @@
-# @voiceflow/channelkit-linear
+# @voiceflow/channels-linear
 
 A Voiceflow agent in Linear, with one command to set it up.
 
@@ -8,7 +8,7 @@ A Voiceflow agent in Linear, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channelkit connect linear --env-file .env.local
+npx voiceflow-channels connect linear --env-file .env.local
 ```
 
 Linear's side is made on Linear's own pages: its app or bot, and the
@@ -20,11 +20,11 @@ the rest. It shows its whole plan and asks before it changes anything.
 - **It creates the `linear_*` variables** on your agent, for its prompts.
 - **It writes the Voiceflow values** it had to ask for to the env file. A
   value already there is never changed.
-- **It says what address to give Linear**: your server's public address, then `/api/linear`. It goes in Linear's Settings → API → Create webhook, with Comments among its events; its signing secret is LINEAR_WEBHOOK_SECRET. `voiceflow-channelkit dev` prints the tunnel's each time it starts.
+- **It says what address to give Linear**: your server's public address, then `/api/linear`. It goes in Linear's Settings → API → Create webhook, with Comments among its events; its signing secret is LINEAR_WEBHOOK_SECRET. `voiceflow-channels dev` prints the tunnel's each time it starts.
 - **With nobody at the terminal** (a script, a coding agent) connect asks
   nothing. It stops with exit code 3 and says, in the one stop, everything a
   person has to do. Exit 0 is done, 1 a failure, 2 a mistake in the command.
-- **`voiceflow-channelkit dev` runs connect for you** the first time, when a
+- **`voiceflow-channels dev` runs connect for you** the first time, when a
   person is there. So in an app the starter made, `npm run dev` is the one
   command.
 - **Nothing is published.** The variables are live once you publish the
@@ -34,7 +34,7 @@ the rest. It shows its whole plan and asks before it changes anything.
 ## In your server
 
 ```ts
-import { linear } from '@voiceflow/channelkit-linear';
+import { linear } from '@voiceflow/channels-linear';
 
 const channels = await createChannels({
   voiceflow: { apiKey: process.env.VOICEFLOW_API_KEY!, projectID: process.env.VOICEFLOW_PROJECT_ID! },
@@ -47,7 +47,7 @@ const channels = await createChannels({
 Install it with Chat SDK's adapter:
 
 ```bash
-npm install @voiceflow/channelkit @voiceflow/channelkit-linear chat @chat-adapter/catalog @chat-adapter/linear
+npm install @voiceflow/channels-sdk @voiceflow/channels-linear chat @chat-adapter/catalog @chat-adapter/linear
 ```
 
 ### What happens in Linear

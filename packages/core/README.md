@@ -1,12 +1,12 @@
-# @voiceflow/channelkit
+# @voiceflow/channels-sdk
 
-The core of Voiceflow ChannelKit: a Voiceflow agent inside any
+The core of Voiceflow Channels SDK: a Voiceflow agent inside any
 [Vercel Chat SDK](https://chat-sdk.dev) bot, on any adapter in the catalog.
 
 > **Status:** pre-release, local only. Not published. The package name is not final.
 
 It loads any adapter the catalog lists. A channel's package
-(`@voiceflow/channelkit-slack`, `@voiceflow/channelkit-telegram` and the rest: the
+(`@voiceflow/channels-slack`, `@voiceflow/channels-telegram` and the rest: the
 [table of channels](../../README.md#channels) has each) adds what only that
 channel has, and the `connect` command that sets it up.
 
@@ -14,12 +14,12 @@ channel has, and the `connect` command that sets it up.
 
 | Import | What it is |
 |---|---|
-| `@voiceflow/channelkit` | `createChannels`, the agent, rendering, server tools, the extension API. |
-| `@voiceflow/channelkit/install` | `installTools` / `uninstallTools`: puts a channel's tools on an agent. Node only. |
-| `@voiceflow/channelkit/connect` | `channelCommands`: `connect`, `point` and `disconnect` for a channel whose bot or app is made on the platform's own pages. Node only. |
-| `@voiceflow/channelkit/dev` | `dev` and `startTunnel`: a tunnel, your server, and each channel pointed at it. Node only. |
-| `@voiceflow/channelkit/testing` | Fakes of Voiceflow's API and runtime, `runFunction`, which runs a tool as Voiceflow's sandbox does, and `channelContract`: the conversation every channel's tests run. |
-| `voiceflow-channelkit` (bin) | `voiceflow-channelkit connect <channel>` (and `point`, `disconnect`): hands off to `@voiceflow/channelkit-<channel>/connect`. `voiceflow-channelkit dev` is this package's own. |
+| `@voiceflow/channels-sdk` | `createChannels`, the agent, rendering, server tools, the extension API. |
+| `@voiceflow/channels-sdk/install` | `installTools` / `uninstallTools`: puts a channel's tools on an agent. Node only. |
+| `@voiceflow/channels-sdk/connect` | `channelCommands`: `connect`, `point` and `disconnect` for a channel whose bot or app is made on the platform's own pages. Node only. |
+| `@voiceflow/channels-sdk/dev` | `dev` and `startTunnel`: a tunnel, your server, and each channel pointed at it. Node only. |
+| `@voiceflow/channels-sdk/testing` | Fakes of Voiceflow's API and runtime, `runFunction`, which runs a tool as Voiceflow's sandbox does, and `channelContract`: the conversation every channel's tests run. |
+| `voiceflow-channels` (bin) | `voiceflow-channels connect <channel>` (and `point`, `disconnect`): hands off to `@voiceflow/channels-<channel>/connect`. `voiceflow-channels dev` is this package's own. |
 
 ## Bundled servers
 
@@ -82,7 +82,7 @@ holds only a small Voiceflow function that passes the call on. Your server
 runs it, knowing which conversation and person it is for.
 
 ```ts
-import { createChannels, type ServerTool } from '@voiceflow/channelkit';
+import { createChannels, type ServerTool } from '@voiceflow/channels-sdk';
 
 const lookUpOrder: ServerTool = {
   name: 'look_up_order',
@@ -138,8 +138,8 @@ Put your tools on the agent with the installer. The secret holds the address
 the agent calls: a route that runs `channels.webhook` or `channels.tools`.
 
 ```ts
-import { serverToolSet, TOOLS_URL_SECRET } from '@voiceflow/channelkit';
-import { installTools } from '@voiceflow/channelkit/install';
+import { serverToolSet, TOOLS_URL_SECRET } from '@voiceflow/channels-sdk';
+import { installTools } from '@voiceflow/channels-sdk/install';
 
 await installTools(serverToolSet('my-app', [lookUpOrder]), {
   apiKey, projectID, environment: 'development',
@@ -153,14 +153,14 @@ with your server.
 
 ## Local development
 
-`voiceflow-channelkit dev -- <your server's command>` is local development in one
+`voiceflow-channels dev -- <your server's command>` is local development in one
 command, for any channel:
 
 - **It opens a tunnel** to your server's port (a Cloudflare quick tunnel: no
   account, and an address that's new each time), and says how to get
   cloudflared when it isn't installed.
 - **It starts your server**, with `PORT` set, and waits until it answers.
-- **It points each channel at the tunnel**: every `@voiceflow/channelkit-*`
+- **It points each channel at the tunnel**: every `@voiceflow/channels-*`
   package the app depends on is asked to move its platform, and the agent's
   tools, to the new address. A channel takes part by answering
   `point --public-url <address> --local-url <the server here>`.
@@ -173,7 +173,7 @@ command, for any channel:
 - **Stopping it stops all of it.** `--public-url` uses an address of your own
   and starts no tunnel.
 
-`startTunnel` is the tunnel on its own, from `@voiceflow/channelkit/dev`.
+`startTunnel` is the tunnel on its own, from `@voiceflow/channels-sdk/dev`.
 
 ## Installing tools
 

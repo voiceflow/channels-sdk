@@ -8,8 +8,8 @@ for the changelog.
 npx changeset
 ```
 
-`@voiceflow/channelkit`, every channel's package and
-`@voiceflow/create-channelkit` share one version number, so a changeset for any
+`@voiceflow/channels-sdk`, every channel's package and
+`@voiceflow/create-channels-sdk` share one version number, so a changeset for any
 of them moves them all. When changesets land on `main`,
 the release workflow opens a "version packages" pull request; merging it
 publishes to npm. See [CONTRIBUTING.md](../CONTRIBUTING.md#changesets).

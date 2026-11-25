@@ -11,9 +11,9 @@
 // only adds what's missing. The bot's token is for your server alone: it never
 // goes to Voiceflow.
 //
-// Node only: import it from `@voiceflow/channelkit-discord/connect`.
-import { type ApiOptions, checkProject, type InstallResult, installTools, memoryRecordStore } from '@voiceflow/channelkit/install';
-import { downloadIcon, type IconFile, iconUrl, VOICEFLOW_ICON_NAME, voiceflowIcon } from '@voiceflow/channelkit/setup';
+// Node only: import it from `@voiceflow/channels-discord/connect`.
+import { type ApiOptions, checkProject, type InstallResult, installTools, memoryRecordStore } from '@voiceflow/channels-sdk/install';
+import { downloadIcon, type IconFile, iconUrl, VOICEFLOW_ICON_NAME, voiceflowIcon } from '@voiceflow/channels-sdk/setup';
 import { CONTEXT_VARIABLES } from '../context.js';
 import { APP_FLAGS, createDiscordApi, DEVELOPER_PORTAL, type DiscordApi, DiscordApiError, type DiscordApiOptions, installLink, isSnowflake } from './api.js';
 
@@ -227,7 +227,7 @@ export interface ConnectDiscordOptions {
   /**
    * Your server's Discord route as Discord reaches it (`https://…/api/discord`).
    * Discord checks it answers as it takes it. Omit it for a server on this
-   * machine: `voiceflow-channelkit dev` gives Discord the address each time it starts.
+   * machine: `voiceflow-channels dev` gives Discord the address each time it starts.
    */
   interactionsUrl?: string;
   /** The slash command's name, or `false` for none. Default: `ask`. */
@@ -349,7 +349,7 @@ export async function connectDiscord(options: ConnectDiscordOptions): Promise<Co
               : `  = the /${wanted!.name} command is there`,
         ]),
     !url
-      ? `  · slash commands and buttons need your server's address: \`voiceflow-channelkit dev\` gives it to Discord each time it starts`
+      ? `  · slash commands and buttons need your server's address: \`voiceflow-channels dev\` gives it to Discord each time it starts`
       : app.endpoint === url
         ? `  = slash commands and buttons go to ${url}`
         : `  ~ send slash commands and buttons to ${url} (Discord checks your server answers there${app.endpoint ? `; it sends them to ${app.endpoint} now` : ''})`,
@@ -506,7 +506,7 @@ export async function checkServer(options: { url: string; token: string; fetch?:
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-discord-gateway-token': options.token },
       // A type the adapter has no handler for: it checks who sent it, and does nothing.
-      body: JSON.stringify({ type: 'GATEWAY_CHANNELKIT_CHECK', timestamp: Date.now(), data: {} }),
+      body: JSON.stringify({ type: 'GATEWAY_CHANNELS_SDK_CHECK', timestamp: Date.now(), data: {} }),
       signal: AbortSignal.timeout(15_000),
     });
   } catch (error) {

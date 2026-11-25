@@ -1,4 +1,4 @@
-# @voiceflow/create-channelkit
+# @voiceflow/create-channels-sdk
 
 Start a Voiceflow agent in Slack, Discord, Microsoft Teams or any other
 channel with one command.
@@ -6,12 +6,12 @@ channel with one command.
 > **Status:** pre-release, local only. Not published. The package name is not final.
 
 ```bash
-npm create @voiceflow/channelkit@latest my-bot
+npm create @voiceflow/channels-sdk@latest my-bot
 ```
 
 It makes a folder with a small Next.js server: the route Slack calls, an env
 file, and a `connect` script that makes the Slack app. `pnpm create`,
-`yarn create` and `bunx @voiceflow/create-channelkit` work the same way.
+`yarn create` and `bunx @voiceflow/create-channels-sdk` work the same way.
 
 ## What it writes
 
@@ -69,7 +69,7 @@ The new app's README has each step in full.
 | `--no-git` | Don't start a git repository. |
 | `-q, --quiet` | Print only errors and what to do next. |
 
-With npm, put `--` before the options: `npm create @voiceflow/channelkit@latest -- my-bot --pm pnpm`.
+With npm, put `--` before the options: `npm create @voiceflow/channels-sdk@latest -- my-bot --pm pnpm`.
 
 ## What it doesn't do
 
