@@ -603,9 +603,15 @@ few things done by hand, once:
       hand
       Done 2026-11-24, by hand: 16 tags on the commit the packages were
       packed from, and a release for each with its package's changelog entry
-- [ ] Give the release workflow a GitHub App token (changesets/action's
-      `github-token`), so CI runs on the version pull request it opens. One
-      opened with the default `GITHUB_TOKEN` starts no workflows.
+- [ ] CI on the version pull request. One opened with the default
+      `GITHUB_TOKEN` starts no workflows, so `all checks` would never report
+      and it could not be merged.
+      Built 2026-11-24, with no other token: after it opens or updates the
+      pull request, `release.yml` starts `ci` on its branch
+      (`workflow_dispatch`), which GitHub lets the default token do. The
+      first version pull request is the proof that a run started
+      that way satisfies the required check. A GitHub App token
+      (changesets/action's `github-token`) is the other way, if it doesn't
 - [x] Decide the oldest Node version supported: 22. Node 20's support ended
       on 2026-04-30; Vercel Chat SDK tests 22 and 24.
 
