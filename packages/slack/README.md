@@ -3,7 +3,7 @@
 A Voiceflow agent in Slack: everything Slack has is on by
 default, and Slack's tools are installed on the agent when you connect it.
 
-> **Status:** pre-release, local only. Not published. The package name is not final.
+> **Status:** an early release. Expect changes between versions before 1.0.
 
 ## Connect
 

@@ -29,6 +29,8 @@ import { getAdapter, getFeatureSupport } from '@chat-adapter/catalog';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const check = process.argv.includes('--check');
+/** Every package is released together, at one version: the core's, which a release raises. */
+const VERSION = JSON.parse(readFileSync(join(root, 'packages/core/package.json'), 'utf8')).version;
 
 /** The platforms with a package of their own code: left alone here. */
 const OWN = ['slack', 'discord', 'teams'];
@@ -127,8 +129,7 @@ function files(slug) {
 
   const pkg = {
     name: `@voiceflow/channels-${slug}`,
-    version: '0.0.0',
-    private: true,
+    version: VERSION,
     description: `A Voiceflow agent in ${name}, with one command to set it up.`,
     keywords: ['voiceflow', 'channels-sdk', slug, 'chat-sdk', 'vercel-chat', 'chatbot', 'bot', 'ai-agent', 'conversational-ai'],
     author: 'Braden Ream',
@@ -145,7 +146,7 @@ function files(slug) {
     },
     files: ['dist', 'src', 'README.md', 'LICENSE'],
     scripts: { build: 'tsc -p tsconfig.json', test: 'npm run build && node --test test/*.test.mjs', typecheck: 'tsc -p tsconfig.json --noEmit' },
-    dependencies: { '@voiceflow/channels-sdk': '0.0.0' },
+    dependencies: { '@voiceflow/channels-sdk': VERSION },
     peerDependencies: {
       chat: '>=4.44.0 <5',
       '@chat-adapter/catalog': '>=4.44.0 <5',
@@ -238,7 +239,7 @@ channelContract({ slug: '${slug}', channel: ${slug}, variables: CONTEXT_VARIABLE
 
 A Voiceflow agent in ${name}, with one command to set it up.
 
-> **Status:** pre-release, local only. Not published. The package name is not final.
+> **Status:** an early release. Expect changes between versions before 1.0.
 > Built on Chat SDK's ${name} adapter.
 
 ## Connect

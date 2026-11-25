@@ -3,7 +3,7 @@
 A Voiceflow agent in Microsoft Teams: chats, channel threads, mentions,
 buttons and cards, with one command to set it up.
 
-> **Status:** pre-release, local only. Not published. The package name is not final.
+> **Status:** an early release. Expect changes between versions before 1.0.
 > Built on Chat SDK's Teams adapter. Tested against a stand-in for Teams' bot
 > API, and run in Teams itself: a chat, a mention and its thread, a reply with
 > no mention, buttons, a card, and a bot made by `connect teams`.

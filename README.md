@@ -12,7 +12,7 @@ it. The same agent runs in Discord, Microsoft Teams, Telegram, WhatsApp and
 [nine more channels](#channels), each with a package of its own and the same
 commands. Built on [Vercel Chat SDK](https://chat-sdk.dev).
 
-> **Status:** pre-release, local only. Not published; package names are not final.
+> **Status:** an early release. Expect changes between versions before 1.0.
 > Every channel is tested end to end on one machine: Chat SDK's real adapter
 > for it, against a stand-in for its platform.
 
