@@ -1,6 +1,6 @@
 {
   "name": "@voiceflow/channels-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The core of Voiceflow Channels SDK: a Voiceflow agent inside any Vercel Chat SDK bot, on any adapter in the catalog.",
   "keywords": [
     "voiceflow",
