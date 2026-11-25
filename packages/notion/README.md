@@ -2,7 +2,7 @@
 
 A Voiceflow agent in Notion, with one command to set it up.
 
-> **Status:** pre-release, local only. Not published. The package name is not final.
+> **Status:** an early release. Expect changes between versions before 1.0.
 > Built on Chat SDK's Notion adapter.
 
 ## Connect

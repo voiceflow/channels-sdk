@@ -1,7 +1,6 @@
 {
   "name": "@voiceflow/channels-telegram",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "A Voiceflow agent in Telegram, with one command to set it up.",
   "keywords": [
     "voiceflow",
@@ -54,7 +53,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@voiceflow/channels-sdk": "0.0.0"
+    "@voiceflow/channels-sdk": "0.1.0"
   },
   "peerDependencies": {
     "chat": ">=4.44.0 <5",

@@ -3,7 +3,7 @@
 The core of Voiceflow Channels SDK: a Voiceflow agent inside any
 [Vercel Chat SDK](https://chat-sdk.dev) bot, on any adapter in the catalog.
 
-> **Status:** pre-release, local only. Not published. The package name is not final.
+> **Status:** an early release. Expect changes between versions before 1.0.
 
 It loads any adapter the catalog lists. A channel's package
 (`@voiceflow/channels-slack`, `@voiceflow/channels-telegram` and the rest: the

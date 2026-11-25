@@ -3,7 +3,7 @@
 Start a Voiceflow agent in Slack, Discord, Microsoft Teams or any other
 channel with one command.
 
-> **Status:** pre-release, local only. Not published. The package name is not final.
+> **Status:** an early release. Expect changes between versions before 1.0.
 
 ```bash
 npm create @voiceflow/channels-sdk@latest my-bot

@@ -3,7 +3,7 @@
 A Voiceflow agent in Discord: mentions, threads, direct messages, buttons,
 cards and a slash command, with one command to set it up.
 
-> **Status:** pre-release, local only. Not published. The package name is not final.
+> **Status:** an early release. Expect changes between versions before 1.0.
 > Built on Chat SDK's Discord adapter. Tested against a stand-in for Discord's
 > API, and run in Discord itself: a mention and its thread, a direct message,
 > buttons and `/ask`.

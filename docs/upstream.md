@@ -506,10 +506,11 @@ as `markdown_text` and a card as `blocks` with a `text` fallback.
 - [x] Known secret values are stripped from everything the CLI prints, errors
       included (2026-11-23): where an error is made, before it is cut to
       length, and from every line on its way out
-- [ ] Take "pre-release, local only" and "the package name is not final" off
+- [x] Take "pre-release, local only" and "the package name is not final" off
       the 17 READMEs that say it, and choose the first version (every
       package is at 0.0.0)
-- [ ] Remove `"private": true` from the 16 packages
+      Done 2026-11-24: the first version is 0.1.0, for every package
+- [x] Remove `"private": true` from the 16 packages (2026-11-24)
 - [x] No open advisory in what the repository installs (2026-11-24): `npm
       audit` finds none. Two were open, on `glob` and `minimatch`, which come
       in under Google Chat's adapter and are never loaded (section 5); the
@@ -529,13 +530,19 @@ machine. What is left is not in the code:
       thing to wait on. That section, and pull request 17, still say what the
       adapter does: cut them before the repository is public if that should
       not be said here
-- [ ] Decide whether this file goes public as it is: it holds plans, and the
+- [x] Decide whether this file goes public as it is: it holds plans, and the
       record of what has and hasn't been run
+      Decided 2026-11-24: it does
 - [ ] Turn on private vulnerability reporting (Settings, Security), which
       SECURITY.md promises. It was off on 2026-11-24
 - [ ] Turn on secret scanning and push protection. Both were off on 2026-11-24
-- [ ] Protect `main`: require pull requests, CI's `all checks` check and code
+- [x] Protect `main`: require pull requests, CI's `all checks` check and code
       owners' review. It had no protection on 2026-11-24
+      Done 2026-11-24, without the review: pull requests and `all checks`
+      are required, for admins too, and force pushes and deleting it are
+      off. An approving review isn't asked for while one person is both the
+      only code owner and every pull request's author, who can't approve
+      their own
 - [ ] Confirm the address SECURITY.md gives for reports is read
 
 ### The first publish
