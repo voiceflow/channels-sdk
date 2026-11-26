@@ -13,6 +13,7 @@
 import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { getAdapter } from '@chat-adapter/catalog';
+import { ALL_CHANNELS } from '../../../scripts/channels.mjs';
 
 const root = new URL('../../../', import.meta.url);
 const templates = new URL('../template/', import.meta.url);
@@ -30,10 +31,11 @@ const json = async (url) => JSON.parse(await readFile(url, 'utf8'));
 const installed = async (name) => (await json(new URL(`node_modules/${name}/package.json`, root))).version;
 
 // Every channel this repository has a package for: packages/<slug>, named @voiceflow/channels-<slug>.
+// A package that isn't a channel (the relay) has a name of that shape too, so the list of channels is scripts/channels.mjs's.
 const slugs = [];
 for (const dir of await readdir(new URL('packages/', root))) {
   const pkg = await json(new URL(`packages/${dir}/package.json`, root)).catch(() => undefined);
-  if (pkg?.name === `@voiceflow/channels-${dir}`) slugs.push(dir);
+  if (pkg?.name === `@voiceflow/channels-${dir}` && ALL_CHANNELS.includes(dir)) slugs.push(dir);
 }
 slugs.sort((a, b) => (FIRST.indexOf(a) + 1 || 99) - (FIRST.indexOf(b) + 1 || 99) || a.localeCompare(b));
 

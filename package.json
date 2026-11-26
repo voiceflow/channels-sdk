@@ -32,6 +32,7 @@
     "packages/twilio",
     "packages/whatsapp",
     "packages/x",
+    "packages/relay",
     "packages/create",
     "examples/*"
   ],

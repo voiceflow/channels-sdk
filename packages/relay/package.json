@@ -1,0 +1,61 @@
+{
+  "name": "@voiceflow/channels-relay",
+  "version": "0.1.1",
+  "description": "One server for many Voiceflow agents' channels: each connection's credentials sealed in a store, its conversations kept apart, and an API to add them.",
+  "keywords": [
+    "voiceflow",
+    "channels-sdk",
+    "relay",
+    "multi-tenant",
+    "chat-sdk",
+    "vercel-chat",
+    "chatbot",
+    "ai-agent"
+  ],
+  "author": "Braden Ream",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voiceflow/channels-sdk.git",
+    "directory": "packages/relay"
+  },
+  "homepage": "https://github.com/voiceflow/channels-sdk/tree/main/packages/relay#readme",
+  "bugs": {
+    "url": "https://github.com/voiceflow/channels-sdk/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/clean.mjs && tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@voiceflow/channels-sdk": "0.1.1"
+  },
+  "peerDependencies": {
+    "chat": ">=4.44.0 <5",
+    "@chat-adapter/catalog": ">=4.44.0 <5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.16",
+    "@voiceflow/channels-telegram": "0.1.1"
+  }
+}

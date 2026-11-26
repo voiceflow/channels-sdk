@@ -49,6 +49,7 @@ a tool's code is its functions' text, so restyling it would change the tool.
 | `packages/slack/src/connect/` | `connect slack` and `point slack`: manifest, Slack CLI login, app creation, the Voiceflow install |
 | `packages/slack/test/helpers/fake-slack.mjs` | A fake of Slack's Web API and events |
 | `packages/slack/scripts/live/` | The live harness: real Slack, real Voiceflow (see below) |
+| `packages/relay` | `@voiceflow/channels-relay`: one server for many connections (`createRelay`). Credentials sealed (`seal.ts`), a store (`store.ts`, `postgres.ts`), each connection's state under its own prefix (`state.ts`), the connections API (`relay.ts`) |
 | `packages/create` | `@voiceflow/create-channels-sdk`: the starter. Its templates are built from the example apps (`scripts/template.mjs`), so there is one copy of each app; a channel with no example of its own gets `examples/nextjs-telegram` with its name in |
 | `examples/` | Apps that use the packages; workspaces named `example-*`, never published |
 | `docs/` | How a conversation works; how this project tracks Vercel Chat SDK |
@@ -95,6 +96,10 @@ a tool's code is its functions' text, so restyling it would change the tool.
   that acts for someone is a server tool: it reads them from `turn.userId`,
   which the server took from the turn's pass, and acts only where that person
   could. Never from an input, and never from a variable.
+- **Connections on a relay never meet.** Each one's state is under its own
+  prefix, it signs its passes with a key of its own (never its API key), and
+  it changes only with its own token. The relay only runs turns: it never
+  writes to an agent, and takes credentials, never addresses.
 - **What leaves the conversation asks first.** A server tool that writes
   outside the thread it was called from returns `askFirst(…)` until
   `turn.approved`, after its own checks, so nobody is asked to approve what

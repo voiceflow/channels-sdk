@@ -19,6 +19,7 @@
       "@voiceflow/channels-twilio",
       "@voiceflow/channels-whatsapp",
       "@voiceflow/channels-x",
+      "@voiceflow/channels-relay",
       "@voiceflow/create-channels-sdk"
     ]
   ],

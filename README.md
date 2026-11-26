@@ -119,6 +119,7 @@ Each package's README has its settings, its options and its variables.
 |---|---|
 | [`@voiceflow/channels-sdk`](packages/core) | The core: a Voiceflow agent on any Chat SDK adapter, the extension API, the tool installer, and the `voiceflow-channels` CLI. |
 | `@voiceflow/channels-<channel>` | A channel: its adapter, its variables, what only its platform has, and `connect <channel>`. One for each [channel above](#channels). |
+| [`@voiceflow/channels-relay`](packages/relay) | One server for many agents' channels: each connection's credentials sealed in a store, its conversations kept apart, and an API to add them. |
 | [`@voiceflow/create-channels-sdk`](packages/create) | The starter: `npm create @voiceflow/channels-sdk@latest` makes a new app, for any channel. |
 
 ## Features
@@ -174,6 +175,8 @@ Each package's README has its settings, its options and its variables.
   settings, what happens in it, its options and its variables.
 - [`@voiceflow/channels-sdk`](packages/core/README.md): the API, server tools,
   channel extensions, and installing tools.
+- [`@voiceflow/channels-relay`](packages/relay/README.md): one server for many
+  agents' channels, the connections API, and how connections are kept apart.
 - [Staying current with Chat SDK](docs/upstream.md).
 - [Voiceflow's documentation](https://www.voiceflow.com/docs), for building the
   agent itself.
