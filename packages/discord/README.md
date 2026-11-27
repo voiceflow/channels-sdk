@@ -11,7 +11,7 @@ cards and a slash command, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect discord --env-file .env.local
+npx voiceflow-channels connect discord --dotenv .env.local
 ```
 
 Discord has no way to make an application from a command, so that one step is
@@ -46,11 +46,11 @@ Then:
   application's own name, shown on the page that adds the bot, is the one you
   typed in the portal: Discord has no call to change it.
 - **What it writes:** `DISCORD_PUBLIC_KEY` and `DISCORD_APPLICATION_ID`, read
-  from Discord, go in the `--env-file` with anything it had to ask for. A value
+  from Discord, go in the `--dotenv` with anything it had to ask for. A value
   already there is never changed. The bot token goes to Discord and that file,
   and never to Voiceflow.
 - **The bot token** comes from `--token-file`, `DISCORD_BOT_TOKEN` in the
-  environment, the same name in `--env-file`, or a hidden prompt.
+  environment, the same name in `--dotenv`, or a hidden prompt.
 - **Pages are opened only for a person who is there**, in a browser that is
   theirs: never for a script or a coding agent, never over SSH or in CI, and
   never with `--no-open`. The links are always printed.

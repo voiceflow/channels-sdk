@@ -8,7 +8,7 @@ A Voiceflow agent in WhatsApp Business Cloud, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect whatsapp --env-file .env.local
+npx voiceflow-channels connect whatsapp --dotenv .env.local
 ```
 
 WhatsApp Business Cloud's side is made on WhatsApp Business Cloud's own pages: its app or bot, and the

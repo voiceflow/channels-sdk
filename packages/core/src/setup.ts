@@ -22,6 +22,23 @@ export type Say = (line: string) => void;
  */
 export const BARE = /^(?!~)(?!.*:~)[\w.:/@+=,~-]+$/;
 
+/**
+ * The flags that name the server's env file, for a command's `parseArgs`. The
+ * flag is `--dotenv`. `--env-file` still works, for a file that's already
+ * there: Node reads that flag itself wherever it is on the command line, even
+ * after the script's name, and exits ("node: .env.local: not found") before a
+ * command starts when the file is missing (nodejs/node#54232). So a first
+ * connect, which makes the file, couldn't run with it.
+ */
+export const ENV_FILE_FLAGS = { dotenv: { type: 'string' }, 'env-file': { type: 'string' } } as const;
+
+/** The env file a command was given, from {@link ENV_FILE_FLAGS}. `--env-file` says it's now `--dotenv`. */
+export function envFileOf(o: { dotenv?: string | undefined; 'env-file'?: string | undefined }, say: Say): string | undefined {
+  if (o['env-file'] === undefined) return o.dotenv;
+  say(`· --env-file is now --dotenv: Node itself exits when a file given as --env-file isn't there yet.`);
+  return o.dotenv ?? o['env-file'];
+}
+
 /** Sets these keys in an env file, keeping its other lines, readable only by you. */
 export async function writeEnvFile(path: string, values: Record<string, string | undefined>): Promise<void> {
   const set = Object.entries(values).filter((e): e is [string, string] => Boolean(e[1]));

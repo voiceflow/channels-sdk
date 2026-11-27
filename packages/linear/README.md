@@ -8,7 +8,7 @@ A Voiceflow agent in Linear, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect linear --env-file .env.local
+npx voiceflow-channels connect linear --dotenv .env.local
 ```
 
 Linear's side is made on Linear's own pages: its app or bot, and the

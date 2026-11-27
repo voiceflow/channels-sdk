@@ -8,7 +8,7 @@ A Voiceflow agent in GitHub, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect github --env-file .env.local
+npx voiceflow-channels connect github --dotenv .env.local
 ```
 
 GitHub's side is made on GitHub's own pages: its app or bot, and the

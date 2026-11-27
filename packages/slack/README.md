@@ -11,7 +11,7 @@ One command makes the Slack app, installs it, and installs Slack's tools on
 your agent:
 
 ```bash
-npx voiceflow-channels connect slack --public-url https://<your server> --env-file .env
+npx voiceflow-channels connect slack --public-url https://<your server> --dotenv .env
 ```
 
 It shows its whole plan and asks before it changes anything:
@@ -53,18 +53,18 @@ Then:
   shows you before it goes ahead.
 - **An app you made by hand:** `--manual` leaves Slack to you and needs no
   Slack CLI. Connect reads `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` from
-  the environment or the `--env-file` (or asks for them, unseen), names any
+  the environment or the `--dotenv` (or asks for them, unseen), names any
   scope the app wasn't granted, lists the settings that must point at your
   server, and installs the tools on the agent. `--print-manifest` prints the
   manifest to make the app from.
 - **Which agent:** `--project` and `--environment`, or `VOICEFLOW_PROJECT_ID`
-  and `VOICEFLOW_ENVIRONMENT` in the environment or in the `--env-file`. With
+  and `VOICEFLOW_ENVIRONMENT` in the environment or in the `--dotenv`. With
   neither, connect asks.
 - **Voiceflow key:** `VOICEFLOW_API_KEY`, in the environment or in the
-  `--env-file`; `--key-file`; or a hidden prompt. Never a command-line value.
+  `--dotenv`; `--key-file`; or a hidden prompt. Never a command-line value.
 - **The env file ends up complete.** Connect writes the app's
   `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` to the file you name with
-  `--env-file`, readable by you alone, and anything it had to ask you for. It
+  `--dotenv`, readable by you alone, and anything it had to ask you for. It
   never changes a Voiceflow value that's already there. Without the flag,
   connect tells you where Slack shows the app's credentials. Slack gives out a
   new app's signing secret once, when connect makes the app.

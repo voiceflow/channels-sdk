@@ -33,7 +33,7 @@ async function app(t, { token } = {}) {
   const fetch = (input, init) => (String(input).startsWith('http://127.0.0.1') ? globalThis.fetch(input, init) : api.fetch(input, init));
   const run = async (argv, { env = {} } = {}) => {
     const said = [];
-    const code = await cli([...argv, '--env-file', envFile], {
+    const code = await cli([...argv, '--dotenv', envFile], {
       out: (line) => said.push(line),
       err: (line) => said.push(line),
       env: { VOICEFLOW_API_KEY: VF_KEY, VOICEFLOW_PROJECT_ID: 'proj1', VOICEFLOW_ENVIRONMENT: 'development', ...env },
@@ -77,7 +77,7 @@ test('point gives Telegram another address and keeps the secret; before connect 
   const a = await app(t);
   const early = await a.run(['point', '--public-url', 'https://one.example.com']);
   assert.equal(early.code, 3, early.said);
-  assert.match(early.said, /isn't connected here yet: run `voiceflow-channels connect telegram --env-file /);
+  assert.match(early.said, /isn't connected here yet: run `voiceflow-channels connect telegram --dotenv /);
   assert.equal(a.platform.webhook(), undefined, 'and Telegram was told nothing');
 
   assert.equal((await a.run(['connect', '--yes'])).code, 0);

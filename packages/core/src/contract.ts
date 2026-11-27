@@ -402,7 +402,7 @@ export function channelContract(options: ChannelContractOptions): void {
   test(`${name}: its commands are the same as every channel's, and know what it needs`, async () => {
     const out: string[] = [];
     assert.equal(await options.commands.cli(['--help'], { out: (line) => out.push(line), err: (line) => out.push(line), env: {} }), 0);
-    assert.match(out.join('\n'), new RegExp(`voiceflow-channels connect ${slug} --env-file`));
+    assert.match(out.join('\n'), new RegExp(`voiceflow-channels connect ${slug} --dotenv`));
     assert.equal(await options.commands.cli(['point'], { out: () => {}, err: () => {}, env: {} }), 2, 'point with no address is a mistake in the command');
     const { needed, made } = options.commands.settings;
     const agent = { VOICEFLOW_API_KEY: 'k', VOICEFLOW_PROJECT_ID: 'p' };
@@ -439,7 +439,7 @@ export function channelContract(options: ChannelContractOptions): void {
       const env = { VOICEFLOW_API_KEY: apiKey, VOICEFLOW_PROJECT_ID: 'proj1', VOICEFLOW_ENVIRONMENT: 'development' };
       const run = async () => {
         const said: string[] = [];
-        const code = await options.commands.cli(['connect', '--yes', '--env-file', envFile], {
+        const code = await options.commands.cli(['connect', '--yes', '--dotenv', envFile], {
           out: (l) => said.push(l),
           err: (l) => said.push(l),
           env,

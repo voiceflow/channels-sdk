@@ -11,7 +11,7 @@ buttons and cards, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect teams --env-file .env.local
+npx voiceflow-channels connect teams --dotenv .env.local
 ```
 
 Connect runs Microsoft's own Teams command
@@ -54,7 +54,7 @@ Then:
   makes the app, and run again it keeps the app as it is. The address Teams
   sends to is the one thing changed afterwards, and Teams takes that at once.
 - **What it writes:** `TEAMS_APP_ID`, `TEAMS_APP_PASSWORD` and
-  `TEAMS_APP_TENANT_ID` go in the `--env-file` the moment the app is made, with
+  `TEAMS_APP_TENANT_ID` go in the `--dotenv` the moment the app is made, with
   anything it had to ask for. The secret is Microsoft's to make and shown
   once: it goes to that file, readable by you alone, and never to Voiceflow or
   the screen.
@@ -94,7 +94,7 @@ starts. Teams takes a new address at once, for an app already added: nobody
 adds it again.
 
 **Deployed,** give Teams your address with
-`connect teams --env-file <path> --public-url https://<host>`. Use a second
+`connect teams --dotenv <path> --public-url https://<host>`. Use a second
 Teams app for development, with an env file of its own: while `dev` runs,
 Teams sends that bot's messages to your machine.
 

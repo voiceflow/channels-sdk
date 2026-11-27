@@ -8,7 +8,7 @@ A Voiceflow agent in GitLab, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect gitlab --env-file .env.local
+npx voiceflow-channels connect gitlab --dotenv .env.local
 ```
 
 GitLab's side is made on GitLab's own pages: its app or bot, and the

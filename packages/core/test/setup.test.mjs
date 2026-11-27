@@ -6,7 +6,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { BARE, canOpenBrowser, openInBrowser, readEnvFile, saveEnv } from '../dist/setup.js';
+import { BARE, canOpenBrowser, envFileOf, openInBrowser, readEnvFile, saveEnv } from '../dist/setup.js';
 
 test("a page is opened only where the browser would be the person's own", () => {
   assert.equal(canOpenBrowser({}, 'darwin'), true);
@@ -91,4 +91,17 @@ test('a value with a "~" is saved as it is, except where a shell would read the 
   assert.deepEqual(await readEnvFile(envFile), { KEPT: 'as-it-was', SECRET: 'abc8Q~def-GHI_jkl.mno' });
   assert.deepEqual(out, [`+ saved SECRET to ${envFile}`]);
   assert.deepEqual(err, [`! HOME_LIKE wasn't saved to ${envFile}: its value needs quoting there. Add it yourself.`]);
+});
+
+test('the env file is --dotenv; --env-file still names it, and says so', () => {
+  const said = [];
+  const say = (line) => said.push(line);
+  assert.equal(envFileOf({ dotenv: '.env.local' }, say), '.env.local');
+  assert.equal(envFileOf({}, say), undefined);
+  assert.deepEqual(said, []);
+  assert.equal(envFileOf({ 'env-file': '.env' }, say), '.env');
+  // Both: --dotenv is the one.
+  assert.equal(envFileOf({ dotenv: '.env.local', 'env-file': '.env' }, say), '.env.local');
+  assert.equal(said.length, 2);
+  assert.match(said[0], /--env-file is now --dotenv/);
 });

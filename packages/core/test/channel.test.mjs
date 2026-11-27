@@ -157,7 +157,7 @@ async function commands(t, setup, file = 'TELEGRAM_BOT_TOKEN=110:made-up\n') {
   const pointed = [];
   const run = async (argv, { env = {}, fetch = api.fetch, withFile = true, ...io } = {}) => {
     const said = [];
-    const code = await set.cli([...argv, ...(withFile ? ['--env-file', envFile] : [])], {
+    const code = await set.cli([...argv, ...(withFile ? ['--dotenv', envFile] : [])], {
       out: (line) => said.push(line),
       err: (line) => said.push(line),
       env: { VOICEFLOW_API_KEY: VF_KEY, VOICEFLOW_PROJECT_ID: 'proj1', VOICEFLOW_ENVIRONMENT: 'development', ...env },
@@ -306,7 +306,7 @@ test('the platform is given the address with the secret connect just made, and n
   assert.equal(early.code, 3, early.said);
   assert.match(
     early.said,
-    /Telegram isn't connected here yet: run `voiceflow-channels connect telegram --env-file .*` first\. It makes HOOK_SECRET and saves it there\./,
+    /Telegram isn't connected here yet: run `voiceflow-channels connect telegram --dotenv .*` first\. It makes HOOK_SECRET and saves it there\./,
   );
   assert.deepEqual(given, [], 'and the platform was given nothing');
 
@@ -417,7 +417,7 @@ test('--help says the same commands for every channel, and a flag that makes no 
   const help = await c.run(['--help'], { withFile: false });
   assert.equal(help.code, 0);
   for (const line of [
-    'voiceflow-channels connect telegram --env-file <path>',
+    'voiceflow-channels connect telegram --dotenv <path>',
     'voiceflow-channels point telegram --public-url',
     'voiceflow-channels disconnect telegram',
     '--dry-run',

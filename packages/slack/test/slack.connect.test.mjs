@@ -769,7 +769,7 @@ async function runCli(
   return { code, out: out.join('\n'), err: err.join('\n'), slack, vf, dir, asked };
 }
 /** The command with only the server's address and its env file: what the starter's connect script runs. */
-const FROM_FILE = ['connect', '--public-url', 'https://bot.example.com', '--port', '0', '--yes', '--env-file', '.env.local'];
+const FROM_FILE = ['connect', '--public-url', 'https://bot.example.com', '--port', '0', '--yes', '--dotenv', '.env.local'];
 const CONNECT = ['connect', '--project', 'proj1', '--environment', 'sdk-test', '--public-url', 'https://bot.example.com', '--port', '0', '--yes'];
 /** No part of a secret long enough to matter: a cut error could leave most of one. */
 const noPartOf = (text, secret) => {
@@ -796,7 +796,7 @@ test("Slack's app API repeating the login back never puts it in the error, even 
 });
 
 test('the command prints its plan and its result without a secret, and saves the credentials only where asked', async (t) => {
-  const { code, out, err, dir } = await runCli(t, [...CONNECT, '--env-file', '.env.local']);
+  const { code, out, err, dir } = await runCli(t, [...CONNECT, '--dotenv', '.env.local']);
   assert.equal(code, 0, err);
   assert.match(out, /\+ create app "Spike" from the manifest/);
   assert.match(out, /Connected: Slack app A1, bot user UBOT\./);
@@ -1001,7 +1001,7 @@ test('an env file is read as servers read one: export, quotes and comments, and 
 
 test('a person is asked only once the command can go ahead, and their answer to the plan decides', async (t) => {
   // No address to point at: that's said first, before any question.
-  const noUrl = await runCli(t, ['point', '--env-file', '.env.local'], { env: {}, answers: {} });
+  const noUrl = await runCli(t, ['point', '--dotenv', '.env.local'], { env: {}, answers: {} });
   assert.equal(noUrl.code, 2);
   assert.match(noUrl.err, /Missing --public-url/);
   assert.deepEqual(noUrl.asked, []);

@@ -15,7 +15,19 @@ import { contextVariables } from './channel.js';
 import { NeedsYou } from './errors.js';
 import { checkProject, installTools, memoryRecordStore } from './install.js';
 import { createRedactor } from './redact.js';
-import { hidden, previewPublish, publishStep, question, readEnvFile, resolveAgent, type Say, saveEnv, voiceflowKey } from './setup.js';
+import {
+  ENV_FILE_FLAGS,
+  envFileOf,
+  hidden,
+  previewPublish,
+  publishStep,
+  question,
+  readEnvFile,
+  resolveAgent,
+  type Say,
+  saveEnv,
+  voiceflowKey,
+} from './setup.js';
 
 interface EnvVar {
   key: string;
@@ -131,28 +143,28 @@ export function channelCommands(slug: string, setup: ChannelSetup = {}): Channel
     .map((v) => v.key)
     .concat((setup.settings ?? []).filter((v) => v.make).map((v) => v.key));
   const usage = `Usage:
-  voiceflow-channels connect ${slug} --env-file <path> [--public-url <https://host>] [options]
-  voiceflow-channels point ${slug} --public-url <https://host> [--env-file <path>]
+  voiceflow-channels connect ${slug} --dotenv <path> [--public-url <https://host>] [options]
+  voiceflow-channels point ${slug} --public-url <https://host> [--dotenv <path>]
   voiceflow-channels disconnect ${slug}
 
 Connect sets up ${platform} for your Voiceflow agent. ${platform}'s side (its
 app or bot, and the settings below) is made on ${platform}'s own pages:
   ${guide}
-Connect checks those settings are in --env-file or the environment, and says
+Connect checks those settings are in --dotenv or the environment, and says
 what each missing one is. It creates the ${slug}_* variables on your agent,
-writes the Voiceflow values to --env-file, and ${setup.point ? `gives ${platform} your server's address` : `says what address to give ${platform}`}.
+writes the Voiceflow values to --dotenv, and ${setup.point ? `gives ${platform} your server's address` : `says what address to give ${platform}`}.
 It shows the plan and asks before changing anything.${
     (setup.settings ?? []).some((v) => v.make)
       ? `\n\nOne secret is yours to choose, and connect makes it: ${(setup.settings ?? [])
           .filter((v) => v.make)
           .map((v) => v.key)
-          .join(', ')}, saved to --env-file.`
+          .join(', ')}, saved to --dotenv.`
       : ''
   }
 
 Your Voiceflow API key, project and environment come from the flags below,
 then VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID and VOICEFLOW_ENVIRONMENT in the
-environment, then --env-file; a person is asked for what's left.
+environment, then --dotenv; a person is asked for what's left.
 
 Point ${setup.point ? `gives ${platform} another address` : `says the address to give ${platform}`}, and changes nothing else:
 \`voiceflow-channels dev\` runs it on each start. Disconnect ${setup.remove ? `has ${platform} stop sending to your server` : `says where ${platform}'s side is taken out`}.
@@ -171,7 +183,7 @@ Options:
                           so a server that's down or has no ${platform} route is said
   --no-variables          create no variables on the agent (then pass
                           context: false to ${slug}() on your server)
-  --env-file <path>       your server's env file
+  --dotenv <path>         your server's env file
   --key-file <path>       a file holding only the Voiceflow API key
   --publish               publish the environment once the variables are on its
                           draft, without asking: its whole draft goes live
@@ -198,7 +210,7 @@ Options:
         'local-url': { type: 'string' },
         'from-dev': { type: 'boolean', default: false },
         'no-variables': { type: 'boolean', default: false },
-        'env-file': { type: 'string' },
+        ...ENV_FILE_FLAGS,
         'key-file': { type: 'string' },
         'dry-run': { type: 'boolean', default: false },
         yes: { type: 'boolean', default: false },
@@ -225,7 +237,7 @@ Options:
       err(`${platform} sends only to an https address, and "${requestUrl}" isn't one.`);
       return 2;
     }
-    const envFile = o['env-file'];
+    const envFile = envFileOf(o, err);
     const inFile = envFile ? await readEnvFile(envFile) : {};
     const value = (key: string) => io.env[key] || inFile[key];
     secrets.add(inFile.VOICEFLOW_API_KEY, ...secretKeys.map(value));
@@ -237,7 +249,7 @@ Options:
     const making = toMake(has, setup);
     if (!envFile) lacking.push(...making.splice(0).map((v) => ({ key: v.key, description: `${v.description} Any long random text of your own.` })));
     const notConnected = () =>
-      `${platform} isn't connected here yet: run \`voiceflow-channels connect ${slug} --env-file ${envFile}\` first. It makes ${making.map((v) => v.key).join(' and ')} and saves ${making.length === 1 ? 'it' : 'them'} there.`;
+      `${platform} isn't connected here yet: run \`voiceflow-channels connect ${slug} --dotenv ${envFile}\` first. It makes ${making.map((v) => v.key).join(' and ')} and saves ${making.length === 1 ? 'it' : 'them'} there.`;
     const lackingText = () =>
       `${platform} isn't set up here yet. ${lacking.length === 1 ? 'One setting is' : 'These settings are'} missing ${where}:\n${lacking
         .map((v) => `  ${v.key}=…   ${v.description}${v.oneOf ? ` (or sign in another way: ${v.oneOf})` : ''}`)

@@ -8,7 +8,7 @@ A Voiceflow agent in Instagram, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect instagram --env-file .env.local
+npx voiceflow-channels connect instagram --dotenv .env.local
 ```
 
 Instagram's side is made on Instagram's own pages: its app or bot, and the

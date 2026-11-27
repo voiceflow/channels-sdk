@@ -1,10 +1,10 @@
 // The command line for `connect discord`, `point discord` and `disconnect discord`:
 //
-//   npx voiceflow-channels connect discord --env-file .env.local
+//   npx voiceflow-channels connect discord --dotenv .env.local
 //
 // Secrets never reach the screen or the command line: the Voiceflow API key
 // and the Discord bot token are each read from a file that holds only it,
-// the environment, your server's env file (--env-file) or a hidden prompt.
+// the environment, your server's env file (--dotenv) or a hidden prompt.
 // The bot token goes only to Discord and to that env file, written readable
 // by you alone, and never to Voiceflow.
 // Every line this prints, an error's included, is first cleaned of the secrets
@@ -15,6 +15,8 @@ import { createRedactor, NeedsYou } from '@voiceflow/channels-sdk';
 import { checkProject } from '@voiceflow/channels-sdk/install';
 import {
   canOpenBrowser,
+  ENV_FILE_FLAGS,
+  envFileOf,
   hidden,
   iconUrl,
   openInBrowser,
@@ -47,9 +49,9 @@ import {
 } from './connect.js';
 
 const USAGE = `Usage:
-  voiceflow-channels connect discord [--public-url <https://host>] [--env-file <path>] [options]
-  voiceflow-channels point discord --public-url <https://host> [--env-file <path>]
-  voiceflow-channels disconnect discord [--env-file <path>] [--yes]
+  voiceflow-channels connect discord [--public-url <https://host>] [--dotenv <path>] [options]
+  voiceflow-channels point discord --public-url <https://host> [--dotenv <path>]
+  voiceflow-channels disconnect discord [--dotenv <path>] [--yes]
 
 Connect sets up a Discord bot for your Voiceflow agent. Discord has no way to
 make an application from here, so that one step is by hand: connect opens
@@ -62,10 +64,10 @@ gives you the link that adds the bot to a server. It shows the plan and asks
 before changing anything.
 
 The bot token comes from --token-file, then DISCORD_BOT_TOKEN in the
-environment, then the same name in --env-file; a person is asked for it in a
+environment, then the same name in --dotenv; a person is asked for it in a
 hidden prompt. Your Voiceflow API key, project and environment come the same
 way: the flags below, VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID and
-VOICEFLOW_ENVIRONMENT, then --env-file.
+VOICEFLOW_ENVIRONMENT, then --dotenv.
 
 Discord sends what people write over a standing connection, and slash
 commands and button clicks to an address. Without --public-url, connect is
@@ -109,7 +111,7 @@ Options:
   --no-greeting           don't have the bot message you in Discord once it's in one
   --no-variables          create no variables on the agent (then pass
                           context: false to discord() on your server)
-  --env-file <path>       your server's env file. Connect reads the bot token and
+  --dotenv <path>         your server's env file. Connect reads the bot token and
                           the Voiceflow values from it, and writes to it
                           DISCORD_PUBLIC_KEY, DISCORD_APPLICATION_ID and any value
                           it had to ask for. A value already there is never changed
@@ -197,7 +199,7 @@ async function run(
       // Set by `voiceflow-channels dev` when it runs connect itself: the server starts next, so nobody is told to start it.
       'from-dev': { type: 'boolean', default: false },
       'no-variables': { type: 'boolean', default: false },
-      'env-file': { type: 'string' },
+      ...ENV_FILE_FLAGS,
       'token-file': { type: 'string' },
       'key-file': { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
@@ -251,7 +253,7 @@ async function run(
     return 2;
   }
 
-  const envFile = o['env-file'];
+  const envFile = envFileOf(o, err);
   const inFile = envFile ? await readEnvFile(envFile) : {};
   secrets.add(inFile.VOICEFLOW_API_KEY, inFile.DISCORD_BOT_TOKEN);
   const interactive = io.interactive ?? Boolean(process.stdin.isTTY);
@@ -455,7 +457,7 @@ ${
   const left = result.problems;
   if (left.length) {
     err(
-      `\n${left.join('\n\n')}${result.endpoint === 'refused' ? `\n\nOnce it's running there:\n\n  voiceflow-channels point discord --public-url ${o['public-url'] ?? '<https://host>'}${envFile ? ` --env-file ${envFile}` : ''}` : ''}`,
+      `\n${left.join('\n\n')}${result.endpoint === 'refused' ? `\n\nOnce it's running there:\n\n  voiceflow-channels point discord --public-url ${o['public-url'] ?? '<https://host>'}${envFile ? ` --dotenv ${envFile}` : ''}` : ''}`,
     );
     return 3;
   }
@@ -492,7 +494,7 @@ async function botToken(from: {
   const where = from.envFile ? `in ${from.envFile}` : 'in the environment';
   if (from.connected)
     throw new NeedsYou(
-      `No DISCORD_BOT_TOKEN ${where}. Run connect first: voiceflow-channels connect discord${from.envFile ? ` --env-file ${from.envFile}` : ''}.`,
+      `No DISCORD_BOT_TOKEN ${where}. Run connect first: voiceflow-channels connect discord${from.envFile ? ` --dotenv ${from.envFile}` : ''}.`,
     );
   if (!from.interactive) {
     throw new NeedsYou(
@@ -534,7 +536,7 @@ export async function listen(
   const absent = ['DISCORD_BOT_TOKEN', 'DISCORD_PUBLIC_KEY', 'DISCORD_APPLICATION_ID'].filter((name) => !get(name));
   if (absent.length) {
     throw new NeedsYou(
-      `No ${absent.join(', ')}${options.envFile ? ` here or in ${options.envFile}` : ' in the environment'}. Run connect first: voiceflow-channels connect discord${options.envFile ? ` --env-file ${options.envFile}` : ''}.`,
+      `No ${absent.join(', ')}${options.envFile ? ` here or in ${options.envFile}` : ' in the environment'}. Run connect first: voiceflow-channels connect discord${options.envFile ? ` --dotenv ${options.envFile}` : ''}.`,
     );
   }
   const webhookUrl = `${options.localUrl.replace(/\/+$/, '')}${WEBHOOK_PATH}`;

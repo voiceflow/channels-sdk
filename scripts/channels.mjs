@@ -249,7 +249,7 @@ A Voiceflow agent in ${name}, with one command to set it up.
 ## Connect
 
 \`\`\`bash
-npx voiceflow-channels connect ${slug} --env-file .env.local
+npx voiceflow-channels connect ${slug} --dotenv .env.local
 \`\`\`
 
 ${name}'s side is made on ${name}'s own pages: its app or bot, and the
