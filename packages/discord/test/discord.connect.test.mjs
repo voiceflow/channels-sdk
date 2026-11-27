@@ -99,7 +99,7 @@ test('the plan says everything it would do, and changes nothing', async (t) => {
   const s = await setup();
   t.after(s.fake.close);
   const before = await readFile(s.envFile, 'utf8');
-  const r = await s.run(['connect', '--env-file', s.envFile, '--dry-run']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--dry-run']);
   assert.equal(r.code, 0, r.all);
   assert.match(r.out, /Discord: app "Support Bot" \(111111111111111111\), bot support-bot/);
   assert.match(r.out, /~ name the bot "Spike", your agent's name in Voiceflow \(it is "support-bot" now; --name keep leaves it\)/);
@@ -119,7 +119,7 @@ test('the plan says everything it would do, and changes nothing', async (t) => {
 test('without --yes and with nobody to ask, it shows the plan and changes nothing', async (t) => {
   const s = await setup();
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile]);
+  const r = await s.run(['connect', '--dotenv', s.envFile]);
   assert.equal(r.code, 0);
   assert.match(r.err, /Nothing was changed: run it again with --yes/);
   assert.deepEqual(s.writes(), []);
@@ -128,7 +128,7 @@ test('without --yes and with nobody to ask, it shows the plan and changes nothin
 test('from a bot token, connect does the rest', async (t) => {
   const s = await setup();
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   assert.equal(r.code, 0, r.all);
   // The intent that lets the bot read messages, turned on without the portal.
   assert.equal(s.fake.state.app.flags & APP_FLAGS.GATEWAY_MESSAGE_CONTENT_LIMITED, APP_FLAGS.GATEWAY_MESSAGE_CONTENT_LIMITED);
@@ -175,7 +175,7 @@ test('from a bot token, connect does the rest', async (t) => {
   // Run again: everything is there, and nothing is written anywhere.
   s.fake.taken();
   const wrote = s.voiceflow.writes().length;
-  const again = await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  const again = await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   assert.equal(again.code, 0, again.all);
   assert.match(again.out, /= the Message Content intent is on/);
   assert.match(again.out, /= the \/ask command is there/);
@@ -187,7 +187,7 @@ test('from a bot token, connect does the rest', async (t) => {
 test('with nobody there and nothing set, it stops once and says everything it waits on', async (t) => {
   const s = await setup({ file: null });
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile]);
+  const r = await s.run(['connect', '--dotenv', s.envFile]);
   assert.equal(r.code, 3);
   assert.match(r.err, /No Voiceflow project/);
   assert.match(r.err, /No Voiceflow environment/);
@@ -206,7 +206,7 @@ test('with nobody there and nothing set, it stops once and says everything it wa
   // With the agent known, the stop says what to name the application: there is no way to fill it in for them.
   const known = await setup({ file: { VOICEFLOW_API_KEY: VF_KEY, VOICEFLOW_PROJECT_ID: PROJECT.id, VOICEFLOW_ENVIRONMENT: 'development' } });
   t.after(known.fake.close);
-  const r2 = await known.run(['connect', '--env-file', known.envFile]);
+  const r2 = await known.run(['connect', '--dotenv', known.envFile]);
   assert.equal(r2.code, 3);
   assert.match(r2.err, /Name it "Spike": that name shows on the page that adds the bot/);
   assert.deepEqual(known.opened, []);
@@ -216,7 +216,7 @@ test('a person is shown the steps and asked for the token unseen, and it is save
   const s = await setup({ file: { VOICEFLOW_API_KEY: VF_KEY, VOICEFLOW_PROJECT_ID: PROJECT.id, VOICEFLOW_ENVIRONMENT: 'development' } });
   t.after(s.fake.close);
   const asked = [];
-  const r = await s.run(['connect', '--env-file', s.envFile], {
+  const r = await s.run(['connect', '--dotenv', s.envFile], {
     interactive: true,
     secret: async (q) => (asked.push(q), BOT_TOKEN),
     ask: async (q) => (asked.push(q), 'y'),
@@ -235,7 +235,7 @@ test('a person is shown the steps and asked for the token unseen, and it is save
   // A person who says no changes nothing.
   const t2 = await setup();
   t.after(t2.fake.close);
-  const no = await t2.run(['connect', '--env-file', t2.envFile], { interactive: true, ask: async () => 'n' });
+  const no = await t2.run(['connect', '--dotenv', t2.envFile], { interactive: true, ask: async () => 'n' });
   assert.equal(no.code, 0);
   assert.deepEqual(t2.writes(), []);
 });
@@ -246,7 +246,7 @@ test('a page is opened only for a person who is there, when not told otherwise, 
   // --no-open: the links are printed, and nothing is opened.
   const quiet = await setup({ file: agent });
   t.after(quiet.fake.close);
-  const r = await quiet.run(['connect', '--env-file', quiet.envFile, '--no-open'], person);
+  const r = await quiet.run(['connect', '--dotenv', quiet.envFile, '--no-open'], person);
   assert.equal(r.code, 0, r.all);
   assert.deepEqual(quiet.opened, []);
   assert.ok(r.out.includes(`1. Make the application: ${NEW_APPLICATION}`), r.out);
@@ -255,7 +255,7 @@ test('a page is opened only for a person who is there, when not told otherwise, 
   // A bot that is in a server already: the link is there to add it to another, and no page is opened for it.
   const there = await setup({ api: { servers: 2 } });
   t.after(there.fake.close);
-  const r2 = await there.run(['connect', '--env-file', there.envFile], person);
+  const r2 = await there.run(['connect', '--dotenv', there.envFile], person);
   assert.equal(r2.code, 0, r2.all);
   assert.deepEqual(there.opened, []);
   assert.match(r2.out, /To add the bot to a server: open this link, pick the server, and authorize\./);
@@ -263,7 +263,7 @@ test('a page is opened only for a person who is there, when not told otherwise, 
   // --server: the page opens with that server chosen.
   const chosen = await setup();
   t.after(chosen.fake.close);
-  const r3 = await chosen.run(['connect', '--env-file', chosen.envFile, '--server', '222222222222222222'], person);
+  const r3 = await chosen.run(['connect', '--dotenv', chosen.envFile, '--server', '222222222222222222'], person);
   assert.equal(r3.code, 0, r3.all);
   assert.deepEqual(chosen.opened, [`${installLink(APP_ID)}&guild_id=222222222222222222`]);
   assert.ok(r3.out.includes(`${installLink(APP_ID)}&guild_id=222222222222222222`));
@@ -272,7 +272,7 @@ test('a page is opened only for a person who is there, when not told otherwise, 
   // A browser that can't be opened is no failure: the link is printed, as for a script.
   const none = await setup({ file: agent });
   t.after(none.fake.close);
-  const r4 = await none.run(['connect', '--env-file', none.envFile], { ...person, open: async () => false });
+  const r4 = await none.run(['connect', '--dotenv', none.envFile], { ...person, open: async () => false });
   assert.equal(r4.code, 0, r4.all);
   assert.ok(r4.out.includes(`1. Make the application: ${NEW_APPLICATION}`), r4.out);
   assert.match(r4.out, /Add it to one: open this link, pick the server, and authorize\./);
@@ -283,7 +283,7 @@ test('a person is waited for until the bot is in a server, and then the bot mess
   // Someone adds the bot while connect waits: on its third look after connecting.
   const s = await setup({ api: { joinsAfter: 3 } });
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile], person);
+  const r = await s.run(['connect', '--dotenv', s.envFile], person);
   assert.equal(r.code, 0, r.all);
   assert.match(r.out, /\+ once it's in one, the bot messages you in Discord to say it's connected/);
   assert.match(r.out, /Waiting for the bot to be added to a server\. Ctrl-C stops the waiting, and loses nothing\./);
@@ -305,7 +305,7 @@ test('a person is waited for until the bot is in a server, and then the bot mess
   // Nobody adds it: the wait ends by itself, says so, and the run is still a success.
   const never = await setup();
   t.after(never.fake.close);
-  const r2 = await never.run(['connect', '--env-file', never.envFile], person);
+  const r2 = await never.run(['connect', '--dotenv', never.envFile], person);
   assert.equal(r2.code, 0, r2.all);
   assert.match(r2.out, /· The bot is in no server yet\. The link above adds it, when you're ready\./);
   assert.ok(never.fake.state.looks > 100, 'it gave up after a few looks');
@@ -314,13 +314,13 @@ test('a person is waited for until the bot is in a server, and then the bot mess
   // --no-wait: no waiting. --no-greeting: it waits, says where the bot is, and the bot says nothing.
   const quick = await setup({ api: { joinsAfter: 3 } });
   t.after(quick.fake.close);
-  const r3 = await quick.run(['connect', '--env-file', quick.envFile, '--no-wait'], person);
+  const r3 = await quick.run(['connect', '--dotenv', quick.envFile, '--no-wait'], person);
   assert.equal(r3.code, 0, r3.all);
   assert.doesNotMatch(r3.out, /Waiting for the bot|messages you in Discord/);
   assert.equal(quick.fake.state.looks, 1);
   const silent = await setup({ api: { joinsAfter: 3 } });
   t.after(silent.fake.close);
-  const r4 = await silent.run(['connect', '--env-file', silent.envFile, '--no-greeting'], person);
+  const r4 = await silent.run(['connect', '--dotenv', silent.envFile, '--no-greeting'], person);
   assert.match(r4.out, /\+ Spike is in Acme HQ/);
   assert.doesNotMatch(r4.out, /messages you in Discord|messaged you/);
   assert.ok(!silent.fake.state.calls.some((c) => c.path === '/users/@me/channels'));
@@ -328,7 +328,7 @@ test('a person is waited for until the bot is in a server, and then the bot mess
   // A person who doesn't take messages from a server's members: said, and no failure.
   const closed = await setup({ api: { joinsAfter: 3, denyDm: true } });
   t.after(closed.fake.close);
-  const r5 = await closed.run(['connect', '--env-file', closed.envFile], person);
+  const r5 = await closed.run(['connect', '--dotenv', closed.envFile], person);
   assert.equal(r5.code, 0, r5.all);
   assert.match(r5.out, /· Spike couldn't message you in Discord: your privacy settings don't let a server's members message you\./);
 });
@@ -338,7 +338,7 @@ test('run from dev, connect says the server starts next, and dev can tell whethe
   t.after(s.fake.close);
   // Before connect, the env file has the token and no more: the bot isn't connected from here.
   assert.equal(await connected({ envFile: s.envFile, env: {} }), false);
-  const r = await s.run(['connect', '--from-dev', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['connect', '--from-dev', '--dotenv', s.envFile, '--yes']);
   assert.equal(r.code, 0, r.all);
   assert.match(r.out, /Your server starts next: dev holds the connection Discord sends messages over/);
   assert.doesNotMatch(r.out, /Then start your server with/);
@@ -353,7 +353,7 @@ test('a key or a project that is wrong is said before anyone is sent to make an 
   const s = await setup({ file: { VOICEFLOW_API_KEY: 'VF.DM.not-the-key', VOICEFLOW_PROJECT_ID: PROJECT.id, VOICEFLOW_ENVIRONMENT: 'development' } });
   t.after(s.fake.close);
   let asked = 0;
-  const r = await s.run(['connect', '--env-file', s.envFile], { interactive: true, secret: async () => (asked++, BOT_TOKEN), ask: async () => 'y' });
+  const r = await s.run(['connect', '--dotenv', s.envFile], { interactive: true, secret: async () => (asked++, BOT_TOKEN), ask: async () => 'y' });
   assert.equal(r.code, 1, r.all);
   assert.equal(asked, 0, 'the token was asked for with a key that does not work');
   assert.deepEqual(s.opened, []);
@@ -366,7 +366,7 @@ test('a token that came from somewhere else is never copied into the env file', 
   // From the environment: the server's host sets it there too.
   const s = await setup({ file: agent });
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--yes'], { env: { DISCORD_API_URL: s.fake.apiUrl, DISCORD_BOT_TOKEN: BOT_TOKEN } });
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--yes'], { env: { DISCORD_API_URL: s.fake.apiUrl, DISCORD_BOT_TOKEN: BOT_TOKEN } });
   assert.equal(r.code, 0, r.all);
   assert.equal((await s.env()).DISCORD_BOT_TOKEN, undefined);
   assert.equal((await s.env()).DISCORD_PUBLIC_KEY, s.fake.publicKey);
@@ -378,7 +378,7 @@ test('a token that came from somewhere else is never copied into the env file', 
   t.after(f.fake.close);
   const tokenFile = join(f.envFile, '..', 'token');
   await writeFile(tokenFile, `${BOT_TOKEN}\n`);
-  const fromFile = await f.run(['connect', '--env-file', f.envFile, '--token-file', tokenFile, '--yes']);
+  const fromFile = await f.run(['connect', '--dotenv', f.envFile, '--token-file', tokenFile, '--yes']);
   assert.equal(fromFile.code, 0, fromFile.all);
   assert.ok(!(await readFile(f.envFile, 'utf8')).includes(BOT_TOKEN));
   assert.ok(!fromFile.all.includes(BOT_TOKEN));
@@ -389,7 +389,7 @@ test('a token Discord refuses is said plainly, and nothing is changed', async (t
     file: { DISCORD_BOT_TOKEN: 'not-the-bot-token-at-all', VOICEFLOW_API_KEY: VF_KEY, VOICEFLOW_PROJECT_ID: PROJECT.id, VOICEFLOW_ENVIRONMENT: 'development' },
   });
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   assert.equal(r.code, 1);
   assert.match(r.err, /Discord refused the bot token \(401\)\. Copy it again/);
   assert.ok(!r.all.includes('not-the-bot-token-at-all'));
@@ -421,7 +421,7 @@ test("an agent's name becomes a bot name Discord takes", () => {
 test("a new bot takes the agent's name, and Voiceflow's icon when the agent has no avatar", async (t) => {
   const s = await setup();
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   assert.equal(r.code, 0, r.all);
   assert.equal(s.fake.state.app.bot.username, 'Spike');
   assert.match(r.out, /~ named the bot "Spike"/);
@@ -436,9 +436,9 @@ test("a new bot takes the agent's name, and Voiceflow's icon when the agent has 
 test("the agent's avatar is the bot's picture, and Voiceflow's icon stands in when Discord won't take it", async (t) => {
   const s = await setup(withAvatar());
   t.after(s.fake.close);
-  const plan = await s.run(['connect', '--env-file', s.envFile, '--dry-run']);
+  const plan = await s.run(['connect', '--dotenv', s.envFile, '--dry-run']);
   assert.ok(plan.out.includes(`+ set the bot's picture to the agent's avatar in Voiceflow (Voiceflow's icon if Discord won't take it): ${AVATAR}`), plan.out);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   assert.equal(r.code, 0, r.all);
   assert.equal(s.fake.state.pictures.avatar, dataOf(PNG_BYTES));
   assert.equal(s.fake.state.pictures.icon, dataOf(PNG_BYTES));
@@ -447,7 +447,7 @@ test("the agent's avatar is the bot's picture, and Voiceflow's icon stands in wh
   // An avatar Discord refuses: the bot isn't left with Discord's blank one, and it is said. Nothing waits on anyone.
   const refused = await setup(withAvatar({ api: { takesAvatar: (data) => data !== dataOf(PNG_BYTES) } }));
   t.after(refused.fake.close);
-  const r2 = await refused.run(['connect', '--env-file', refused.envFile, '--yes']);
+  const r2 = await refused.run(['connect', '--dotenv', refused.envFile, '--yes']);
   assert.equal(r2.code, 0, r2.all);
   assert.equal(refused.fake.state.pictures.avatar, dataOf(VOICEFLOW_ICON));
   assert.match(
@@ -459,7 +459,7 @@ test("the agent's avatar is the bot's picture, and Voiceflow's icon stands in wh
   // An avatar that can't be downloaded is the same.
   const gone = await setup(withAvatar({ images: { [AVATAR]: { bytes: new Uint8Array(), type: 'text/html', status: 404 } } }));
   t.after(gone.fake.close);
-  const r3 = await gone.run(['connect', '--env-file', gone.envFile, '--yes']);
+  const r3 = await gone.run(['connect', '--dotenv', gone.envFile, '--yes']);
   assert.equal(r3.code, 0, r3.all);
   assert.equal(gone.fake.state.pictures.avatar, dataOf(VOICEFLOW_ICON));
   assert.match(r3.out, /it couldn't be downloaded \(HTTP 404\)/);
@@ -481,7 +481,7 @@ test('a bot connected before keeps its name and its picture, unless you name the
   };
   const s = await setup(withAvatar({ api: before }));
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   assert.equal(r.code, 0, r.all);
   assert.equal(s.fake.state.app.bot.username, 'support-bot');
   assert.ok(!/name the bot|the bot's picture/.test(r.out), r.out);
@@ -491,7 +491,7 @@ test('a bot connected before keeps its name and its picture, unless you name the
   const NEW = 'https://cdn.example.com/new.gif';
   const named = await setup(withAvatar({ api: before, images: { [NEW]: { bytes: PNG_BYTES, type: 'image/gif' } } }));
   t.after(named.fake.close);
-  const r2 = await named.run(['connect', '--env-file', named.envFile, '--name', 'Helper', '--icon', NEW, '--yes']);
+  const r2 = await named.run(['connect', '--dotenv', named.envFile, '--name', 'Helper', '--icon', NEW, '--yes']);
   assert.equal(r2.code, 0, r2.all);
   assert.match(r2.out, /~ name the bot "Helper" \(it is "support-bot" now\)/);
   assert.ok(r2.out.includes(`+ set the bot's picture to the image: ${NEW}`));
@@ -502,7 +502,7 @@ test('a bot connected before keeps its name and its picture, unless you name the
   // And a new bot is left as it is when you say so.
   const kept = await setup(withAvatar());
   t.after(kept.fake.close);
-  const r3 = await kept.run(['connect', '--env-file', kept.envFile, '--name', 'keep', '--icon', 'none', '--yes']);
+  const r3 = await kept.run(['connect', '--dotenv', kept.envFile, '--name', 'keep', '--icon', 'none', '--yes']);
   assert.equal(r3.code, 0, r3.all);
   assert.equal(kept.fake.state.app.bot.username, 'support-bot');
   assert.equal(kept.fake.state.pictures.avatar, null);
@@ -512,7 +512,7 @@ test('a bot connected before keeps its name and its picture, unless you name the
 test("a name Discord won't take is said, and connect does everything else", async (t) => {
   const s = await setup({ api: { denyName: true } });
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   // The bot works under any name: nothing waits on anyone.
   assert.equal(r.code, 0, r.all);
   assert.match(
@@ -528,7 +528,7 @@ test("a name Discord won't take is said, and connect does everything else", asyn
   // A picture that is the bot's but not the application's is said too.
   const icon = await setup({ api: { takesIcon: () => false } });
   t.after(icon.fake.close);
-  const r2 = await icon.run(['connect', '--env-file', icon.envFile, '--yes']);
+  const r2 = await icon.run(['connect', '--dotenv', icon.envFile, '--yes']);
   assert.equal(r2.code, 0, r2.all);
   assert.equal(icon.fake.state.pictures.avatar, dataOf(VOICEFLOW_ICON));
   assert.match(r2.out, /The bot has its picture, but Discord didn't take it as the application's icon/);
@@ -538,7 +538,7 @@ test('with --public-url Discord is given the address, and checks it', async (t) 
   const asked = [];
   const s = await setup({ api: { verify: (url) => (asked.push(url), true) } });
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--public-url', `${PUBLIC}/`, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--public-url', `${PUBLIC}/`, '--yes']);
   assert.equal(r.code, 0, r.all);
   assert.deepEqual(asked, [`${PUBLIC}/api/discord`]);
   assert.equal(s.fake.state.app.interactions_endpoint_url, `${PUBLIC}/api/discord`);
@@ -549,27 +549,27 @@ test('with --public-url Discord is given the address, and checks it', async (t) 
 test("an address Discord can't verify leaves everything else done, and says how to finish", async (t) => {
   const s = await setup({ api: { verify: () => false } });
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--public-url', PUBLIC, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--public-url', PUBLIC, '--yes']);
   assert.equal(r.code, 3, r.all);
   assert.equal(s.fake.state.commands.length, 1);
   assert.equal(s.voiceflow.state.variables.length, VARIABLES);
   assert.equal((await s.env()).DISCORD_PUBLIC_KEY, s.fake.publicKey);
   assert.match(r.err, /Discord couldn't verify https:\/\/bot\.example\.com\/api\/discord/);
   assert.match(r.err, /could not be verified/);
-  assert.ok(r.err.includes(`voiceflow-channels point discord --public-url ${PUBLIC} --env-file ${s.envFile}`));
+  assert.ok(r.err.includes(`voiceflow-channels point discord --public-url ${PUBLIC} --dotenv ${s.envFile}`));
 });
 
 test('a mistake in the command is said as one, before anything is asked or changed', async (t) => {
   const s = await setup();
   t.after(s.fake.close);
   for (const argv of [
-    ['connect', '--public-url', 'http://bot.example.com', '--env-file', s.envFile],
-    ['connect', '--command', '/Ask Me', '--env-file', s.envFile],
-    ['connect', '--publish', '--no-publish', '--env-file', s.envFile],
-    ['connect', '--icon', 'agent.png', '--env-file', s.envFile],
-    ['connect', '--server', 'my-server', '--env-file', s.envFile],
-    ['connect', '--name', '  ', '--env-file', s.envFile],
-    ['point', '--env-file', s.envFile],
+    ['connect', '--public-url', 'http://bot.example.com', '--dotenv', s.envFile],
+    ['connect', '--command', '/Ask Me', '--dotenv', s.envFile],
+    ['connect', '--publish', '--no-publish', '--dotenv', s.envFile],
+    ['connect', '--icon', 'agent.png', '--dotenv', s.envFile],
+    ['connect', '--server', 'my-server', '--dotenv', s.envFile],
+    ['connect', '--name', '  ', '--dotenv', s.envFile],
+    ['point', '--dotenv', s.envFile],
     ['install'],
   ]) {
     const r = await s.run(argv);
@@ -593,13 +593,13 @@ test('the command and the variables are each optional, and a changed command is 
     },
   });
   t.after(s.fake.close);
-  const none = await s.run(['connect', '--env-file', s.envFile, '--command', 'none', '--no-variables', '--yes']);
+  const none = await s.run(['connect', '--dotenv', s.envFile, '--command', 'none', '--no-variables', '--yes']);
   assert.equal(none.code, 0, none.all);
   assert.match(none.out, /no variables \(then pass context: false to discord\(\)/);
   assert.deepEqual(s.writes(), []);
   assert.equal(s.voiceflow.state.variables.length, 0);
 
-  const r = await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   assert.equal(r.code, 0, r.all);
   // An intent Discord granted the app is the intent: nothing to turn on.
   assert.match(r.out, /= the Message Content intent is on/);
@@ -613,7 +613,7 @@ test('the command and the variables are each optional, and a changed command is 
 test("an intent Discord won't turn on is left to the person, with where to do it", async (t) => {
   const s = await setup({ api: { denyFlags: true } });
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   assert.equal(r.code, 3, r.all);
   assert.match(r.err, /Discord didn't turn on the Message Content intent/);
   assert.ok(r.err.includes(`https://discord.com/developers/applications/${APP_ID}/bot`));
@@ -624,10 +624,10 @@ test("an intent Discord won't turn on is left to the person, with where to do it
 test('--publish publishes the environment, and only then', async (t) => {
   const s = await setup();
   t.after(s.fake.close);
-  const dry = await s.run(['connect', '--env-file', s.envFile, '--publish', '--dry-run']);
+  const dry = await s.run(['connect', '--dotenv', s.envFile, '--publish', '--dry-run']);
   assert.match(dry.out, /\+ publish development: its whole draft goes live \(--publish\)/);
   assert.equal(s.voiceflow.state.publishes.length, 0);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--publish', '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--publish', '--yes']);
   assert.equal(r.code, 0, r.all);
   assert.deepEqual(s.voiceflow.state.publishes, [
     { environment: 'development', name: 'Discord variables (Channels SDK)', description: 'Published by `voiceflow-channels connect discord --publish`.' },
@@ -637,7 +637,7 @@ test('--publish publishes the environment, and only then', async (t) => {
 test('a project in another workspace stops it before anything is changed', async (t) => {
   const s = await setup();
   t.after(s.fake.close);
-  const r = await s.run(['connect', '--env-file', s.envFile, '--workspace', 'ws-other', '--yes']);
+  const r = await s.run(['connect', '--dotenv', s.envFile, '--workspace', 'ws-other', '--yes']);
   assert.equal(r.code, 1);
   assert.match(r.err, /is in workspace ws1, not ws-other\. Nothing was changed/);
   assert.deepEqual(s.writes(), []);
@@ -659,7 +659,7 @@ test('point asks your server first, then gives Discord the address, and needs no
   const s = await setup({ file: { DISCORD_BOT_TOKEN: BOT_TOKEN } });
   const server = await localServer();
   t.after(() => Promise.all([s.fake.close(), server.close()]));
-  const r = await s.run(['point', '--public-url', PUBLIC, '--local-url', server.url, '--env-file', s.envFile]);
+  const r = await s.run(['point', '--public-url', PUBLIC, '--local-url', server.url, '--dotenv', s.envFile]);
   assert.equal(r.code, 0, r.all);
   assert.deepEqual(server.seen, [{ url: '/api/discord', token: BOT_TOKEN }]);
   assert.match(r.out, /= your server takes Discord's events at http:\/\/127\.0\.0\.1:\d+\/api\/discord, with this bot's token/);
@@ -669,14 +669,14 @@ test('point asks your server first, then gives Discord the address, and needs no
   assert.ok(!r.all.includes(BOT_TOKEN));
 
   // Another address the next time: it's moved, and where it was is said.
-  const moved = await s.run(['point', '--public-url', 'https://next.example.com', '--env-file', s.envFile]);
+  const moved = await s.run(['point', '--public-url', 'https://next.example.com', '--dotenv', s.envFile]);
   assert.match(
     moved.out,
     /~ Discord sends slash commands and buttons to https:\/\/next\.example\.com\/api\/discord \(it sent them to https:\/\/bot\.example\.com\/api\/discord\)/,
   );
   // The same address again changes nothing.
   s.fake.taken();
-  const same = await s.run(['point', '--public-url', 'https://next.example.com', '--env-file', s.envFile]);
+  const same = await s.run(['point', '--public-url', 'https://next.example.com', '--dotenv', s.envFile]);
   assert.match(same.out, /= Discord sends slash commands and buttons to https:\/\/next\.example\.com\/api\/discord/);
   assert.deepEqual(s.writes(), []);
 });
@@ -686,7 +686,7 @@ test("a server that's down, has no route, or runs with another token is said bef
   const other = await localServer('another-bot-token-entirely');
   const broken = await localServer(BOT_TOKEN, 500);
   t.after(() => Promise.all([s.fake.close(), other.close(), broken.close()]));
-  const point = (local, more = []) => s.run(['point', '--public-url', PUBLIC, '--local-url', local, '--env-file', s.envFile, ...more]);
+  const point = (local, more = []) => s.run(['point', '--public-url', PUBLIC, '--local-url', local, '--dotenv', s.envFile, ...more]);
 
   const wrong = await point(other.url);
   assert.equal(wrong.code, 1);
@@ -710,19 +710,19 @@ test("a server that's down, has no route, or runs with another token is said bef
 test('point says when Discord refuses the address, and when the server would refuse Discord', async (t) => {
   const s = await setup({ api: { verify: () => false }, file: { DISCORD_BOT_TOKEN: BOT_TOKEN, DISCORD_PUBLIC_KEY: 'ab'.repeat(32) } });
   t.after(s.fake.close);
-  const refused = await s.run(['point', '--public-url', PUBLIC, '--env-file', s.envFile]);
+  const refused = await s.run(['point', '--public-url', PUBLIC, '--dotenv', s.envFile]);
   assert.equal(refused.code, 1);
   assert.match(refused.err, /Discord couldn't verify https:\/\/bot\.example\.com\/api\/discord/);
 
   s.fake.state.verify = () => true;
-  const taken = await s.run(['point', '--public-url', PUBLIC, '--env-file', s.envFile]);
+  const taken = await s.run(['point', '--public-url', PUBLIC, '--dotenv', s.envFile]);
   assert.equal(taken.code, 0);
   assert.match(taken.err, /DISCORD_PUBLIC_KEY in .* isn't this app's public key/);
 
   // With no token there is nothing to point: connect comes first.
   const none = await setup({ file: null });
   t.after(none.fake.close);
-  const r = await none.run(['point', '--public-url', PUBLIC, '--env-file', none.envFile]);
+  const r = await none.run(['point', '--public-url', PUBLIC, '--dotenv', none.envFile]);
   assert.equal(r.code, 3);
   assert.match(r.err, /No DISCORD_BOT_TOKEN in .*Run connect first/);
 });
@@ -738,11 +738,11 @@ test('disconnect takes back the command and the address, and leaves the rest to 
     },
   });
   t.after(s.fake.close);
-  const plan = await s.run(['disconnect', '--env-file', s.envFile]);
+  const plan = await s.run(['disconnect', '--dotenv', s.envFile]);
   assert.match(plan.out, /- delete the \/ask command/);
   assert.match(plan.out, /the app and its bot stay/);
   assert.deepEqual(s.writes(), []);
-  const r = await s.run(['disconnect', '--env-file', s.envFile, '--yes']);
+  const r = await s.run(['disconnect', '--dotenv', s.envFile, '--yes']);
   assert.equal(r.code, 0, r.all);
   assert.deepEqual(
     s.fake.state.commands.map((c) => c.name),
@@ -805,7 +805,7 @@ function listening(s, { env = {}, localUrl = 'http://127.0.0.1:3000' } = {}) {
 test("listen holds Discord's connection for the server on this machine, with the app's own values", async (t) => {
   const s = await setup({ api: { flags: APP_FLAGS.GATEWAY_MESSAGE_CONTENT_LIMITED } });
   t.after(s.fake.close);
-  await s.run(['connect', '--env-file', s.envFile, '--yes']);
+  await s.run(['connect', '--dotenv', s.envFile, '--yes']);
   const l = listening(s, { env: { DISCORD_RESPOND_TO_CHANNEL_IDS: '1, 2' } });
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(l.started.length, 1);

@@ -18,6 +18,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { parseArgs } from 'node:util';
 import { NeedsYou } from './errors.js';
+import { ENV_FILE_FLAGS, envFileOf } from './setup.js';
 import { startTunnel, type Tunnel, type TunnelHost } from './tunnel.js';
 
 export { checkTunnelTool, startTunnel, TUNNEL_DOCS, TUNNEL_INSTALL_BREW, type Tunnel, type TunnelHost, type TunnelOptions } from './tunnel.js';
@@ -34,7 +35,7 @@ with Ctrl-C: the server and the tunnel stop with it.
 Options:
   --port <n>            your server's port (default: PORT, or 3000); the server's
                         command is started with PORT set to it
-  --env-file <path>     your server's env file, passed on to each channel
+  --dotenv <path>       your server's env file, passed on to each channel
   --public-url <url>    use this address and start no tunnel
   --channel <name>      a channel to point; default: every @voiceflow/channels-*
                         package this app depends on. Repeat it for several
@@ -59,7 +60,7 @@ export interface ChannelCommands {
   /**
    * Whether the channel has been connected from here. When it hasn't, dev is
    * starting the server itself, and a person is there, dev runs the channel's
-   * connect first: `cli(['connect', '--from-dev', '--env-file', <path>])`. A
+   * connect first: `cli(['connect', '--from-dev', '--dotenv', <path>])`. A
    * channel that exports this takes `--from-dev`, which says the server starts next.
    */
   connected?(options: { envFile?: string; env: Record<string, string | undefined> }): boolean | Promise<boolean>;
@@ -104,7 +105,7 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
     allowPositionals: true,
     options: {
       port: { type: 'string' },
-      'env-file': { type: 'string' },
+      ...ENV_FILE_FLAGS,
       'public-url': { type: 'string' },
       channel: { type: 'string', multiple: true },
       help: { type: 'boolean', short: 'h', default: false },
@@ -118,6 +119,7 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
     err(`dev takes your server's command after "--": voiceflow-channels dev -- ${positionals.join(' ')}\n\n${DEV_USAGE}`);
     return 2;
   }
+  const envFile = envFileOf(o, err);
   const env = io.env ?? process.env;
   const cwd = io.cwd ?? process.cwd();
   const port = Number(o.port ?? env.PORT ?? 3000);
@@ -176,9 +178,9 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
     // running already was started without what connect writes.
     if (command.length && interactive) {
       for (const [name, commands] of loaded) {
-        if (!commands.connected || (await commands.connected({ ...(o['env-file'] ? { envFile: o['env-file'] } : {}), env }))) continue;
+        if (!commands.connected || (await commands.connected({ ...(envFile ? { envFile } : {}), env }))) continue;
         out(`${name} isn't connected yet, so that comes first.\n`);
-        const code = await commands.cli(['connect', '--from-dev', ...(o['env-file'] ? ['--env-file', o['env-file']] : [])]);
+        const code = await commands.cli(['connect', '--from-dev', ...(envFile ? ['--dotenv', envFile] : [])]);
         if (code !== 0) {
           err(`\n${name} wasn't connected, so dev is stopping.`);
           return code;
@@ -226,14 +228,14 @@ async function run(argv: string[], io: DevIO, out: (line: string) => void, err: 
       lost = resolve;
     });
     for (const [name, commands] of loaded) {
-      const code = await commands.cli(['point', '--public-url', url, '--local-url', local, ...(o['env-file'] ? ['--env-file', o['env-file']] : [])]);
+      const code = await commands.cli(['point', '--public-url', url, '--local-url', local, ...(envFile ? ['--dotenv', envFile] : [])]);
       if (code !== 0) {
         err(`\n${name} wasn't pointed at ${url}, so dev is stopping.`);
         return code;
       }
       if (commands.listen) {
         listeners.push(
-          commands.listen({ localUrl: local, ...(o['env-file'] ? { envFile: o['env-file'] } : {}), signal: listening.signal, out, err }).catch((error) => {
+          commands.listen({ localUrl: local, ...(envFile ? { envFile } : {}), signal: listening.signal, out, err }).catch((error) => {
             // A connection that ends because dev is stopping is no failure. One that drops while it runs is: nothing would arrive.
             if (listening.signal.aborted) return;
             err(`\n${name} lost its connection, so dev is stopping: ${error instanceof Error ? error.message : String(error)}`);

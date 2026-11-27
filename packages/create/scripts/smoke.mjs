@@ -66,7 +66,7 @@ const CHANNELS = {
       TEAMS_APP_PASSWORD: 'smoke-test-teams-secret',
       TEAMS_APP_TENANT_ID: '22222222-2222-4222-8222-222222222222',
     },
-    help: /voiceflow-channels connect teams --env-file <path> \[--public-url/,
+    help: /voiceflow-channels connect teams --dotenv <path> \[--public-url/,
     check: checkTeams,
   },
   telegram: {
@@ -86,7 +86,7 @@ function channelOf(name) {
   const settings = [...info.required, ...(info.modes[0]?.settings ?? []), ...info.made, ...info.later];
   return {
     env: Object.fromEntries(settings.map((setting) => [setting.key, `smoke-test-${setting.key.toLowerCase()}`])),
-    help: new RegExp(`voiceflow-channels connect ${name} --env-file <path> \\[--public-url`),
+    help: new RegExp(`voiceflow-channels connect ${name} --dotenv <path> \\[--public-url`),
     check: checkRoute,
     ...CHANNELS[name],
   };

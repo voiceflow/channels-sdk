@@ -8,7 +8,7 @@ A Voiceflow agent in Google Chat, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect gchat --env-file .env.local
+npx voiceflow-channels connect gchat --dotenv .env.local
 ```
 
 Google Chat's side is made on Google Chat's own pages: its app or bot, and the

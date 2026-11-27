@@ -8,7 +8,7 @@ A Voiceflow agent in Messenger, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect messenger --env-file .env.local
+npx voiceflow-channels connect messenger --dotenv .env.local
 ```
 
 Messenger's side is made on Messenger's own pages: its app or bot, and the

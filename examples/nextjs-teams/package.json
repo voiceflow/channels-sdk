@@ -4,11 +4,11 @@
   "private": true,
   "description": "A Voiceflow agent in Microsoft Teams, served by a Next.js route.",
   "scripts": {
-    "dev": "voiceflow-channels dev --env-file .env.local -- next dev",
+    "dev": "voiceflow-channels dev --dotenv .env.local -- next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
-    "connect": "voiceflow-channels connect teams --env-file .env.local"
+    "connect": "voiceflow-channels connect teams --dotenv .env.local"
   },
   "dependencies": {
     "@chat-adapter/catalog": "4.45.0",

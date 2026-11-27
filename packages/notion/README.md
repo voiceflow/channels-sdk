@@ -8,7 +8,7 @@ A Voiceflow agent in Notion, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect notion --env-file .env.local
+npx voiceflow-channels connect notion --dotenv .env.local
 ```
 
 Notion's side is made on Notion's own pages: its app or bot, and the

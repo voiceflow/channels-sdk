@@ -1,10 +1,10 @@
 // The command line for `connect teams`, `point teams` and `disconnect teams`:
 //
-//   npx voiceflow-channels connect teams --env-file .env.local
+//   npx voiceflow-channels connect teams --dotenv .env.local
 //
 // Secrets never reach the screen or the command line. Your Voiceflow API key
 // is read from a file that holds only it, the environment, your server's env
-// file (--env-file) or a hidden prompt. The bot's secret is made by Microsoft
+// file (--dotenv) or a hidden prompt. The bot's secret is made by Microsoft
 // and goes straight to that env file, written readable by you alone, and
 // never to Voiceflow. Your Microsoft 365 sign-in is Microsoft's own command's:
 // this never sees your password or its tokens.
@@ -15,6 +15,8 @@ import { createRedactor, NeedsYou } from '@voiceflow/channels-sdk';
 import {
   BARE,
   canOpenBrowser,
+  ENV_FILE_FLAGS,
+  envFileOf,
   hidden,
   iconUrl,
   openInBrowser,
@@ -42,9 +44,9 @@ import {
 import { createMsCli, MS_CLI_NPX, type MsAccount, type MsCli, msRunner } from './ms.js';
 
 const USAGE = `Usage:
-  voiceflow-channels connect teams --env-file <path> [--public-url <https://host>] [options]
-  voiceflow-channels point teams --public-url <https://host> [--env-file <path>]
-  voiceflow-channels disconnect teams [--env-file <path>]
+  voiceflow-channels connect teams --dotenv <path> [--public-url <https://host>] [options]
+  voiceflow-channels point teams --public-url <https://host> [--dotenv <path>]
+  voiceflow-channels disconnect teams [--dotenv <path>]
 
 Connect sets up a bot in Microsoft Teams for your Voiceflow agent. It runs
 Microsoft's own Teams command (${MS_CLI_NPX}) to make the app, its
@@ -53,7 +55,7 @@ command has you sign in to Microsoft 365, with the account you use Teams with.
 
 Then connect gives the bot your agent's name and picture, asks for the
 permission that lets it read a thread's replies, creates the teams_* variables
-on your agent, writes what your server needs to --env-file, and gives you the
+on your agent, writes what your server needs to --dotenv, and gives you the
 link that adds the bot in Teams. It shows the plan and asks before changing
 anything. Run again, it keeps the app it made and adds only what's missing.
 
@@ -63,7 +65,7 @@ turns that on, once), and you click Add in Teams yourself.
 
 Your Voiceflow API key, project and environment come from the flags below,
 then VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID and VOICEFLOW_ENVIRONMENT in the
-environment, then --env-file; a person is asked for what's left.
+environment, then --dotenv; a person is asked for what's left.
 
 Teams sends the bot's messages to an address. Without --public-url, connect is
 for a server on this machine: \`voiceflow-channels dev\` gives Teams your
@@ -108,7 +110,7 @@ Options:
   --no-open               open no page in your browser: the link is printed
   --no-variables          create no variables on the agent (then pass
                           context: false to teams() on your server)
-  --env-file <path>       your server's env file. Connect reads the Voiceflow
+  --dotenv <path>         your server's env file. Connect reads the Voiceflow
                           values and TEAMS_APP_ID from it, and writes to it
                           TEAMS_APP_ID, TEAMS_APP_PASSWORD, TEAMS_APP_TENANT_ID
                           and any value it had to ask for
@@ -180,7 +182,7 @@ async function run(
       // Set by `voiceflow-channels dev` when it runs connect itself: the server starts next, so nobody is told to start it.
       'from-dev': { type: 'boolean', default: false },
       'no-variables': { type: 'boolean', default: false },
-      'env-file': { type: 'string' },
+      ...ENV_FILE_FLAGS,
       'key-file': { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
       yes: { type: 'boolean', default: false },
@@ -218,7 +220,7 @@ async function run(
     return 2;
   }
 
-  const envFile = o['env-file'];
+  const envFile = envFileOf(o, err);
   const inFile = envFile ? await readEnvFile(envFile) : {};
   secrets.add(inFile.VOICEFLOW_API_KEY, inFile.TEAMS_APP_PASSWORD);
   const interactive = io.interactive ?? Boolean(process.stdin.isTTY);
@@ -227,7 +229,7 @@ async function run(
   const withFetch = io.fetch ? { fetch: io.fetch } : {};
   const microsoft = io.microsoft ?? createMsCli(msRunner({ env: io.env, ...(io.cwd ? { cwd: io.cwd } : {}) }));
   const appId = io.env.TEAMS_APP_ID || inFile.TEAMS_APP_ID;
-  const connectAgain = `voiceflow-channels connect teams${envFile ? ` --env-file ${envFile}` : ' --env-file <path>'}`;
+  const connectAgain = `voiceflow-channels connect teams${envFile ? ` --dotenv ${envFile}` : ' --dotenv <path>'}`;
 
   /** Has a person sign in to Microsoft 365, in Microsoft's own command: a browser where one can open here, a link and a code where not. */
   const signIn = async () => {
@@ -270,7 +272,7 @@ async function run(
 
   // Connect makes a secret, and it has to land somewhere the server reads: said before anything is asked or made.
   if (!envFile && !appId && !o['dry-run']) {
-    err(`connect teams makes the bot's secret, which has to be written where your server reads it: pass --env-file <path> (.env.local, say).\n\n${USAGE}`);
+    err(`connect teams makes the bot's secret, which has to be written where your server reads it: pass --dotenv <path> (.env.local, say).\n\n${USAGE}`);
     return 2;
   }
 

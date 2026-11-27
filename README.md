@@ -65,7 +65,7 @@ tools on your agent, and writes the app's credentials to your env file. It
 shows its plan and asks before it changes anything:
 
 ```bash
-npx voiceflow-channels connect slack --env-file .env.local
+npx voiceflow-channels connect slack --dotenv .env.local
 ```
 
 It reads `VOICEFLOW_API_KEY`, `VOICEFLOW_PROJECT_ID` and `VOICEFLOW_ENVIRONMENT`
@@ -78,7 +78,7 @@ own machine that takes a tunnel. Dev opens one, starts the server and points
 both at it:
 
 ```bash
-npx voiceflow-channels dev --env-file .env.local -- next dev
+npx voiceflow-channels dev --dotenv .env.local -- next dev
 ```
 
 For a server that has an address of its own, give it to connect instead

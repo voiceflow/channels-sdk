@@ -8,7 +8,7 @@ A Voiceflow agent in X, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect x --env-file .env.local
+npx voiceflow-channels connect x --dotenv .env.local
 ```
 
 X's side is made on X's own pages: its app or bot, and the

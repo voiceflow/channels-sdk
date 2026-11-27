@@ -1,10 +1,10 @@
 // The command line for `connect slack` and `disconnect slack`:
 //
-//   npx voiceflow-channels connect slack --public-url https://<host> --env-file .env.local
+//   npx voiceflow-channels connect slack --public-url https://<host> --dotenv .env.local
 //
 // Secrets never reach the screen or the command line: the Voiceflow API key is
 // read from a file (--key-file), VOICEFLOW_API_KEY, your server's env file
-// (--env-file) or a hidden prompt; the Slack login is the Slack CLI's, which
+// (--dotenv) or a hidden prompt; the Slack login is the Slack CLI's, which
 // connect refreshes, or makes with `slack login`, when it has to (sign-in.ts);
 // the app's credentials go only to that env file, written readable by you
 // alone, and never to Voiceflow.
@@ -15,6 +15,8 @@ import { parseArgs } from 'node:util';
 import { createRedactor } from '@voiceflow/channels-sdk';
 import { checkTunnelTool, startTunnel, type Tunnel, type TunnelHost } from '@voiceflow/channels-sdk/dev';
 import {
+  ENV_FILE_FLAGS,
+  envFileOf,
   hidden,
   previewPublish,
   publishPlanLine,
@@ -45,10 +47,10 @@ import {
 import { NeedsYou, type SlackCliHost, slackSignIn } from './sign-in.js';
 
 const USAGE = `Usage:
-  voiceflow-channels connect slack [--public-url <https://host>] [--env-file <path>] [options]
-  voiceflow-channels connect slack --manual --public-url <https://host> [--env-file <path>]
-  voiceflow-channels point slack --public-url <https://host> [--env-file <path>]
-  voiceflow-channels disconnect slack [--env-file <path>] [--remove-tools] [--yes]
+  voiceflow-channels connect slack [--public-url <https://host>] [--dotenv <path>] [options]
+  voiceflow-channels connect slack --manual --public-url <https://host> [--dotenv <path>]
+  voiceflow-channels point slack --public-url <https://host> [--dotenv <path>]
+  voiceflow-channels disconnect slack [--dotenv <path>] [--remove-tools] [--yes]
   voiceflow-channels connect slack --print-manifest --public-url <https://host>
 
 Connect makes a Slack app for your Voiceflow agent (or adds what's missing to
@@ -65,7 +67,7 @@ connected.
 
 Your Voiceflow API key, project and environment come from the flags below,
 then VOICEFLOW_API_KEY, VOICEFLOW_PROJECT_ID and VOICEFLOW_ENVIRONMENT in the
-environment, then the same names in --env-file. What's still missing is asked
+environment, then the same names in --dotenv. What's still missing is asked
 for, the key in a hidden prompt.
 
 Connect works in Slack with the Slack CLI's login. It refreshes a login that
@@ -77,7 +79,7 @@ carry on.
 With --manual, connect leaves Slack to you: for an app you made and installed
 by hand, it checks the app's scopes and installs the tools on the agent, and
 needs no Slack CLI. It reads SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET from the
-environment or --env-file, or asks for them.
+environment or --dotenv, or asks for them.
 
 Without --public-url, connect is for a server on this machine: it opens a
 temporary tunnel so Slack has an address while the app is made, and
@@ -125,7 +127,7 @@ Options:
   --no-workspace-tools    install only the presentation tools (then pass
                           workspaceTools: false to slack() on your server)
   --restore <a,b>         add these tools again, although they were removed
-  --env-file <path>       your server's env file. Connect reads the Voiceflow
+  --dotenv <path>         your server's env file. Connect reads the Voiceflow
                           values from it, and writes to it the Slack app's
                           SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET and any
                           Voiceflow value it had to ask for. A value already
@@ -220,7 +222,7 @@ async function run(
       'no-tools': { type: 'boolean', default: false },
       'no-workspace-tools': { type: 'boolean', default: false },
       restore: { type: 'string' },
-      'env-file': { type: 'string' },
+      ...ENV_FILE_FLAGS,
       port: { type: 'string', default: '3000' },
       'key-file': { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
@@ -261,7 +263,7 @@ async function run(
   }
 
   // The server's env file, when there is one: what it already says isn't asked for again.
-  const envFile = o['env-file'];
+  const envFile = envFileOf(o, err);
   const inFile = envFile ? await readEnvFile(envFile) : {};
   secrets.add(inFile.VOICEFLOW_API_KEY, inFile.SLACK_BOT_TOKEN, inFile.SLACK_SIGNING_SECRET);
   const interactive = io.interactive ?? Boolean(process.stdin.isTTY);

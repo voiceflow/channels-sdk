@@ -8,7 +8,7 @@ A Voiceflow agent in Twilio, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect twilio --env-file .env.local
+npx voiceflow-channels connect twilio --dotenv .env.local
 ```
 
 Twilio's side is made on Twilio's own pages: its app or bot, and the

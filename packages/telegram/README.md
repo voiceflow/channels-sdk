@@ -8,7 +8,7 @@ A Voiceflow agent in Telegram, with one command to set it up.
 ## Connect
 
 ```bash
-npx voiceflow-channels connect telegram --env-file .env.local
+npx voiceflow-channels connect telegram --dotenv .env.local
 ```
 
 Telegram's side is made on Telegram's own pages: its app or bot, and the

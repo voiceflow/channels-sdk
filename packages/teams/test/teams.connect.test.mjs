@@ -97,7 +97,7 @@ async function setup({
   const writes = () => voiceflow.state.calls.filter((call) => call.method !== 'GET').length;
   return { microsoft, voiceflow, dir, envFile, run, env, opened, writes };
 }
-const connect = (t, ...more) => t.run(['connect', '--env-file', t.envFile, ...more]);
+const connect = (t, ...more) => t.run(['connect', '--dotenv', t.envFile, ...more]);
 
 /** Servers a test started: each is stopped when the test ends, passed or failed. */
 const servers = [];
@@ -224,7 +224,7 @@ test("a person who is there signs in, in Microsoft's own command, and connect go
   const here = await connect(t, '--no-open');
   assert.equal(here.code, 3, 'not interactive: it waits');
   t.microsoft.taken();
-  const { code, out, all } = await t.run(['connect', '--env-file', t.envFile], { ...io, env: DESKTOP });
+  const { code, out, all } = await t.run(['connect', '--dotenv', t.envFile], { ...io, env: DESKTOP });
   assert.equal(code, 0, all);
   assert.match(out, /Sign in to Microsoft 365, with the account you use Teams with\./);
   const calls = t.microsoft.taken();
@@ -236,12 +236,12 @@ test("a person who is there signs in, in Microsoft's own command, and connect go
 
   // Over SSH no browser of theirs can open here: a link and a code instead.
   const far = await setup({ ms: { signedIn: false } });
-  await far.run(['connect', '--env-file', far.envFile, '--yes'], { interactive: true, env: { SSH_CONNECTION: '10.0.0.1 1 10.0.0.2 22' }, open: undefined });
+  await far.run(['connect', '--dotenv', far.envFile, '--yes'], { interactive: true, env: { SSH_CONNECTION: '10.0.0.1 1 10.0.0.2 22' }, open: undefined });
   assert.equal(far.microsoft.taken()[1], 'login --device-code (shown)');
 
   // A sign-in that doesn't finish is said, and nothing is made.
   const failed = await setup({ ms: { signedIn: false, signInWorks: false } });
-  const result = await failed.run(['connect', '--env-file', failed.envFile, '--yes'], { interactive: true });
+  const result = await failed.run(['connect', '--dotenv', failed.envFile, '--yes'], { interactive: true });
   assert.equal(result.code, 1);
   assert.match(result.err, /The sign-in didn't finish/);
   assert.deepEqual(failed.microsoft.apps(), []);
@@ -300,7 +300,7 @@ test("the bot's secret is saved before anything else can fail", async () => {
     if (args[1] === 'create') made = true;
     return result;
   });
-  const { code } = await t.run(['connect', '--env-file', t.envFile, '--yes'], { microsoft });
+  const { code } = await t.run(['connect', '--dotenv', t.envFile, '--yes'], { microsoft });
   assert.equal(code, 1, 'the run failed');
   const env = await t.env();
   assert.equal(env.TEAMS_APP_PASSWORD, SECRET, 'and the secret, shown once, is where the server reads it');
@@ -428,13 +428,13 @@ test('with --public-url Teams is given the address as the app is made, and again
 test('a mistake in the command is said as one, before anything is asked or changed', async () => {
   const t = await setup();
   for (const [argv, said] of [
-    [['connect', '--yes'], /makes the bot's secret, which has to be written where your server reads it: pass --env-file/],
-    [['connect', '--env-file', t.envFile, '--public-url', 'http://bot.example.com'], /Teams sends only to an https address/],
-    [['connect', '--env-file', t.envFile, '--name', 'x'.repeat(31)], /--name takes the bot's name in Teams, at most 30 characters: ".*" is 31/],
-    [['connect', '--env-file', t.envFile, '--name', ' '], /--name takes the bot's name in Teams/],
-    [['connect', '--env-file', t.envFile, '--icon', 'logo.png'], /--icon takes a PNG's http\(s\) URL, or "none"/],
-    [['connect', '--env-file', t.envFile, '--publish', '--no-publish'], /say opposite things/],
-    [['point', '--env-file', t.envFile], /Missing --public-url/],
+    [['connect', '--yes'], /makes the bot's secret, which has to be written where your server reads it: pass --dotenv/],
+    [['connect', '--dotenv', t.envFile, '--public-url', 'http://bot.example.com'], /Teams sends only to an https address/],
+    [['connect', '--dotenv', t.envFile, '--name', 'x'.repeat(31)], /--name takes the bot's name in Teams, at most 30 characters: ".*" is 31/],
+    [['connect', '--dotenv', t.envFile, '--name', ' '], /--name takes the bot's name in Teams/],
+    [['connect', '--dotenv', t.envFile, '--icon', 'logo.png'], /--icon takes a PNG's http\(s\) URL, or "none"/],
+    [['connect', '--dotenv', t.envFile, '--publish', '--no-publish'], /say opposite things/],
+    [['point', '--dotenv', t.envFile], /Missing --public-url/],
     [['install'], /Usage:/],
   ]) {
     const { code, all } = await t.run(argv);
@@ -502,10 +502,10 @@ test('a value the env file has is never changed, and what it lacks is added', as
 test('a page is opened only for a person who is there, for a new app, and not when told not to', async () => {
   const t = await setup();
   const io = { interactive: true, ask: async () => 'y' };
-  await t.run(['connect', '--env-file', t.envFile, '--no-open'], io);
+  await t.run(['connect', '--dotenv', t.envFile, '--no-open'], io);
   assert.deepEqual(t.opened, []);
   // The app is made already: its page isn't opened again.
-  await t.run(['connect', '--env-file', t.envFile], io);
+  await t.run(['connect', '--dotenv', t.envFile], io);
   assert.deepEqual(t.opened, []);
 });
 
@@ -523,7 +523,7 @@ test('point asks your server first, then gives Teams the address, and needs noth
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   servers.push(server);
   const local = `http://127.0.0.1:${server.address().port}`;
-  const { code, out, all } = await t.run(['point', '--public-url', PUBLIC, '--local-url', local, '--env-file', t.envFile]);
+  const { code, out, all } = await t.run(['point', '--public-url', PUBLIC, '--local-url', local, '--dotenv', t.envFile]);
   assert.equal(code, 0, all);
   assert.deepEqual(asked, ['POST /api/teams no token']);
   assert.match(out, /= your server has its Teams route at http:\/\/127\.0\.0\.1:\d+\/api\/teams, and refuses a request that isn't Teams'/);
@@ -541,7 +541,7 @@ test("a server that's down, has no route, or takes anyone's request is said befo
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   servers.push(server);
   const local = `http://127.0.0.1:${server.address().port}`;
-  const point = (url = local) => t.run(['point', '--public-url', PUBLIC, '--local-url', url, '--env-file', t.envFile]);
+  const point = (url = local) => t.run(['point', '--public-url', PUBLIC, '--local-url', url, '--dotenv', t.envFile]);
 
   const none = await point();
   assert.equal(none.code, 1);
@@ -561,19 +561,19 @@ test("a server that's down, has no route, or takes anyone's request is said befo
 
 test('point says what it waits on: connect not run, or Microsoft 365 signed out', async () => {
   const none = await setup({ file: {} });
-  const first = await none.run(['point', '--public-url', PUBLIC, '--env-file', none.envFile]);
+  const first = await none.run(['point', '--public-url', PUBLIC, '--dotenv', none.envFile]);
   assert.equal(first.code, 3);
-  assert.match(first.err, /No TEAMS_APP_ID in .*\.env\.local\. Run connect first: voiceflow-channels connect teams --env-file/);
+  assert.match(first.err, /No TEAMS_APP_ID in .*\.env\.local\. Run connect first: voiceflow-channels connect teams --dotenv/);
 
   const out = await setup({ ms: { signedIn: false, apps: [{ id: APP, name: 'Acme Support' }] }, file: { TEAMS_APP_ID: APP } });
-  const second = await out.run(['point', '--public-url', PUBLIC, '--env-file', out.envFile]);
+  const second = await out.run(['point', '--public-url', PUBLIC, '--dotenv', out.envFile]);
   assert.equal(second.code, 3);
   assert.match(second.err, /Not signed in to Microsoft 365/);
   assert.equal(out.microsoft.apps()[0].endpoint, '');
   assert.ok(!out.microsoft.taken().some((call) => call.startsWith('login')), 'nobody is signed in on their behalf');
 
   // A sign-in runs out in time. A person who is there (dev was started by one) signs in again, and it goes on.
-  const third = await out.run(['point', '--public-url', PUBLIC, '--env-file', out.envFile], { interactive: true, env: DESKTOP });
+  const third = await out.run(['point', '--public-url', PUBLIC, '--dotenv', out.envFile], { interactive: true, env: DESKTOP });
   assert.equal(third.code, 0, third.all);
   assert.match(third.out, /Sign in to Microsoft 365, with the account you use Teams with\./);
   assert.ok(out.microsoft.taken().includes('login (shown)'));
@@ -582,7 +582,7 @@ test('point says what it waits on: connect not run, or Microsoft 365 signed out'
 
 test('disconnect says how the bot is removed, and removes nothing', async () => {
   const t = await setup({ ms: { apps: [{ id: APP, name: 'Acme Support' }] }, file: { TEAMS_APP_ID: APP } });
-  const { code, err } = await t.run(['disconnect', '--env-file', t.envFile]);
+  const { code, err } = await t.run(['disconnect', '--dotenv', t.envFile]);
   assert.equal(code, 3, "what's left is the person's to do");
   assert.match(err, /Microsoft gives no command that removes a Teams app, so this is by hand:/);
   assert.ok(err.includes(`https://dev.teams.microsoft.com/apps/${APP}`));
@@ -590,7 +590,7 @@ test('disconnect says how the bot is removed, and removes nothing', async () => 
   assert.match(err, /The teams_\* variables stay on the agent/);
   assert.deepEqual(t.microsoft.taken(), []);
   const none = await setup({ file: {} });
-  assert.equal((await none.run(['disconnect', '--env-file', none.envFile])).code, 3);
+  assert.equal((await none.run(['disconnect', '--dotenv', none.envFile])).code, 3);
 });
 
 test("what Microsoft's command says is passed on as it said it, and never with a secret", async () => {
@@ -601,7 +601,7 @@ test("what Microsoft's command says is passed on as it said it, and never with a
     },
     file: { TEAMS_APP_ID: APP, TEAMS_APP_PASSWORD: SECRET },
   });
-  const { code, err } = await t.run(['point', '--public-url', PUBLIC, '--env-file', t.envFile]);
+  const { code, err } = await t.run(['point', '--public-url', PUBLIC, '--dotenv', t.envFile]);
   assert.equal(code, 1);
   assert.match(err, /The service refused it\./);
   assert.ok(!err.includes(SECRET), 'a secret it repeats back is taken out');
@@ -613,7 +613,7 @@ test("what Microsoft's command says is passed on as it said it, and never with a
   assert.match(second.err, new RegExp(`Microsoft 365 has no Teams app ${APP} for the account signed in \\(Failed to fetch app details: 404 Not Found\\)`));
   assert.match(second.err, /take TEAMS_APP_ID, TEAMS_APP_PASSWORD and TEAMS_APP_TENANT_ID out of your server's env file and run connect again/);
   // The same from dev's point: said, with the address left where it was.
-  const pointed = await gone.run(['point', '--public-url', PUBLIC, '--env-file', gone.envFile]);
+  const pointed = await gone.run(['point', '--public-url', PUBLIC, '--dotenv', gone.envFile]);
   assert.equal(pointed.code, 1);
   assert.match(pointed.err, /It was made from another account, or deleted\./);
 });
