@@ -1,6 +1,6 @@
 {
   "name": "@voiceflow/channels-slack",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A Voiceflow agent in Slack: Slack's native features, and Slack's tools installed on the agent.",
   "keywords": [
     "voiceflow",
@@ -57,7 +57,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@voiceflow/channels-sdk": "0.1.1"
+    "@voiceflow/channels-sdk": "0.2.0"
   },
   "peerDependencies": {
     "chat": ">=4.44.0 <5",
