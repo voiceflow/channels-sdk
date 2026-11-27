@@ -1,6 +1,6 @@
 {
   "name": "@voiceflow/channels-teams",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A Voiceflow agent in Microsoft Teams: chats, channel threads, mentions, buttons and cards, with one command to set it up.",
   "keywords": [
     "voiceflow",
@@ -55,7 +55,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@voiceflow/channels-sdk": "0.1.1"
+    "@voiceflow/channels-sdk": "0.2.0"
   },
   "peerDependencies": {
     "chat": ">=4.44.0 <5",
